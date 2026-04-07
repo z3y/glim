@@ -32,19 +32,9 @@ pub struct VulkanObjects {
     pub graphics_queue: vk::Queue,
     pub compute_queue: vk::Queue,
     pub present_queue: vk::Queue,
-}
 
-impl Drop for VulkanObjects {
-    fn drop(&mut self) {
-        unsafe {
-            self.device
-                .device_wait_idle()
-                .expect("Failed to wait for device idle");
-
-            self.device.destroy_device(None);
-            self.instance.destroy_instance(None);
-        }
-    }
+    pub graphics_command_pool: vk::CommandPool,
+    pub compute_command_pool: vk::CommandPool,
 }
 
 pub extern "system" fn vulkan_debug_callback(
@@ -94,7 +84,7 @@ fn find_queue_families(instance: &Instance, physical_device: PhysicalDevice) -> 
     }
 }
 
-pub fn vulkan_initialize(config: &VulkanConfig) -> VulkanObjects {
+pub fn create_vulkan_objects(config: &VulkanConfig) -> VulkanObjects {
     let app_name = CString::new("stilb").unwrap();
     let validation_layer_name = CString::new("VK_LAYER_KHRONOS_validation").unwrap();
 
@@ -255,6 +245,20 @@ pub fn vulkan_initialize(config: &VulkanConfig) -> VulkanObjects {
         // create_swapchain();
     }
 
+    let pool_info = vk::CommandPoolCreateInfo {
+        flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+        queue_family_index: queue_family_indices.graphics,
+        ..Default::default()
+    };
+    let graphics_command_pool = unsafe { device.create_command_pool(&pool_info, None) }.unwrap();
+
+    let pool_info = vk::CommandPoolCreateInfo {
+        flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+        queue_family_index: queue_family_indices.compute,
+        ..Default::default()
+    };
+    let compute_command_pool = unsafe { device.create_command_pool(&pool_info, None) }.unwrap();
+
     return VulkanObjects {
         entry,
         instance,
@@ -264,5 +268,27 @@ pub fn vulkan_initialize(config: &VulkanConfig) -> VulkanObjects {
         graphics_queue,
         compute_queue,
         present_queue,
+        graphics_command_pool,
+        compute_command_pool,
     };
+}
+
+impl Drop for VulkanObjects {
+    fn drop(&mut self) {
+        unsafe {
+            let device = &self.device;
+            let instance = &self.instance;
+
+            device
+                .device_wait_idle()
+                .expect("Failed to wait for device idle");
+
+            device.destroy_command_pool(self.graphics_command_pool, None);
+            device.destroy_command_pool(self.compute_command_pool, None);
+
+            device.destroy_device(None);
+
+            instance.destroy_instance(None);
+        }
+    }
 }
