@@ -5,6 +5,7 @@ use crate::{
 
 mod math;
 mod tests;
+mod vulkan_cmd;
 mod vulkan_core;
 
 pub struct Stilb {

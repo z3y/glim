@@ -290,8 +290,10 @@ pub fn create_vulkan_objects(config: &VulkanConfig) -> VulkanObjects {
         .pool_sizes(&mut pool_sizes)
         .max_sets(1);
 
-    let descriptor_pool =
-        unsafe { device.create_descriptor_pool(&descriptor_pool_info, None) }.unwrap();
+    let descriptor_pool = unsafe { device.create_descriptor_pool(&descriptor_pool_info, None) }
+        .expect("failed to create descriptor pool");
+
+    // todo: semaphores and fences
 
     return VulkanObjects {
         entry,

@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use crate::{
+        vulkan_cmd::{begin_temp_graphics_cmd, end_temp_graphics_cmd},
+        *,
+    };
 
     #[test]
     fn test_initialize() {
@@ -48,6 +51,13 @@ mod tests {
         };
 
         add_mesh(stilb, mesh);
+
+        let stilb_obj = unsafe { &*stilb };
+        let vk = &stilb_obj.vk;
+
+        let cmd = begin_temp_graphics_cmd(vk);
+
+        end_temp_graphics_cmd(vk, cmd);
 
         deinitialize(stilb);
     }
