@@ -17,7 +17,7 @@ use glfw_sys::{
 
 use crate::{
     math::{Vector2, Vector3},
-    vulkan_core::{VulkanConfig, VulkanContext, create_vulkan_objects},
+    vulkan_core::{VulkanConfig, VulkanContext},
 };
 
 // mod bvh;
@@ -143,6 +143,28 @@ pub extern "C" fn initialize(config: StilbConfig) -> *mut Stilb {
         height: 512,
     };
 
+    let window = initialize_window(config, &mut vulkan_config);
+
+    let create_surface_callback = |instance: &ash::Instance| unsafe {
+        let instance = instance.handle().as_raw() as glfw_sys::VkInstance;
+        let mut surface: glfw_sys::VkSurfaceKHR = ptr::null_mut();
+        glfwCreateWindowSurface(instance, window, std::ptr::null(), &mut surface);
+        ash::vk::SurfaceKHR::from_raw(surface as u64)
+    };
+
+    let vk = VulkanContext::new(&vulkan_config, create_surface_callback);
+    println!("Vulkan Initialized");
+
+    let stilb = Stilb {
+        vk,
+        meshes: Vec::new(),
+        window: window,
+    };
+
+    Box::into_raw(Box::new(stilb))
+}
+
+fn initialize_window(config: StilbConfig, vulkan_config: &mut VulkanConfig) -> *mut GLFWwindow {
     let mut window = ptr::null_mut();
     if vulkan_config.enable_window {
         window = create_window(config.preview_width, config.preview_height);
@@ -166,24 +188,7 @@ pub extern "C" fn initialize(config: StilbConfig) -> *mut Stilb {
             }
         }
     }
-
-    let create_surface_callback = |instance: &ash::Instance| unsafe {
-        let instance = instance.handle().as_raw() as glfw_sys::VkInstance;
-        let mut surface: glfw_sys::VkSurfaceKHR = ptr::null_mut();
-        glfwCreateWindowSurface(instance, window, std::ptr::null(), &mut surface);
-        ash::vk::SurfaceKHR::from_raw(surface as u64)
-    };
-
-    let vk = create_vulkan_objects(&vulkan_config, create_surface_callback);
-    println!("Vulkan Initialized");
-
-    let stilb = Stilb {
-        vk,
-        meshes: Vec::new(),
-        window: window,
-    };
-
-    Box::into_raw(Box::new(stilb))
+    window
 }
 
 #[unsafe(no_mangle)]

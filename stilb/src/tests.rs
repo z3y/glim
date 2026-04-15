@@ -1,14 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::{
-        vulkan_cmd::{begin_temp_graphics_cmd, end_temp_graphics_cmd},
-        *,
-    };
+    use crate::*;
 
     #[test]
     fn test_initialize() {
+        let preview = true;
+
         let config = StilbConfig {
-            is_preview: 1,
+            is_preview: if preview { 1 } else { 0 },
             preview_width: 512,
             preview_height: 512,
         };
@@ -55,9 +54,9 @@ mod tests {
         let stilb_obj = unsafe { &*stilb };
         let vk = &stilb_obj.vk;
 
-        let cmd = begin_temp_graphics_cmd(vk);
+        let cmd = vk.begin_temp_graphics_cmd();
 
-        end_temp_graphics_cmd(vk, cmd);
+        vk.end_temp_graphics_cmd(cmd);
 
         deinitialize(stilb);
     }
