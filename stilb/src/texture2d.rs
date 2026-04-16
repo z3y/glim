@@ -109,11 +109,19 @@ impl Texture2D {
         self.image = vk::Image::null();
     }
 
+    fn get_device_size(&self) -> vk::DeviceSize {
+        let res = self.width * self.height;
+        let channels = 4;
+        let bytes = std::mem::size_of::<f32>() as u32;
+
+        (res * channels * bytes) as vk::DeviceSize
+    }
+
     // only 4 channel f32 textures
     pub fn set_pixels(&self, vk: &VulkanContext, pixels: &[f32]) {
-        let size = (pixels.len() * std::mem::size_of::<f32>()) as vk::DeviceSize;
-
         assert!(pixels.len() as u32 == self.width * self.height * 4);
+
+        let size = self.get_device_size();
 
         let (staging_buffer, staging_memory) = vk.create_buffer(
             size,
@@ -220,6 +228,100 @@ impl Texture2D {
             vk.device.destroy_buffer(staging_buffer, None);
             vk.device.free_memory(staging_memory, None);
         };
+    }
+
+    pub fn read_pixels(&mut self, vk: &VulkanContext) -> Vec<f32> {
+        let size = self.get_device_size();
+
+        let (staging_buffer, staging_memory) = vk.create_buffer(
+            size,
+            vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+
+        let cmd = vk.begin_temp_graphics_cmd();
+
+        let subresource_range = vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 1,
+        };
+
+        let old_layout = self.layout();
+
+        let barrier = vk::ImageMemoryBarrier {
+            src_access_mask: vk::AccessFlags::SHADER_WRITE,
+            dst_access_mask: vk::AccessFlags::TRANSFER_READ,
+            old_layout: old_layout,
+            new_layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            image: self.image,
+            subresource_range,
+            ..Default::default()
+        };
+
+        self.layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+
+        unsafe {
+            vk.device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            )
+        };
+
+        let image_subresource = vk::ImageSubresourceLayers {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            mip_level: 0,
+            base_array_layer: 0,
+            layer_count: 1,
+        };
+
+        let image_extent = vk::Extent3D {
+            width: self.width,
+            height: self.height,
+            depth: 1,
+        };
+
+        let region = vk::BufferImageCopy {
+            image_subresource,
+            image_extent,
+            ..Default::default()
+        };
+
+        unsafe {
+            vk.device.cmd_copy_image_to_buffer(
+                cmd,
+                self.image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                staging_buffer,
+                &[region],
+            )
+        };
+
+        vk.end_temp_graphics_cmd(cmd);
+
+        let ptr = unsafe {
+            vk.device
+                .map_memory(staging_memory, 0, size, vk::MemoryMapFlags::empty())
+                .unwrap()
+        } as *mut f32;
+
+        let pixel_count = (self.width * self.height * 4) as usize;
+
+        let pixels = unsafe { std::slice::from_raw_parts(ptr, pixel_count).to_vec() };
+
+        unsafe {
+            vk.device.destroy_buffer(staging_buffer, None);
+            vk.device.free_memory(staging_memory, None);
+        };
+
+        pixels
     }
 
     pub fn layout(&self) -> vk::ImageLayout {

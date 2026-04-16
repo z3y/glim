@@ -78,12 +78,16 @@ mod tests {
             1.0, 0.0, 0.0, 1.0,
             0.0, 1.0, 0.0, 1.0,
             0.0, 0.0, 1.0, 1.0,
-            0.0, 0.0, 0.0, 1.0,
+            1.0, 1.0, 0.0, 1.0,
         ];
 
-        save_bmp("test.bmp", 2, 2, &pixels).unwrap();
+        // save_bmp("write.bmp", 2, 2, &pixels).unwrap();
 
         texture.set_pixels(vk, &pixels);
+
+        let pixels_read = texture.read_pixels(vk);
+
+        // save_bmp("read.bmp", 2, 2, &pixels_read).unwrap();
 
         texture.destroy(vk);
 
