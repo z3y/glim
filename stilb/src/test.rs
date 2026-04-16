@@ -64,11 +64,21 @@ mod tests {
 
         let mut texture = Texture2D::new(
             vk,
-            512,
-            512,
+            2,
+            2,
             vk::Format::R32G32B32A32_SFLOAT,
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
         );
+
+        #[rustfmt::skip]
+        let pixels: [f32; 16] = [
+            0.0, 0.0, 0.0, 0.0,
+            1.0, 1.0, 1.0, 1.0,
+            0.0, 0.0, 0.0, 0.0,
+            1.0, 1.0, 1.0, 1.0,
+        ];
+
+        texture.set_pixels(vk, &pixels);
 
         texture.destroy(vk);
 
