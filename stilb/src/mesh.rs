@@ -82,9 +82,13 @@ pub struct GpuMesh {
 
 impl GpuMesh {
     pub fn new(vk: &VulkanContext, mesh: &Mesh) -> Self {
-        let usage = vk::BufferUsageFlags::TRANSFER_DST
+        let mut usage = vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS;
+
+        if vk.as_device.is_some() {
+            usage |= vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR;
+        }
 
         // vertices
 
