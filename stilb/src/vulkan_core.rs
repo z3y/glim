@@ -43,6 +43,8 @@ pub struct VulkanContext {
     pub compute_command_pool: vk::CommandPool,
 
     pub descriptor_pool: vk::DescriptorPool,
+
+    pub as_device: Option<khr::acceleration_structure::Device>,
 }
 
 impl VulkanContext {
@@ -274,6 +276,12 @@ impl VulkanContext {
 
         // todo: semaphores and fences
 
+        let as_device = if has_ray_query {
+            Some(khr::acceleration_structure::Device::new(&instance, &device))
+        } else {
+            None
+        };
+
         Self {
             entry,
             instance,
@@ -288,6 +296,7 @@ impl VulkanContext {
             descriptor_pool,
             surface,
             surface_instance,
+            as_device,
         }
     }
 
