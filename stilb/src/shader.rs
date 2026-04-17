@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use ash::vk;
+use ash::vk::{self, Handle};
 
 use crate::vulkan_core::VulkanContext;
 
@@ -65,5 +65,22 @@ impl Shader {
             pipeline,
             set_layout,
         }
+    }
+
+    pub fn destroy(&mut self, vk: &VulkanContext) {
+        assert!(!self.module.is_null());
+        assert!(!self.pipeline.is_null());
+        assert!(!self.pipeline_layout.is_null());
+
+        unsafe {
+            vk.device.destroy_shader_module(self.module, None);
+            vk.device.destroy_pipeline(self.pipeline, None);
+            vk.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+        };
+
+        self.module = vk::ShaderModule::null();
+        self.pipeline = vk::Pipeline::null();
+        self.pipeline_layout = vk::PipelineLayout::null();
     }
 }

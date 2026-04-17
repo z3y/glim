@@ -106,13 +106,15 @@ mod tests {
         let push_constant_ranges = vk::PushConstantRange::default();
         let specialization_info = vk::SpecializationInfo::default();
 
-        let shader = Shader::new(
+        let mut shader = Shader::new(
             vk,
             get_test_shader(),
             &bindings,
             &[push_constant_ranges],
             &specialization_info,
         );
+
+        shader.destroy(vk);
 
         deinitialize(stilb);
     }
