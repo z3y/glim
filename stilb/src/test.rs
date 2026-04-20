@@ -208,7 +208,7 @@ mod tests {
         texture.destroy(vk);
         shader.destroy(vk);
 
-        vk.create_swapchain(512, 512);
+        run(stilb);
 
         deinitialize(stilb);
     }

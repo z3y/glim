@@ -15,8 +15,6 @@ pub struct VulkanConfig {
     pub enable_validation_layers: bool,
     pub enable_window: bool,
     pub window_extensions: Vec<*const c_char>,
-    pub width: u32,
-    pub height: u32,
 }
 
 #[derive(Debug)]

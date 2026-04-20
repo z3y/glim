@@ -7,7 +7,7 @@ use glfw_sys::{GLFWwindow, glfwCreateWindowSurface};
 use crate::{
     mesh::{FfiMesh, Mesh},
     vulkan_core::{VulkanConfig, VulkanContext},
-    window::initialize_window,
+    window::{initialize_window, platform_loop},
 };
 
 mod bmp;
@@ -42,11 +42,9 @@ pub extern "C" fn initialize(config: StilbConfig) -> *mut Stilb {
         enable_validation_layers: is_debug,
         enable_window: config.is_preview != 0,
         window_extensions: Vec::new(),
-        width: 512,
-        height: 512,
     };
 
-    let window = initialize_window(config, &mut vulkan_config);
+    let window = initialize_window(&config, &mut vulkan_config);
 
     let create_surface_callback = |instance: &ash::Instance| unsafe {
         let instance = instance.handle().as_raw() as glfw_sys::VkInstance;
@@ -55,8 +53,10 @@ pub extern "C" fn initialize(config: StilbConfig) -> *mut Stilb {
         ash::vk::SurfaceKHR::from_raw(surface as u64)
     };
 
-    let vk = VulkanContext::new(&vulkan_config, create_surface_callback);
+    let mut vk = VulkanContext::new(&vulkan_config, create_surface_callback);
     println!("Vulkan Initialized");
+
+    vk.create_swapchain(config.preview_width, config.preview_height);
 
     let stilb = Stilb {
         vk,
@@ -74,6 +74,13 @@ pub extern "C" fn deinitialize(stilb: *mut Stilb) {
         let _ = unsafe { Box::from_raw(stilb) };
         println!("Stilb destroyed");
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn run(stilb: *mut Stilb) {
+    let stilb = unsafe { &mut *stilb };
+
+    platform_loop(stilb.window);
 }
 
 #[unsafe(no_mangle)]

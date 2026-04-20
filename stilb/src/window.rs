@@ -29,7 +29,23 @@ pub fn create_window(width: u32, height: u32) -> *mut GLFWwindow {
     }
 }
 
-pub fn initialize_window(config: StilbConfig, vulkan_config: &mut VulkanConfig) -> *mut GLFWwindow {
+pub fn platform_loop(window: *mut GLFWwindow) {
+    unsafe {
+        while glfwWindowShouldClose(window) == 0 {
+            glfwPollEvents();
+
+            if glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS {
+                glfwSetWindowShouldClose(window, 1);
+                println!("ESC")
+            }
+        }
+    }
+}
+
+pub fn initialize_window(
+    config: &StilbConfig,
+    vulkan_config: &mut VulkanConfig,
+) -> *mut GLFWwindow {
     let mut window = ptr::null_mut();
     if vulkan_config.enable_window {
         window = create_window(config.preview_width, config.preview_height);
@@ -41,15 +57,6 @@ pub fn initialize_window(config: StilbConfig, vulkan_config: &mut VulkanConfig) 
             for i in 0..window_extensions_count {
                 let str = *window_extensions.add(i as usize);
                 vulkan_config.window_extensions.push(str);
-            }
-
-            while glfwWindowShouldClose(window) == 0 {
-                glfwPollEvents();
-
-                if glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS {
-                    glfwSetWindowShouldClose(window, 1);
-                    println!("ESC")
-                }
             }
         }
     }
