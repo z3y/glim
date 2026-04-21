@@ -94,22 +94,12 @@ mod tests {
 
         let mut gpu_mesh = GpuMesh::new(vk, mesh);
 
-        let mut shader = load_shader_test(vk);
-        update_test_shader(vk, &shader, texture.view);
+        let mut test_shader = load_shader_test(vk);
+        update_test_shader(vk, &test_shader, texture.view);
 
         let cmd = vk.begin_temp_cmd();
+
         unsafe {
-            vk.device
-                .reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
-                .unwrap();
-
-            let begin_info = vk::CommandBufferBeginInfo {
-                flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-                ..Default::default()
-            };
-
-            vk.device.begin_command_buffer(cmd, &begin_info).unwrap();
-
             let barrier = texture.barrier(
                 vk::ImageLayout::GENERAL,
                 vk::AccessFlags::default(),
@@ -127,14 +117,14 @@ mod tests {
             );
 
             vk.device
-                .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+                .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, test_shader.pipeline);
 
             vk.device.cmd_bind_descriptor_sets(
                 cmd,
                 vk::PipelineBindPoint::COMPUTE,
-                shader.pipeline_layout,
+                test_shader.pipeline_layout,
                 0,
-                &[shader.descriptor_set],
+                &[test_shader.descriptor_set],
                 &[],
             );
 
@@ -142,17 +132,7 @@ mod tests {
             let groups_y = (texture.height() + 7) / 8;
             vk.device.cmd_dispatch(cmd, groups_x, groups_y, 1);
 
-            vk.device.end_command_buffer(cmd).unwrap();
-
-            let cmds = [cmd];
-
-            let submit_info = vk::SubmitInfo::default().command_buffers(&cmds);
-
-            vk.device
-                .queue_submit(vk.compute_queue, &[submit_info], vk::Fence::null())
-                .unwrap();
-
-            vk.device.queue_wait_idle(vk.compute_queue).unwrap();
+            vk.end_temp_cmd(cmd);
         }
 
         let pixels_read = texture.read_pixels(vk);
@@ -166,7 +146,7 @@ mod tests {
 
         gpu_mesh.destroy(vk);
         texture.destroy(vk);
-        shader.destroy(vk);
+        test_shader.destroy(vk);
 
         run(stilb);
 
