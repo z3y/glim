@@ -95,5 +95,7 @@ void geometry(triangle VertexOutput input[3], uint primitiveID: SV_PrimitiveID, 
 [shader("fragment")]
 float4 fragment(Varyings varyings) : SV_Target
 {
+    // Surface surf = Surface::Get(Push.indices, Push.vertices, varyings.primitiveID, varyings.bary);
+    // return float4(surf.N, 1);
     return float4(varyings.bary, asfloat(varyings.primitiveID), 1.0);
 }

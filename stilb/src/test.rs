@@ -17,7 +17,7 @@ mod tests {
     };
 
     fn get_test_config() -> StilbConfig {
-        let preview = true;
+        let preview = false;
 
         StilbConfig {
             is_preview: if preview { 1 } else { 0 },
@@ -193,7 +193,7 @@ mod tests {
         texture.destroy(vk);
         test_shader.destroy(vk);
 
-        run(stilb);
+        // run(stilb);
 
         deinitialize(stilb);
     }
@@ -234,7 +234,9 @@ mod tests {
         }
 
         let push_constant_ranges = [vk::PushConstantRange {
-            stage_flags: vk::ShaderStageFlags::GEOMETRY,
+            stage_flags: vk::ShaderStageFlags::GEOMETRY
+                | vk::ShaderStageFlags::FRAGMENT
+                | vk::ShaderStageFlags::VERTEX,
             offset: 0,
             size: std::mem::size_of::<PushConstants>() as u32,
         }];
@@ -297,7 +299,9 @@ mod tests {
             vk.device.cmd_push_constants(
                 cmd,
                 shader.pipeline_layout,
-                vk::ShaderStageFlags::GEOMETRY,
+                vk::ShaderStageFlags::GEOMETRY
+                    | vk::ShaderStageFlags::FRAGMENT
+                    | vk::ShaderStageFlags::VERTEX,
                 0,
                 &constants_bytes,
             );

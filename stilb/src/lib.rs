@@ -64,7 +64,9 @@ pub extern "C" fn initialize(config: StilbConfig) -> *mut Stilb {
     let mut vk = VulkanContext::new(&vulkan_config, create_surface_callback);
     println!("Vulkan Initialized");
 
-    vk.create_swapchain(config.preview_width, config.preview_height);
+    if config.is_preview != 0 {
+        vk.create_swapchain(config.preview_width, config.preview_height);
+    }
 
     let stilb = Stilb {
         vk,
