@@ -30,7 +30,7 @@ pub fn blit_with_shader(vk: &VulkanContext, cmd: vk::CommandBuffer, image: vk::I
 
 pub struct Stilb {
     pub vk: VulkanContext,
-    pub meshes: Vec<Mesh>,
+    pub mesh: Mesh,
     pub window: *mut GLFWwindow,
 }
 
@@ -70,7 +70,10 @@ pub extern "C" fn initialize(config: StilbConfig) -> *mut Stilb {
 
     let stilb = Stilb {
         vk,
-        meshes: Vec::new(),
+        mesh: Mesh {
+            vertices: Vec::new(),
+            indices: Vec::new(),
+        },
         window: window,
     };
 
@@ -90,12 +93,12 @@ pub extern "C" fn deinitialize(stilb: *mut Stilb) {
 pub extern "C" fn add_mesh(stilb: *mut Stilb, raw: FfiMesh) {
     unsafe {
         let stilb_obj = &mut *stilb;
-
         let mesh = Mesh::from_ffi_mesh(raw);
 
         // println!("Added mesh: {:#?}", mesh);
 
-        stilb_obj.meshes.push(mesh);
+        // stilb_obj.meshes.push(mesh);
+        todo!();
     }
 }
 

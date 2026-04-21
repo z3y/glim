@@ -17,7 +17,7 @@ mod tests {
     };
 
     fn get_test_config() -> StilbConfig {
-        let preview = false;
+        let preview = true;
 
         StilbConfig {
             is_preview: if preview { 1 } else { 0 },
@@ -84,14 +84,9 @@ mod tests {
     #[test]
     fn test_initialize() {
         let config = get_test_config();
-
-        let stilb = initialize(config);
-
-        let stilb_obj = unsafe { &mut *stilb };
-        let vk = &mut stilb_obj.vk;
-
-        stilb_obj.meshes.push(get_test_mesh());
-        let mesh = &stilb_obj.meshes[0];
+        let app = initialize(config);
+        let app = unsafe { &mut *app };
+        let vk = &mut app.vk;
 
         let mut texture2 = Texture2D::new(
             vk,
@@ -125,8 +120,6 @@ mod tests {
         .unwrap();
 
         texture2.destroy(vk);
-
-        let mut gpu_mesh = GpuMesh::new(vk, mesh);
 
         let mut texture = Texture2D::new(
             vk,
@@ -176,9 +169,9 @@ mod tests {
             let groups_x = (texture.width() + 7) / 8;
             let groups_y = (texture.height() + 7) / 8;
             vk.device.cmd_dispatch(cmd, groups_x, groups_y, 1);
-
-            vk.end_single_use_cmd(cmd);
         }
+
+        vk.end_single_use_cmd(cmd);
 
         let pixels_read = texture.read_pixels(vk);
         save_bmp(
@@ -189,25 +182,20 @@ mod tests {
         )
         .unwrap();
 
-        gpu_mesh.destroy(vk);
         texture.destroy(vk);
         test_shader.destroy(vk);
 
-        // run(stilb);
-
-        deinitialize(stilb);
+        deinitialize(app);
     }
 
     #[test]
     fn test_visibility_rasterize() {
         let config = get_test_config();
-        let stilb = initialize(config);
+        let app = initialize(config);
+        let app = unsafe { &mut *app };
+        let vk = &mut app.vk;
 
-        let stilb_obj = unsafe { &mut *stilb };
-        let vk = &mut stilb_obj.vk;
-
-        stilb_obj.meshes.push(get_test_mesh_moneky());
-        let mesh = &stilb_obj.meshes[0];
+        let mesh = get_test_mesh_moneky();
 
         let mut visibility = Texture2D::new(
             vk,
@@ -221,7 +209,7 @@ mod tests {
                 | vk::ImageUsageFlags::COLOR_ATTACHMENT,
         );
 
-        let mut gpu_mesh = GpuMesh::new(vk, mesh);
+        let mut gpu_mesh = GpuMesh::new(vk, &mesh);
 
         #[repr(C)]
         struct PushConstants {
@@ -325,6 +313,6 @@ mod tests {
         visibility.destroy(vk);
         gpu_mesh.destroy(vk);
 
-        deinitialize(stilb);
+        deinitialize(app);
     }
 }
