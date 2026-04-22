@@ -324,22 +324,25 @@ impl GpuMesh {
     }
 }
 
-pub fn destroy_vulkan_as(vk: &VulkanContext, vulkan_blas: &mut VulkanAs) {
-    assert!(!vulkan_blas.acceleration_structure.is_null());
-    assert!(!vulkan_blas.memory.is_null());
-    assert!(!vulkan_blas.buffer.is_null());
+pub fn destroy_vulkan_as(vk: &VulkanContext, accel_structure: &mut VulkanAs) {
+    assert!(!accel_structure.acceleration_structure.is_null());
+    assert!(!accel_structure.memory.is_null());
+    assert!(!accel_structure.buffer.is_null());
 
     let Some(as_device) = &vk.as_device else {
         unreachable!("expected as device");
     };
 
     unsafe {
-        vk.device.destroy_buffer(vulkan_blas.buffer, None);
-        vk.device.free_memory(vulkan_blas.memory, None);
-        as_device.destroy_acceleration_structure(vulkan_blas.acceleration_structure, None);
+        vk.device.destroy_buffer(accel_structure.buffer, None);
+        vk.device.free_memory(accel_structure.memory, None);
+        as_device.destroy_acceleration_structure(accel_structure.acceleration_structure, None);
     };
 
-    vulkan_blas.address = 0;
+    accel_structure.address = 0;
+    accel_structure.memory = vk::DeviceMemory::null();
+    accel_structure.buffer = vk::Buffer::null();
+    accel_structure.acceleration_structure = vk::AccelerationStructureKHR::null();
 }
 
 pub fn create_tlas(vk: &VulkanContext, blas: &VulkanAs) -> VulkanAs {
