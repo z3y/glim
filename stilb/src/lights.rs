@@ -1,0 +1,20 @@
+use crate::math::Vector3;
+
+#[repr(u32)]
+pub enum LightType {
+    Directional = 0,
+    Point = 1,
+    Spot = 2,
+}
+
+#[repr(C)]
+pub struct Light {
+    pub ty: LightType,
+    pub position: Vector3,
+
+    pub direction: Vector3,
+    pub range: f32,
+
+    pub color: Vector3,
+    pub shadow_range_or_angle: f32,
+}

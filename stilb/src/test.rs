@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn test_initialize() {
         let config = get_test_config();
-        let app = initialize(config);
+        let app = app_initialize(config);
         let app = unsafe { &mut *app };
         let vk = &mut app.vk;
 
@@ -181,13 +181,13 @@ mod tests {
         texture.destroy(vk);
         test_shader.destroy(vk);
 
-        deinitialize(app);
+        app_deinitialize(app);
     }
 
     #[test]
     fn test_visibility_rasterize() {
         let config = get_test_config();
-        let app = initialize(config);
+        let app = app_initialize(config);
         let app = unsafe { &mut *app };
         let vk = &mut app.vk;
 
@@ -282,7 +282,7 @@ mod tests {
         visibility.destroy(vk);
         gpu_mesh.destroy(vk);
 
-        deinitialize(app);
+        app_deinitialize(app);
     }
 
     #[test]
@@ -293,15 +293,28 @@ mod tests {
             preview_height: 512,
         };
 
-        let app = initialize(config);
+        let app = app_initialize(config);
         let app = unsafe { &mut *app };
 
         let mesh = get_test_mesh_moneky();
 
         app.meshes.push(mesh);
 
-        run(app);
+        app.lights.push(Light {
+            ty: lights::LightType::Point,
+            position: Vector3 {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+            },
+            direction: Vector3::ZERO,
+            range: 5.0,
+            color: Vector3::ONE,
+            shadow_range_or_angle: 0.1,
+        });
 
-        deinitialize(app);
+        app_run(app);
+
+        app_deinitialize(app);
     }
 }

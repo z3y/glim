@@ -1,9 +1,9 @@
 use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
-use shaders::get_test_shader;
+use shaders::{get_bake_lights_shader, get_test_shader};
 
-use crate::vulkan_core::VulkanContext;
+use crate::{lights::Light, mesh::Vertex, texture2d::Texture2D, vulkan_core::VulkanContext};
 
 pub struct ComputeShader {
     module: vk::ShaderModule,
@@ -136,6 +136,162 @@ pub fn update_test_shader(vk: &VulkanContext, shader: &ComputeShader, binding0: 
     image_write = image_write.image_info(&image_info);
 
     let descriptor_writes = [image_write];
+
+    unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
+}
+
+// pub struct BakePushConstants
+// {
+//     Vertex *vertices;
+//     uint *indices;
+
+//     Light *lights;
+//     uint lightCount;
+//     float pad0;
+
+//     uint sampleIndex;
+//     uint width;
+//     uint height;
+//     float pad1;
+// };
+
+#[repr(C)]
+pub struct BakePushConstants {
+    vertices: *const Vertex,
+    indices: *const u32,
+
+    lights: *const Light,
+    lights_count: u32,
+    pad0: f32,
+
+    sampled_index: u32,
+    width: u32,
+    height: u32,
+    pad1: f32,
+}
+
+pub fn load_bake_lights_shader(vk: &VulkanContext) -> ComputeShader {
+    let mut bindings = Vec::new();
+
+    // TopLevelAS
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 0,
+        descriptor_type: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+
+    // VisibilityBuffer
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 2,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+
+    // Albedo
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 3,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+
+    // Target0
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 4,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+
+    let specialization_info = vk::SpecializationInfo::default();
+
+    let push_constant_ranges = [vk::PushConstantRange {
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        offset: 0,
+        size: std::mem::size_of::<BakePushConstants>() as u32,
+    }];
+
+    ComputeShader::new(
+        vk,
+        get_bake_lights_shader(),
+        &bindings,
+        &push_constant_ranges,
+        &specialization_info,
+    )
+}
+
+pub fn update_bake_lights_shader(
+    vk: &VulkanContext,
+    shader: &ComputeShader,
+    tlas: vk::AccelerationStructureKHR,
+    visibility: &Texture2D,
+    albedo: &Texture2D,
+    target0: &Texture2D,
+) {
+    let mut descriptor_writes = Vec::new();
+
+    // TopLevelAS
+    let tlas = [tlas];
+    let mut info =
+        vk::WriteDescriptorSetAccelerationStructureKHR::default().acceleration_structures(&tlas);
+    let write = vk::WriteDescriptorSet::default()
+        .push_next(&mut info)
+        .dst_set(shader.descriptor_set)
+        .dst_binding(0)
+        .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
+        .descriptor_count(1);
+    descriptor_writes.push(write);
+
+    // VisibilityBuffer
+    let info = [vk::DescriptorImageInfo {
+        image_view: visibility.view,
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 2,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
+
+    // Albedo
+    let info = [vk::DescriptorImageInfo {
+        image_view: albedo.view,
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 3,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
+
+    // Target0
+    let info = [vk::DescriptorImageInfo {
+        image_view: target0.view,
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 4,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }

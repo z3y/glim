@@ -59,10 +59,10 @@ impl Mesh {
 }
 
 pub struct VulkanAs {
-    acceleration_structure: vk::AccelerationStructureKHR,
-    buffer: vk::Buffer,
-    memory: vk::DeviceMemory,
-    address: vk::DeviceAddress,
+    pub acceleration_structure: vk::AccelerationStructureKHR,
+    pub buffer: vk::Buffer,
+    pub memory: vk::DeviceMemory,
+    pub address: vk::DeviceAddress,
 }
 
 pub enum AccelerationStructureType {

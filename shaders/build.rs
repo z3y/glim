@@ -36,6 +36,12 @@ fn main() {
     });
 
     shaders.push(Shader {
+        ty: ShaderType::Compute,
+        src: "bake_lights.slang".into(),
+        dst: "bake_lights.spv".into(),
+    });
+
+    shaders.push(Shader {
         ty: ShaderType::Vertex,
         src: "visibility.slang".into(),
         dst: "visibility_vertex.spv".into(),
