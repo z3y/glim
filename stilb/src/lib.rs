@@ -336,7 +336,9 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) {
         app.vk
             .device
             .wait_for_fences(&[frame.fence], true, u64::MAX)
-            .unwrap()
+            .unwrap();
+
+        app.vk.device.reset_fences(&[frame.fence]).unwrap()
     }
 
     let (image_index, is_optimal) = unsafe {
@@ -409,7 +411,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) {
             let barrier = group.diffuse_lightmap.barrier(
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                 vk::AccessFlags::SHADER_WRITE,
-                vk::AccessFlags::SHADER_READ,
+                vk::AccessFlags::TRANSFER_READ,
             );
 
             let swapchain_barrier = vk::ImageMemoryBarrier {
@@ -434,7 +436,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) {
         }
 
         {
-            let offset0 = vk::Offset3D { x: 0, y: 0, z: 1 };
+            let offset0 = vk::Offset3D { x: 0, y: 0, z: 0 };
             let offset1 = vk::Offset3D {
                 x: width as i32,
                 y: height as i32,
@@ -508,6 +510,18 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) {
             .device
             .queue_submit(app.vk.compute_queue, &submits, fence)
             .unwrap();
+
+        let swapchains = [app.vk.swapchain.swapchain];
+        let image_indices = [image_index];
+        let present_info = vk::PresentInfoKHR::default()
+            .wait_semaphores(&signal_semaphores)
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+
+        app.vk
+            .swapchain_device
+            .queue_present(app.vk.present_queue, &present_info)
+            .unwrap();
     };
 
     app.vk.swapchain.frame_index =
@@ -522,11 +536,11 @@ fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGr
 
     let constants_bytes = as_bytes(&group.push);
 
-    let barrier = group.diffuse_lightmap.barrier(
-        vk::ImageLayout::GENERAL,
-        vk::AccessFlags::default(),
-        vk::AccessFlags::SHADER_WRITE,
-    );
+    // let barrier = group.diffuse_lightmap.barrier(
+    //     vk::ImageLayout::GENERAL,
+    //     vk::AccessFlags::default(),
+    //     vk::AccessFlags::SHADER_WRITE,
+    // );
 
     let barrier2 = group.visibility.barrier(
         vk::ImageLayout::GENERAL,
@@ -545,7 +559,7 @@ fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGr
             vk::DependencyFlags::empty(),
             &[],
             &[],
-            &[barrier, barrier2],
+            &[barrier2],
         );
 
         vk.device
