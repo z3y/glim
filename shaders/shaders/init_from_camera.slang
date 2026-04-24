@@ -45,9 +45,12 @@ void main(uint3 threadID: SV_DispatchThreadID)
     ray.tMin = 0.001;
     ray.tMax = RAY_MAX;
 
-    // trace ray
+    float4 result = float4(0, 0, 0, 1);
+    Hit hit;
+    if (TraceRay(ray, hit))
+    {
+        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, true, false);
+    }
 
-    // get surface bary and prim id
-
-    VisibilityBuffer[coords] = float4(ray.D, 1);
+    VisibilityBuffer[coords] = result;
 }

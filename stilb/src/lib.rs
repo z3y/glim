@@ -199,7 +199,7 @@ fn init_from_camera(app: &mut Stilb, width: u32, height: u32) -> Texture2D {
     let push = InitFromCameraPushConstants {
         camera_position: app.camera.position,
         fov_half_tan: (app.camera.fov.to_radians() * 0.5).tan(),
-        camera_direction: Vector3::new(0.0, 0.0, 1.0).normalize(),
+        camera_direction: Vector3::new(-0.0, 0.5, 1.0).normalize(),
         pad: 0,
     };
 
@@ -437,7 +437,7 @@ pub extern "C" fn app_initialize(app_config: StilbConfig) -> *mut Stilb {
     let bake_lights_shader = load_bake_lights_shader(&vk);
 
     let camera = Camera {
-        position: Vector3::ONE,
+        position: Vector3::new(0.0, -1.0, -5.0),
         yaw: 0.0,
         pitch: 0.0,
         fov: 60.0,
