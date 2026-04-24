@@ -1,4 +1,4 @@
-use std::ptr;
+use std::{ptr, time::Duration};
 
 use ash::vk::{self, Handle};
 
@@ -289,15 +289,21 @@ fn bake_lightmap_group(app: &mut Stilb, group: &mut LightmapGroup) {
 
         let mut sample_index: u32 = 0;
 
+        let mut previous_time = std::time::Instant::now();
+
         unsafe {
             while glfwWindowShouldClose(window) == 0 {
                 glfwPollEvents();
+
+                let now = std::time::Instant::now();
 
                 if glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS {
                     glfwSetWindowShouldClose(window, 1);
                 }
 
-                update_camera(app);
+                let delta_time = now.duration_since(previous_time).as_secs_f32();
+
+                update_camera(app, delta_time);
 
                 if !app.preview_initialized {
                     sample_index = 0;
@@ -308,6 +314,10 @@ fn bake_lightmap_group(app: &mut Stilb, group: &mut LightmapGroup) {
                     render_sample_camera(app, group);
                     sample_index += 1;
                 }
+
+                std::thread::sleep(Duration::from_millis(16));
+
+                previous_time = now;
             }
         }
     } else {
@@ -367,7 +377,6 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) {
     let fence = frame.fence;
     let cmd = frame.command_buffer;
     let image_available_semaphore = frame.image_available_semaphore;
-    let render_finished_semaphore = frame.render_finished_semaphore;
 
     let begin_info = vk::CommandBufferBeginInfo {
         flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
@@ -509,6 +518,9 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) {
         }
 
         app.vk.device.end_command_buffer(cmd).unwrap();
+
+        let render_finished_semaphore =
+            app.vk.swapchain.frames[image_index as usize].render_finished_semaphore;
 
         let wait_dst_stage_mask = [vk::PipelineStageFlags::TRANSFER];
         let cmds = [cmd];

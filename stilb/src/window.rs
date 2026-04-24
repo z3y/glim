@@ -63,14 +63,12 @@ pub fn initialize_window(
     window
 }
 
-pub fn update_camera(app: &mut Stilb) {
+pub fn update_camera(app: &mut Stilb, delta_time: f32) {
     let window = app.window;
     let camera = &mut app.camera;
 
-    // todo delta time
-    let delta_time = 0.016;
     let mut move_speed = 5.0 * delta_time;
-    let mouse_sensitivity = 0.1;
+    let mouse_sensitivity = 0.01;
 
     let mut camera_moved = false;
 
@@ -88,33 +86,36 @@ pub fn update_camera(app: &mut Stilb) {
         let mut pos_y = 0.0f64;
         glfwGetCursorPos(window, &mut pos_x, &mut pos_y);
 
-        if right_click_held {
+        if !right_click_held {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            // Always track position while not held so there's no jump when you start holding
+            camera.last_cursor_pos = Some((pos_x, pos_y));
+        } else {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
             if let Some((last_x, last_y)) = camera.last_cursor_pos {
                 let dx = (pos_x - last_x) as f32 * mouse_sensitivity;
-                let dy = (pos_y - last_y) as f32 * mouse_sensitivity;
+                let dy = (last_y - pos_y) as f32 * mouse_sensitivity;
+                camera.last_cursor_pos = Some((pos_x, pos_y));
 
                 if dx != 0.0 || dy != 0.0 {
                     camera.yaw += dx;
-                    camera.pitch = (camera.pitch + dy).clamp(-89.0, 89.0);
+                    camera.pitch = (camera.pitch + dy).clamp(-1.55334, 1.55334);
                     camera_moved = true;
                 }
             }
-        } else {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         }
 
-        camera.last_cursor_pos = Some((pos_x, pos_y));
+        let yaw_rad = camera.yaw;
+        let pitch_rad = camera.pitch;
 
-        let yaw_rad = camera.yaw.to_radians();
-        let pitch_rad = camera.pitch.to_radians();
-
+        // Match C: cos(yaw)*cos(pitch), sin(pitch), sin(yaw)*cos(pitch)
         let forward = Vector3::new(
-            yaw_rad.sin() * pitch_rad.cos(),
-            -pitch_rad.sin(),
             yaw_rad.cos() * pitch_rad.cos(),
-        );
+            pitch_rad.sin(),
+            yaw_rad.sin() * pitch_rad.cos(),
+        )
+        .normalize();
 
         let world_up = Vector3::new(0.0, 1.0, 0.0);
         let right = forward.cross(world_up).normalize();
@@ -136,11 +137,11 @@ pub fn update_camera(app: &mut Stilb) {
             camera_moved = true;
         }
         if glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS {
-            camera.position = camera.position + world_up * move_speed;
+            camera.position = camera.position + Vector3::new(0.0, 1.0, 0.0) * move_speed;
             camera_moved = true;
         }
         if glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS {
-            camera.position = camera.position - world_up * move_speed;
+            camera.position = camera.position - Vector3::new(0.0, 1.0, 0.0) * move_speed;
             camera_moved = true;
         }
     }
