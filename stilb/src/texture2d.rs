@@ -10,9 +10,9 @@ pub struct Texture2D {
     height: u32,
     layout: vk::ImageLayout,
 
-    pub image: vk::Image,
-    pub memory: vk::DeviceMemory,
-    pub view: vk::ImageView,
+    image: vk::Image,
+    memory: vk::DeviceMemory,
+    view: vk::ImageView,
 }
 
 #[allow(dead_code)]
@@ -336,5 +336,17 @@ impl Texture2D {
 
     pub fn format(&self) -> vk::Format {
         self.format
+    }
+
+    pub fn image(&self) -> vk::Image {
+        self.image
+    }
+
+    pub fn memory(&self) -> vk::DeviceMemory {
+        self.memory
+    }
+
+    pub fn view(&self) -> vk::ImageView {
+        self.view
     }
 }

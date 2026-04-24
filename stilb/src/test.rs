@@ -13,10 +13,8 @@ mod tests {
     };
 
     fn get_test_config() -> StilbConfig {
-        let preview = true;
-
         StilbConfig {
-            is_preview: if preview { 1 } else { 0 },
+            is_preview: false,
             preview_width: 512,
             preview_height: 512,
         }
@@ -129,7 +127,7 @@ mod tests {
         );
 
         let mut test_shader = load_shader_test(vk);
-        update_test_shader(vk, &test_shader, texture.view);
+        update_test_shader(vk, &test_shader, texture.view());
 
         let cmd = vk.begin_single_use_cmd();
 
@@ -288,7 +286,7 @@ mod tests {
     #[test]
     fn test_headless_bake() {
         let config = StilbConfig {
-            is_preview: 0,
+            is_preview: false,
             preview_width: 512,
             preview_height: 512,
         };
@@ -298,9 +296,9 @@ mod tests {
 
         let mesh = get_test_mesh_moneky();
 
-        app.meshes.push(mesh);
+        app.cpu_meshes.push(mesh);
 
-        app.lights.push(Light {
+        app.cpu_lights.push(Light {
             ty: lights::LightType::Point,
             position: Vector3 {
                 x: 0.0,

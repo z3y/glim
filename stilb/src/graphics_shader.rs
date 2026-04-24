@@ -190,7 +190,7 @@ impl GraphicsShader {
             layers: 1,
             ..Default::default()
         };
-        let attachments = [target.view];
+        let attachments = [target.view()];
         framebuffer_create = framebuffer_create.attachments(&attachments);
 
         let framebuffer = unsafe {
@@ -301,7 +301,7 @@ pub fn create_visibility_shader(vk: &mut VulkanContext, visibility: &Texture2D) 
         size: std::mem::size_of::<VisibilityPushConstants>() as u32,
     }];
 
-    let mut shader = GraphicsShader::new(
+    let shader = GraphicsShader::new(
         vk,
         Some(get_visibility_vertex_shader()),
         Some(get_visibility_fragment_shader()),

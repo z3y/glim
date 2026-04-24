@@ -59,10 +59,46 @@ impl Mesh {
 }
 
 pub struct VulkanAs {
-    pub acceleration_structure: vk::AccelerationStructureKHR,
-    pub buffer: vk::Buffer,
-    pub memory: vk::DeviceMemory,
-    pub address: vk::DeviceAddress,
+    acceleration_structure: vk::AccelerationStructureKHR,
+    buffer: vk::Buffer,
+    memory: vk::DeviceMemory,
+    address: vk::DeviceAddress,
+}
+
+impl VulkanAs {
+    pub fn acceleration_structure(&self) -> vk::AccelerationStructureKHR {
+        self.acceleration_structure
+    }
+
+    pub fn null() -> Self {
+        Self {
+            acceleration_structure: vk::AccelerationStructureKHR::null(),
+            buffer: vk::Buffer::null(),
+            memory: vk::DeviceMemory::null(),
+            address: 0,
+        }
+    }
+
+    pub fn destroy(&mut self, vk: &VulkanContext) {
+        assert!(!self.acceleration_structure.is_null());
+        assert!(!self.memory.is_null());
+        assert!(!self.buffer.is_null());
+
+        let Some(as_device) = &vk.as_device else {
+            unreachable!("expected as device");
+        };
+
+        unsafe {
+            vk.device.destroy_buffer(self.buffer, None);
+            vk.device.free_memory(self.memory, None);
+            as_device.destroy_acceleration_structure(self.acceleration_structure, None);
+        };
+
+        self.address = 0;
+        self.memory = vk::DeviceMemory::null();
+        self.buffer = vk::Buffer::null();
+        self.acceleration_structure = vk::AccelerationStructureKHR::null();
+    }
 }
 
 pub enum AccelerationStructureType {
@@ -283,10 +319,23 @@ impl GpuMesh {
         }
     }
 
+    pub fn null() -> Self {
+        Self {
+            vertex_buffer: vk::Buffer::null(),
+            vertex_memory: vk::DeviceMemory::null(),
+            vertex_address: 0,
+            index_buffer: vk::Buffer::null(),
+            index_memory: vk::DeviceMemory::null(),
+            index_address: 0,
+            acceleration_structure: AccelerationStructureType::RayQuery(VulkanAs::null()),
+            index_len: 0,
+        }
+    }
+
     pub fn destroy(&mut self, vk: &VulkanContext) {
         match &mut self.acceleration_structure {
             AccelerationStructureType::RayQuery(vulkan_blas) => {
-                destroy_vulkan_as(vk, vulkan_blas);
+                vulkan_blas.destroy(vk);
             }
             AccelerationStructureType::CwBvh => todo!(),
         }
@@ -322,27 +371,6 @@ impl GpuMesh {
     pub fn index_address(&self) -> u64 {
         self.index_address
     }
-}
-
-pub fn destroy_vulkan_as(vk: &VulkanContext, accel_structure: &mut VulkanAs) {
-    assert!(!accel_structure.acceleration_structure.is_null());
-    assert!(!accel_structure.memory.is_null());
-    assert!(!accel_structure.buffer.is_null());
-
-    let Some(as_device) = &vk.as_device else {
-        unreachable!("expected as device");
-    };
-
-    unsafe {
-        vk.device.destroy_buffer(accel_structure.buffer, None);
-        vk.device.free_memory(accel_structure.memory, None);
-        as_device.destroy_acceleration_structure(accel_structure.acceleration_structure, None);
-    };
-
-    accel_structure.address = 0;
-    accel_structure.memory = vk::DeviceMemory::null();
-    accel_structure.buffer = vk::Buffer::null();
-    accel_structure.acceleration_structure = vk::AccelerationStructureKHR::null();
 }
 
 pub fn create_tlas(vk: &VulkanContext, blas: &VulkanAs) -> VulkanAs {

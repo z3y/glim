@@ -232,7 +232,7 @@ pub fn update_bake_lights_shader(
     tlas: vk::AccelerationStructureKHR,
     visibility: &Texture2D,
     albedo: &Texture2D,
-    target0: &Texture2D,
+    diffuse_lightmap: &Texture2D,
 ) {
     let mut descriptor_writes = Vec::new();
 
@@ -250,7 +250,7 @@ pub fn update_bake_lights_shader(
 
     // VisibilityBuffer
     let info = [vk::DescriptorImageInfo {
-        image_view: visibility.view,
+        image_view: visibility.view(),
         image_layout: vk::ImageLayout::GENERAL,
         ..Default::default()
     }];
@@ -265,7 +265,7 @@ pub fn update_bake_lights_shader(
 
     // Albedo
     let info = [vk::DescriptorImageInfo {
-        image_view: albedo.view,
+        image_view: albedo.view(),
         image_layout: vk::ImageLayout::GENERAL,
         ..Default::default()
     }];
@@ -280,7 +280,7 @@ pub fn update_bake_lights_shader(
 
     // Target0
     let info = [vk::DescriptorImageInfo {
-        image_view: target0.view,
+        image_view: diffuse_lightmap.view(),
         image_layout: vk::ImageLayout::GENERAL,
         ..Default::default()
     }];
