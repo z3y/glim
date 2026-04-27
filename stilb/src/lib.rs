@@ -8,6 +8,7 @@ use glfw_sys::{
 };
 
 use crate::{
+    bmp::save_bmp,
     camera::Camera,
     compute_shader::{
         BakePushConstants, ComputeShader, load_bake_lights_shader, load_init_from_camera_shader,
@@ -56,6 +57,7 @@ pub struct Stilb {
     pub preview_initialized: bool,
 }
 
+#[derive(Clone, Debug)]
 pub struct LightmapSettings {
     pub width: u32,
     pub height: u32,
@@ -178,7 +180,7 @@ fn init_from_camera(app: &mut Stilb, width: u32, height: u32) -> Texture2D {
     let vk = &mut app.vk;
     let shader = &app.init_from_camera_shader;
 
-    let mut visibility = Texture2D::new(
+    let visibility = Texture2D::new(
         vk,
         width,
         height,
@@ -255,7 +257,7 @@ fn rasterize_visibility_from_camera(
 
 fn clear_texture(app: &mut Stilb, texture: &mut Texture2D, cmd: vk::CommandBuffer) {
     let clear = vk::ClearColorValue {
-        float32: [0.0, 0.0, 0.0, 1.0],
+        float32: [0.0, 0.0, 0.0, 0.0],
     };
 
     let range = vk::ImageSubresourceRange {
@@ -293,8 +295,6 @@ fn clear_texture(app: &mut Stilb, texture: &mut Texture2D, cmd: vk::CommandBuffe
     }
 }
 
-// fn initialize_rays(app: &mut Stilb) {}
-
 fn start_bake(app: &mut Stilb, settings: LightmapSettings) {
     assert!(app.cpu_meshes.len() > 0);
 
@@ -307,22 +307,12 @@ fn start_bake(app: &mut Stilb, settings: LightmapSettings) {
 
     app.tlas = create_tlas(&app.vk, blas);
 
-    let mut group = create_lightmap_group(app, settings);
-
-    bake_lightmap_group(app, &mut group);
-
-    destroy_group(&app.vk, &mut group);
+    let group = create_lightmap_group(app, settings);
+    bake_lightmap_group(app, group);
 }
 
-fn bake_lightmap_group(app: &mut Stilb, group: &mut LightmapGroup) {
-    update_bake_lights_shader(
-        &app.vk,
-        &app.bake_shader,
-        app.tlas.acceleration_structure(),
-        &group.visibility,
-        &group.albedo,
-        &group.diffuse_lightmap,
-    );
+fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
+    let mut group = group;
 
     if app.config.is_preview {
         let window = app.window;
@@ -351,7 +341,19 @@ fn bake_lightmap_group(app: &mut Stilb, group: &mut LightmapGroup) {
 
                 if sample_index < group.settings.max_samples {
                     group.push.sample_index = sample_index;
-                    render_sample_camera(app, group);
+                    if !render_sample_camera(app, &mut group) {
+                        destroy_group(&app.vk, &mut group);
+
+                        group.settings.width = app.vk.swapchain.extent.width;
+                        group.settings.height = app.vk.swapchain.extent.height;
+                        app.config.preview_width = group.settings.width;
+                        app.config.preview_height = group.settings.height;
+                        group = create_lightmap_group(app, group.settings.clone());
+
+                        sample_index = 0;
+                        app.preview_initialized = false;
+                        continue;
+                    }
                     sample_index += 1;
                 }
 
@@ -366,26 +368,28 @@ fn bake_lightmap_group(app: &mut Stilb, group: &mut LightmapGroup) {
             group.push.sample_index = i as u32;
 
             let cmd = app.vk.begin_single_use_cmd();
-            render_sample(app, cmd, group);
+            render_sample(app, cmd, &mut group);
             app.vk.end_single_use_cmd(cmd);
         }
+
+        let pixels_read = group.diffuse_lightmap.read_pixels(&app.vk);
+        save_bmp(
+            "../temp/diffuse_lightmap.bmp",
+            group.diffuse_lightmap.width(),
+            group.diffuse_lightmap.height(),
+            &pixels_read,
+        )
+        .unwrap();
     }
 
     unsafe {
         app.vk.device.device_wait_idle().unwrap();
     }
 
-    // let pixels_read = group.diffuse_lightmap.read_pixels(&app.vk);
-    // save_bmp(
-    //     "../temp/diffuse_lightmap.bmp",
-    //     group.diffuse_lightmap.width(),
-    //     group.diffuse_lightmap.height(),
-    //     &pixels_read,
-    // )
-    // .unwrap();
+    destroy_group(&app.vk, &mut group);
 }
 
-fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) {
+fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
     let frame_index = app.vk.swapchain.frame_index;
 
     let frame = &app.vk.swapchain.frames[frame_index];
@@ -402,17 +406,26 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) {
         app.vk.device.reset_fences(&[frame.fence]).unwrap()
     }
 
-    let (image_index, is_optimal) = unsafe {
-        app.vk
-            .swapchain_device
-            .acquire_next_image(
-                app.vk.swapchain.swapchain,
-                u64::MAX,
-                frame.image_available_semaphore,
-                vk::Fence::null(),
-            )
-            .unwrap()
+    let (image_index, is_optimal) = match unsafe {
+        app.vk.swapchain_device.acquire_next_image(
+            app.vk.swapchain.swapchain,
+            u64::MAX,
+            frame.image_available_semaphore,
+            vk::Fence::null(),
+        )
+    } {
+        Ok(result) => result,
+        Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+            unsafe {
+                app.vk.device.device_wait_idle().unwrap();
+            }
+            app.vk.create_swapchain(width, height);
+            return false;
+        }
+        Err(e) => panic!("acquire failed: {e}"),
     };
+
+    // assert!(is_optimal);
 
     // todo: handle is_optimal
     let fence = frame.fence;
@@ -588,16 +601,25 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) {
             .swapchains(&swapchains)
             .image_indices(&image_indices);
 
-        app.vk
-            .swapchain_device
-            .queue_present(app.vk.present_queue, &present_info)
-            .unwrap();
+        match {
+            app.vk
+                .swapchain_device
+                .queue_present(app.vk.present_queue, &present_info)
+        } {
+            Ok(_) => {}
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                app.vk.device.device_wait_idle().unwrap();
+                app.vk.create_swapchain(width, height);
+                return false;
+            }
+            Err(e) => panic!("present failed: {e}"),
+        }
     };
 
     app.vk.swapchain.frame_index =
         (app.vk.swapchain.frame_index + 1) % app.vk.swapchain.frames.len();
 
-    // let fence = render_sample(app, group);
+    true
 }
 
 fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGroup) {
@@ -663,6 +685,8 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
         init_from_bake(app, settings.width, settings.height)
     };
 
+    println!("creating lightmap group {:?}", &settings);
+
     let albedo = Texture2D::new(
         &app.vk,
         settings.width,
@@ -694,6 +718,15 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
         height: settings.height,
         pad1: 0,
     };
+
+    update_bake_lights_shader(
+        &app.vk,
+        &app.bake_shader,
+        app.tlas.acceleration_structure(),
+        &visibility,
+        &albedo,
+        &diffuse_lightmap,
+    );
 
     LightmapGroup {
         settings,

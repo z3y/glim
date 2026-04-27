@@ -287,6 +287,10 @@ impl VulkanContext {
             swapchain: vk::SwapchainKHR::null(),
             frames: Vec::new(),
             frame_index: 0,
+            extent: vk::Extent2D {
+                width: 0,
+                height: 0,
+            },
         };
 
         let allocate_info = vk::CommandBufferAllocateInfo::default()

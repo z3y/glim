@@ -43,26 +43,26 @@ fn main() {
 
     shaders.push(Shader {
         ty: ShaderType::Compute,
-        src: "bake_lights.slang".into(),
-        dst: "bake_lights.spv".into(),
+        src: "bake.slang".into(),
+        dst: "bake.spv".into(),
     });
 
     shaders.push(Shader {
         ty: ShaderType::Vertex,
-        src: "visibility.slang".into(),
-        dst: "visibility_vertex.spv".into(),
+        src: "init_from_bake.slang".into(),
+        dst: "init_from_bake_vertex.spv".into(),
     });
 
     shaders.push(Shader {
         ty: ShaderType::Geometry,
-        src: "visibility.slang".into(),
-        dst: "visibility_geometry.spv".into(),
+        src: "init_from_bake.slang".into(),
+        dst: "init_from_bake_geometry.spv".into(),
     });
 
     shaders.push(Shader {
         ty: ShaderType::Fragment,
-        src: "visibility.slang".into(),
-        dst: "visibility_fragment.spv".into(),
+        src: "init_from_bake.slang".into(),
+        dst: "init_from_bake_fragment.spv".into(),
     });
 
     for shader in shaders {

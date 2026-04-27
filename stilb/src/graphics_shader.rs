@@ -2,7 +2,8 @@ use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
 use shaders::{
-    get_visibility_fragment_shader, get_visibility_geometry_shader, get_visibility_vertex_shader,
+    get_init_from_bake_fragment_shader, get_init_from_bake_geometry_shader,
+    get_init_from_bake_vertex_shader,
 };
 
 use crate::{mesh::Vertex, texture2d::Texture2D, vulkan_context::VulkanContext};
@@ -303,9 +304,9 @@ pub fn create_visibility_shader(vk: &mut VulkanContext, visibility: &Texture2D) 
 
     let shader = GraphicsShader::new(
         vk,
-        Some(get_visibility_vertex_shader()),
-        Some(get_visibility_fragment_shader()),
-        Some(get_visibility_geometry_shader()),
+        Some(get_init_from_bake_vertex_shader()),
+        Some(get_init_from_bake_fragment_shader()),
+        Some(get_init_from_bake_geometry_shader()),
         &[],
         &push_constant_ranges,
         &vk::SpecializationInfo::default(),

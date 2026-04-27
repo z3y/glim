@@ -36,6 +36,8 @@ float4 EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, boo
 //     return GetSurface(query.CommittedPrimitiveIndex(), query.CommittedTriangleBarycentrics());
 // }
 
+// hit is not always initialized
+#pragma warning(disable: 41018)
 bool TraceRay(Ray ray, out Hit hit)
 {
     RayDesc rayDesc;
@@ -62,6 +64,7 @@ bool TraceRay(Ray ray, out Hit hit)
 
     return false;
 }
+#pragma warning(default: 41018)
 
 bool TraceShadowRay(Ray ray)
 {

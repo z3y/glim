@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
-use shaders::{get_bake_lights_shader, get_init_from_camera_shader, get_test_shader};
+use shaders::{get_bake_shader, get_init_from_camera_shader, get_test_shader};
 
 use crate::{math::Vector3, texture2d::Texture2D, vulkan_context::VulkanContext};
 
@@ -304,7 +304,7 @@ pub fn load_bake_lights_shader(vk: &VulkanContext) -> ComputeShader {
 
     ComputeShader::new(
         vk,
-        get_bake_lights_shader(),
+        get_bake_shader(),
         &bindings,
         &push_constant_ranges,
         &specialization_info,

@@ -13,6 +13,7 @@ pub struct SwapchainFrame {
 
 pub struct SwapchainData {
     pub swapchain: vk::SwapchainKHR,
+    pub extent: vk::Extent2D,
     pub frame_index: usize,
     pub frames: Vec<SwapchainFrame>,
 }
@@ -69,7 +70,7 @@ impl VulkanContext {
             }
         }
 
-        let extent = if capabilities.current_extent.width == u32::MAX {
+        let extent = if capabilities.current_extent.width != u32::MAX {
             capabilities.current_extent
         } else {
             vk::Extent2D {
@@ -197,6 +198,7 @@ impl VulkanContext {
             frames,
             swapchain,
             frame_index: 0,
+            extent,
         };
     }
 

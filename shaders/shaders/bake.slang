@@ -46,7 +46,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float4 result = 0;
 
-    result.rgb = (surf.Ng + 1.0) / 2.0;
+    result.rgb = (surf.N + 1.0) / 2.0;
 
     LightmapDiffuse[coords] = float4(result.rgb, 1);
 
