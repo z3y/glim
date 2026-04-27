@@ -317,7 +317,7 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
     if app.config.is_preview {
         let window = app.window;
 
-        let mut sample_index: u32 = 0;
+        group.push.sample_index = 0;
 
         let mut previous_time = std::time::Instant::now();
 
@@ -336,29 +336,29 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
                 update_camera(app, delta_time);
 
                 if !app.preview_initialized {
-                    sample_index = 0;
+                    group.push.sample_index = 0;
                 }
 
-                if sample_index < group.settings.max_samples {
-                    group.push.sample_index = sample_index;
-                    if !render_sample_camera(app, &mut group) {
-                        destroy_group(&app.vk, &mut group);
+                if group.push.sample_index >= group.settings.max_samples {
+                    std::thread::sleep(Duration::from_millis(16));
+                }
 
-                        group.settings.width = app.vk.swapchain.extent.width;
-                        group.settings.height = app.vk.swapchain.extent.height;
-                        app.config.preview_width = group.settings.width;
-                        app.config.preview_height = group.settings.height;
-                        group = create_lightmap_group(app, group.settings.clone());
+                if !render_sample_camera(app, &mut group) {
+                    destroy_group(&app.vk, &mut group);
 
-                        sample_index = 0;
-                        app.preview_initialized = false;
-                        continue;
-                    }
-                    sample_index += 1;
+                    group.settings.width = app.vk.swapchain.extent.width;
+                    group.settings.height = app.vk.swapchain.extent.height;
+                    app.config.preview_width = group.settings.width;
+                    app.config.preview_height = group.settings.height;
+                    group = create_lightmap_group(app, group.settings.clone());
+
+                    group.push.sample_index = 0;
+                    app.preview_initialized = false;
+                    continue;
                 }
 
                 #[cfg(debug_assertions)]
-                std::thread::sleep(Duration::from_millis(16));
+                std::thread::sleep(Duration::from_millis(1000 / 100));
 
                 previous_time = now;
             }
@@ -481,8 +481,9 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
             );
         }
 
-        {
+        if group.push.sample_index < group.settings.max_samples {
             render_sample(app, cmd, group);
+            group.push.sample_index += 1;
         }
 
         let swapchain_image = &app.vk.swapchain.frames[image_index as usize];
@@ -627,6 +628,8 @@ fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGr
     let shader = &app.bake_shader;
 
     let constants_bytes = as_bytes(&group.push);
+
+    // println!("rendering sample: {}", group.push.sample_index);
 
     // let barrier = group.diffuse_lightmap.barrier(
     //     vk::ImageLayout::GENERAL,

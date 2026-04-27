@@ -29,19 +29,6 @@ pub fn create_window(width: u32, height: u32) -> *mut GLFWwindow {
     }
 }
 
-pub fn platform_loop(window: *mut GLFWwindow) {
-    unsafe {
-        while glfwWindowShouldClose(window) == 0 {
-            glfwPollEvents();
-
-            if glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS {
-                glfwSetWindowShouldClose(window, 1);
-                println!("ESC")
-            }
-        }
-    }
-}
-
 pub fn initialize_window(
     config: &StilbConfig,
     vulkan_config: &mut VulkanConfig,
@@ -68,7 +55,7 @@ pub fn update_camera(app: &mut Stilb, delta_time: f32) {
     let camera = &mut app.camera;
 
     let mut move_speed = 5.0 * delta_time;
-    let mouse_sensitivity = 0.01;
+    let mouse_sensitivity = 0.0025;
 
     let mut camera_moved = false;
 
