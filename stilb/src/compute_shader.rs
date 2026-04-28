@@ -3,7 +3,7 @@ use std::ffi::CStr;
 use ash::vk::{self, Handle};
 use shaders::{get_bake_shader, get_init_from_camera_shader, get_test_shader};
 
-use crate::{math::Vector3, texture2d::Texture2D, vulkan_context::VulkanContext};
+use crate::{as_bytes, math::Vector3, texture2d::Texture2D, vulkan_context::VulkanContext};
 
 pub struct ComputeShader {
     module: vk::ShaderModule,
@@ -247,15 +247,15 @@ pub struct BakePushConstants {
 
     pub lights: vk::DeviceAddress,
     pub lights_count: u32,
-    pub pad0: u32,
+    pub max_samples: u32,
 
     pub sample_index: u32,
     pub width: u32,
     pub height: u32,
-    pub pad1: u32,
+    pub bounce_count: u32,
 }
 
-pub fn load_bake_lights_shader(vk: &VulkanContext) -> ComputeShader {
+pub fn load_bake_lights_shader(vk: &VulkanContext, use_camera: bool) -> ComputeShader {
     let mut bindings = Vec::new();
 
     // TopLevelAS
@@ -294,7 +294,20 @@ pub fn load_bake_lights_shader(vk: &VulkanContext) -> ComputeShader {
         ..Default::default()
     });
 
-    let specialization_info = vk::SpecializationInfo::default();
+    let size = std::mem::size_of::<u32>();
+    let map_entries = [vk::SpecializationMapEntry {
+        constant_id: 0,
+        offset: 0 * (size as u32),
+        size: size,
+    }];
+
+    let use_camera: u32 = if use_camera { 1 } else { 0 };
+    let data = [use_camera];
+    let data_bytes = as_bytes(&data);
+
+    let specialization_info = vk::SpecializationInfo::default()
+        .map_entries(&map_entries)
+        .data(data_bytes);
 
     let push_constant_ranges = [vk::PushConstantRange {
         stage_flags: vk::ShaderStageFlags::COMPUTE,

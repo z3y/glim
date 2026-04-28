@@ -15,7 +15,7 @@ use crate::{
         update_bake_lights_shader, update_init_from_camera_shader,
     },
     graphics_shader::{VisibilityPushConstants, create_visibility_shader},
-    lights::Light,
+    lights::{GpuLights, Light},
     math::Vector3,
     mesh::{FfiMesh, GpuMesh, Mesh, VulkanAs, create_tlas},
     texture2d::Texture2D,
@@ -47,6 +47,7 @@ pub struct Stilb {
     pub cpu_lights: Vec<Light>,
 
     pub gpu_mesh: GpuMesh,
+    pub gpu_lights: GpuLights,
     pub tlas: VulkanAs,
 
     pub camera: Camera,
@@ -63,7 +64,7 @@ pub struct LightmapSettings {
     pub height: u32,
 
     pub max_samples: u32,
-    pub bounces: u32,
+    pub bounce_count: u32,
 
     pub denoise: bool,
 }
@@ -713,13 +714,13 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
     let push = BakePushConstants {
         vertices: app.gpu_mesh.vertex_address(),
         indices: app.gpu_mesh.index_address(),
-        lights: 0,
-        lights_count: 0,
-        pad0: 0,
+        lights: app.gpu_lights.address(),
+        lights_count: app.cpu_lights.len() as u32,
         sample_index: 0,
         width: settings.width,
         height: settings.height,
-        pad1: 0,
+        max_samples: settings.max_samples,
+        bounce_count: settings.bounce_count,
     };
 
     update_bake_lights_shader(
@@ -772,7 +773,7 @@ pub extern "C" fn app_initialize(app_config: StilbConfig) -> *mut Stilb {
         vk.create_swapchain(app_config.preview_width, app_config.preview_height);
     }
 
-    let bake_lights_shader = load_bake_lights_shader(&vk);
+    let bake_lights_shader = load_bake_lights_shader(&vk, app_config.is_preview);
 
     let mut camera = Camera {
         position: Vector3::new(0.0, 1.0, -5.0),
@@ -785,6 +786,12 @@ pub extern "C" fn app_initialize(app_config: StilbConfig) -> *mut Stilb {
     camera.look_at(Vector3::ZERO);
 
     let init_from_camera_shader = load_init_from_camera_shader(&vk);
+
+    let gpu_lights = GpuLights {
+        buffer: vk::Buffer::null(),
+        memory: vk::DeviceMemory::null(),
+        address: 0,
+    };
 
     let stilb = Stilb {
         vk,
@@ -799,6 +806,7 @@ pub extern "C" fn app_initialize(app_config: StilbConfig) -> *mut Stilb {
         camera,
         init_from_camera_shader,
         preview_initialized: false,
+        gpu_lights,
     };
 
     Box::into_raw(Box::new(stilb))
@@ -818,23 +826,12 @@ pub extern "C" fn add_mesh(stilb: *mut Stilb, raw: FfiMesh) {
 pub extern "C" fn app_run(app: *mut Stilb) {
     let app = unsafe { &mut *app };
 
-    let mut settings = LightmapSettings {
-        width: 512,
-        height: 512,
-        bounces: 3,
-        max_samples: 1,
-        denoise: false,
-    };
+    assert!(app.cpu_lights.len() > 0);
 
-    if app.config.is_preview {
-        settings = LightmapSettings {
-            width: app.config.preview_width,
-            height: app.config.preview_height,
-            bounces: 3,
-            max_samples: 1,
-            denoise: false,
-        };
-    }
+    let settings = app.groups[0].clone();
+
+    let gpu_lights = GpuLights::new(&app.vk, &app.cpu_lights);
+    app.gpu_lights = gpu_lights;
 
     start_bake(app, settings);
 }
@@ -849,6 +846,7 @@ pub extern "C" fn app_deinitialize(app: *mut Stilb) {
         app.gpu_mesh.destroy(&app.vk);
         app.tlas.destroy(&app.vk);
         app.init_from_camera_shader.destroy(&app.vk);
+        app.gpu_lights.destroy(&app.vk);
 
         println!("Stilb destroyed");
     }

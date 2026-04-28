@@ -326,11 +326,11 @@ mod tests {
             ty: lights::LightType::Point,
             position: Vector3 {
                 x: 0.0,
-                y: 1.0,
+                y: 5.0,
                 z: 0.0,
             },
             direction: Vector3::ZERO,
-            range: 5.0,
+            range: 10.0,
             color: Vector3::ONE,
             shadow_range_or_angle: 0.1,
         });
@@ -359,14 +359,24 @@ mod tests {
             ty: lights::LightType::Point,
             position: Vector3 {
                 x: 0.0,
-                y: 1.0,
+                y: 2.0,
                 z: 0.0,
             },
             direction: Vector3::ZERO,
-            range: 5.0,
-            color: Vector3::ONE,
-            shadow_range_or_angle: 0.1,
+            range: 10.0,
+            color: Vector3::new(1.0, 1.0, 1.0),
+            shadow_range_or_angle: 0.01,
         });
+
+        let settings = LightmapSettings {
+            width: app.config.preview_width,
+            height: app.config.preview_height,
+            bounce_count: 5,
+            max_samples: 8,
+            denoise: false,
+        };
+
+        app.groups.push(settings);
 
         app_run(app);
 
