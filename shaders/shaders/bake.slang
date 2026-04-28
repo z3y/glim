@@ -109,11 +109,11 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float2 hammersley = Hammersley(sampleIndex, sampleCount);
 
-    // if (USE_CAMERA > 0)
-    // {
-    //     float3 albedo = Albedo[uint2(surface.uv * (float2)resolution)].rgb;
-    //     throughput = albedo;
-    // }
+    if (USE_CAMERA > 0)
+    {
+        float3 albedo = Albedo[uint2(surface.uv * (float2)resolution)].rgb;
+        throughput = albedo;
+    }
 
     if (useSmoothP)
     {
@@ -155,7 +155,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
             float2 uv = surfaceBounce.uv;
             float3 bounceAlbedo = Albedo[uint2(uv * (float2)resolution)].rgb;
-            bounceAlbedo = 1;
 
             throughput *= bounceAlbedo;
 

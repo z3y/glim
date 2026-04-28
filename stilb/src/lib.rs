@@ -257,11 +257,12 @@ fn rasterize_visibility_from_camera(
     app.preview_initialized = true;
 }
 
-fn clear_texture(app: &mut Stilb, texture: &mut Texture2D, cmd: vk::CommandBuffer) {
-    let clear = vk::ClearColorValue {
-        float32: [0.0, 0.0, 0.0, 0.0],
-    };
-
+fn clear_texture(
+    app: &mut Stilb,
+    texture: &mut Texture2D,
+    cmd: vk::CommandBuffer,
+    clear: vk::ClearColorValue,
+) {
     let range = vk::ImageSubresourceRange {
         aspect_mask: vk::ImageAspectFlags::COLOR,
         base_mip_level: 0,
@@ -461,7 +462,10 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
         if group.push.sample_index == 0 {
             rasterize_visibility_from_camera(app, &mut group.visibility, cmd);
             app.preview_initialized = true;
-            clear_texture(app, &mut group.diffuse_lightmap, cmd);
+            let clear = vk::ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 0.0],
+            };
+            clear_texture(app, &mut group.diffuse_lightmap, cmd, clear);
         }
 
         {
@@ -736,14 +740,18 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
     println!("albedo: {:#x}", albedo.image().as_raw());
     println!("diffuse_lightmap: {:#x}", diffuse_lightmap.image().as_raw());
 
-    let barrier = albedo.barrier(
-        vk::ImageLayout::GENERAL,
-        vk::AccessFlags::default(),
-        vk::AccessFlags::SHADER_READ,
-    );
-
     let cmd = app.vk.begin_single_use_cmd();
     unsafe {
+        let clear = vk::ClearColorValue {
+            float32: [1.0, 1.0, 1.0, 1.0],
+        };
+        clear_texture(app, &mut albedo, cmd, clear);
+
+        let barrier = albedo.barrier(
+            vk::ImageLayout::GENERAL,
+            vk::AccessFlags::default(),
+            vk::AccessFlags::SHADER_READ,
+        );
         app.vk.device.cmd_pipeline_barrier(
             cmd,
             vk::PipelineStageFlags::TOP_OF_PIPE,
@@ -754,6 +762,7 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
             &[barrier],
         );
     }
+
     app.vk.end_single_use_cmd(cmd);
 
     LightmapGroup {
