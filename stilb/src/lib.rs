@@ -271,7 +271,7 @@ fn clear_texture(
         layer_count: 1,
     };
 
-    let vk = &*app.vk.device;
+    let vk = &app.vk.device;
 
     unsafe {
         let barrier = texture.barrier(
@@ -349,6 +349,8 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
                 }
 
                 if !render_sample_camera(app, &mut group) {
+                    destroy_group(&app.vk, &mut group);
+
                     group.settings.width = app.vk.swapchain.extent.width;
                     group.settings.height = app.vk.swapchain.extent.height;
                     app.config.preview_width = group.settings.width;
@@ -388,6 +390,8 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
     unsafe {
         app.vk.device.device_wait_idle().unwrap();
     }
+
+    destroy_group(&app.vk, &mut group);
 }
 
 fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
@@ -398,7 +402,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
     let width = app.config.preview_width;
     let height = app.config.preview_height;
 
-    let vk = &*app.vk.device;
+    let vk = &app.vk.device;
 
     unsafe {
         vk.wait_for_fences(&[frame.fence], true, u64::MAX).unwrap();
@@ -459,34 +463,31 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
             clear_texture(app, &mut group.diffuse_lightmap, cmd, clear);
         }
 
-        let vk = &*app.vk.device;
+        let vk = &app.vk.device;
 
-        {
-            let barrier = group.diffuse_lightmap.barrier(
-                vk::ImageLayout::GENERAL,
-                vk::AccessFlags::default(),
-                vk::AccessFlags::SHADER_WRITE,
-            );
-
-            vk.cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            );
-        }
+        let barrier = group.diffuse_lightmap.barrier(
+            vk::ImageLayout::GENERAL,
+            vk::AccessFlags::default(),
+            vk::AccessFlags::SHADER_WRITE,
+        );
+        vk.cmd_pipeline_barrier(
+            cmd,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier],
+        );
 
         if group.push.sample_index < group.settings.max_samples {
             render_sample(app, cmd, group);
             group.push.sample_index += 1;
         }
 
-        let vk = &*app.vk.device;
-
         let swapchain_image = &app.vk.swapchain.frames[image_index as usize];
+
+        let vk = &app.vk.device;
 
         {
             let barrier = group.diffuse_lightmap.barrier(
@@ -622,7 +623,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
 }
 
 fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGroup) {
-    let vk = &*app.vk.device;
+    let vk = &app.vk;
     let shader = &app.bake_shader;
 
     let constants_bytes = as_bytes(&group.push);
@@ -655,9 +656,10 @@ fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGr
         //     &[barrier2],
         // );
 
-        vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+        vk.device
+            .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
 
-        vk.cmd_bind_descriptor_sets(
+        vk.device.cmd_bind_descriptor_sets(
             cmd,
             vk::PipelineBindPoint::COMPUTE,
             shader.pipeline_layout,
@@ -666,7 +668,7 @@ fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGr
             &[],
         );
 
-        vk.cmd_push_constants(
+        vk.device.cmd_push_constants(
             cmd,
             shader.pipeline_layout,
             vk::ShaderStageFlags::COMPUTE,
@@ -674,7 +676,7 @@ fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGr
             &constants_bytes,
         );
 
-        vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+        vk.device.cmd_dispatch(cmd, groups_x, groups_y, 1);
     }
 }
 
@@ -688,6 +690,16 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
     println!("creating lightmap group {:?}", &settings);
 
     let mut albedo = Texture2D::new(
+        &app.vk,
+        settings.width,
+        settings.height,
+        vk::Format::R32G32B32A32_SFLOAT,
+        vk::ImageUsageFlags::SAMPLED
+            | vk::ImageUsageFlags::TRANSFER_SRC
+            | vk::ImageUsageFlags::TRANSFER_DST,
+    );
+
+    let mut emission = Texture2D::new(
         &app.vk,
         settings.width,
         settings.height,
@@ -725,11 +737,13 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
         app.tlas.acceleration_structure(),
         &visibility,
         &albedo,
+        &emission,
         &diffuse_lightmap,
     );
 
     println!("visibility: {:#x}", visibility.image().as_raw());
     println!("albedo: {:#x}", albedo.image().as_raw());
+    println!("emission: {:#x}", emission.image().as_raw());
     println!("diffuse_lightmap: {:#x}", diffuse_lightmap.image().as_raw());
 
     let cmd = app.vk.begin_single_use_cmd();
@@ -738,8 +752,17 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
             float32: [1.0, 1.0, 1.0, 1.0],
         };
         clear_texture(app, &mut albedo, cmd, clear);
+        let clear = vk::ClearColorValue {
+            float32: [0.0, 0.0, 0.0, 0.0],
+        };
+        clear_texture(app, &mut emission, cmd, clear);
 
         let barrier = albedo.barrier(
+            vk::ImageLayout::GENERAL,
+            vk::AccessFlags::default(),
+            vk::AccessFlags::SHADER_READ,
+        );
+        let barrier1 = emission.barrier(
             vk::ImageLayout::GENERAL,
             vk::AccessFlags::default(),
             vk::AccessFlags::SHADER_READ,
@@ -751,7 +774,7 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
             vk::DependencyFlags::empty(),
             &[],
             &[],
-            &[barrier],
+            &[barrier, barrier1],
         );
     }
 
@@ -764,6 +787,12 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
         diffuse_lightmap,
         push,
     }
+}
+
+fn destroy_group(vk: &VulkanContext, group: &mut LightmapGroup) {
+    group.albedo.destroy(vk);
+    group.diffuse_lightmap.destroy(vk);
+    group.visibility.destroy(vk);
 }
 
 #[unsafe(no_mangle)]

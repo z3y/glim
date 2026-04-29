@@ -270,7 +270,16 @@ pub fn load_bake_lights_shader(vk: &VulkanContext, use_camera: bool) -> ComputeS
         ..Default::default()
     });
 
-    // Target0
+    // Emission
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 5,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+
+    // LightmapDiffuse
     bindings.push(vk::DescriptorSetLayoutBinding {
         binding: 4,
         descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
@@ -315,6 +324,7 @@ pub fn update_bake_lights_shader(
     tlas: vk::AccelerationStructureKHR,
     visibility: &Texture2D,
     albedo: &Texture2D,
+    emission: &Texture2D,
     lightmap_diffuse: &Texture2D,
 ) {
     let mut descriptor_writes = Vec::new();
@@ -355,6 +365,21 @@ pub fn update_bake_lights_shader(
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
         dst_binding: 3,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
+
+    // Emission
+    let info = [vk::DescriptorImageInfo {
+        image_view: emission.view(),
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 5,
         descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
         ..Default::default()
     };

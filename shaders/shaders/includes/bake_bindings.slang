@@ -20,5 +20,9 @@ RWTexture2D<float4> VisibilityBuffer;
 Texture2D<float4> Albedo;
 
 [[vk::image_format("rgba32f")]]
+[[vk::binding(5, 0)]]
+Texture2D<float4> Emission;
+
+[[vk::image_format("rgba32f")]]
 [[vk::binding(4, 0)]]
 RWTexture2D<float4> LightmapDiffuse;

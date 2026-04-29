@@ -7,7 +7,6 @@ use std::{
     collections::HashSet,
     ffi::{CStr, c_char},
     ptr,
-    rc::Rc,
 };
 
 use crate::vulkan_swapchain::SwapchainData;
@@ -30,7 +29,7 @@ pub struct VulkanContext {
 
     pub instance: Instance,
     pub physical_device: vk::PhysicalDevice,
-    pub device: Rc<Device>,
+    pub device: Device,
 
     pub surface_instance: khr::surface::Instance,
     pub surface: vk::SurfaceKHR,
@@ -301,8 +300,6 @@ impl VulkanContext {
 
         let command_buffer = unsafe { device.allocate_command_buffers(&allocate_info) }.unwrap()[0];
 
-        // let instance = Arc::new(instance);
-        let device = Rc::new(device);
         Self {
             entry,
             instance,

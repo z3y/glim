@@ -1,4 +1,4 @@
-use std::{ptr, rc::Rc};
+use std::ptr;
 
 use ash::vk::{self, Handle};
 
@@ -13,7 +13,6 @@ pub struct Texture2D {
     image: vk::Image,
     memory: vk::DeviceMemory,
     view: vk::ImageView,
-    vk_device: Rc<ash::Device>,
 }
 
 #[allow(dead_code)]
@@ -83,8 +82,6 @@ impl Texture2D {
 
         let view = unsafe { vk.device.create_image_view(&create_info, None) }.unwrap();
 
-        let vk_device = vk.device.clone();
-
         Self {
             format,
             image,
@@ -93,8 +90,23 @@ impl Texture2D {
             width,
             height,
             layout,
-            vk_device,
         }
+    }
+
+    pub fn destroy(&mut self, vk: &VulkanContext) {
+        assert!(!self.image.is_null());
+        assert!(!self.view.is_null());
+        assert!(!self.memory.is_null());
+
+        unsafe {
+            vk.device.destroy_image_view(self.view, None);
+            vk.device.free_memory(self.memory, None);
+            vk.device.destroy_image(self.image, None);
+        };
+
+        self.view = vk::ImageView::null();
+        self.memory = vk::DeviceMemory::null();
+        self.image = vk::Image::null();
     }
 
     fn get_device_size(&self) -> vk::DeviceSize {
@@ -347,25 +359,5 @@ impl Texture2D {
 
     pub fn view(&self) -> vk::ImageView {
         self.view
-    }
-}
-
-impl Drop for Texture2D {
-    fn drop(&mut self) {
-        let vk = &*self.vk_device;
-
-        assert!(!self.image.is_null());
-        assert!(!self.view.is_null());
-        assert!(!self.memory.is_null());
-
-        unsafe {
-            vk.destroy_image_view(self.view, None);
-            vk.free_memory(self.memory, None);
-            vk.destroy_image(self.image, None);
-        };
-
-        self.view = vk::ImageView::null();
-        self.memory = vk::DeviceMemory::null();
-        self.image = vk::Image::null();
     }
 }
