@@ -74,8 +74,8 @@ pub struct LightmapGroup {
     pub push: BakePushConstants,
 
     pub albedo: Texture2D,
+    pub emission: Texture2D,
     pub visibility: Texture2D,
-
     pub diffuse_lightmap: Texture2D,
 }
 
@@ -350,12 +350,9 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
 
                 if !render_sample_camera(app, &mut group) {
                     destroy_group(&app.vk, &mut group);
-
-                    group.settings.width = app.vk.swapchain.extent.width;
-                    group.settings.height = app.vk.swapchain.extent.height;
-                    app.config.preview_width = group.settings.width;
-                    app.config.preview_height = group.settings.height;
-                    group = create_lightmap_group(app, group.settings.clone());
+                    app.config.preview_width = app.vk.swapchain.extent.width;
+                    app.config.preview_height = app.vk.swapchain.extent.height;
+                    group = create_lightmap_group(app, group.settings);
 
                     group.push.sample_index = 0;
                     app.preview_initialized = false;
@@ -369,11 +366,14 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
             }
         }
     } else {
+        let width = group.settings.width;
+        let height = group.settings.height;
+
         for i in 0..group.settings.max_samples {
             group.push.sample_index = i as u32;
 
             let cmd = app.vk.begin_single_use_cmd();
-            render_sample(app, cmd, &mut group);
+            render_sample(app, cmd, &mut group, width, height);
             app.vk.end_single_use_cmd(cmd);
         }
 
@@ -481,7 +481,13 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
         );
 
         if group.push.sample_index < group.settings.max_samples {
-            render_sample(app, cmd, group);
+            render_sample(
+                app,
+                cmd,
+                group,
+                app.config.preview_width,
+                app.config.preview_height,
+            );
             group.push.sample_index += 1;
         }
 
@@ -622,7 +628,13 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
     true
 }
 
-fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGroup) {
+fn render_sample(
+    app: &mut Stilb,
+    cmd: vk::CommandBuffer,
+    group: &mut LightmapGroup,
+    width: u32,
+    height: u32,
+) {
     let vk = &app.vk;
     let shader = &app.bake_shader;
 
@@ -642,8 +654,8 @@ fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGr
     //     vk::AccessFlags::SHADER_READ,
     // );
 
-    let groups_x = (group.settings.width + 7) / 8;
-    let groups_y = (group.settings.height + 7) / 8;
+    let groups_x = (width + 7) / 8;
+    let groups_y = (height + 7) / 8;
 
     unsafe {
         // vk.device.cmd_pipeline_barrier(
@@ -682,7 +694,7 @@ fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, group: &mut LightmapGr
 
 fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> LightmapGroup {
     let visibility = if app.config.is_preview {
-        init_from_camera(app, settings.width, settings.height)
+        init_from_camera(app, app.config.preview_width, app.config.preview_height)
     } else {
         init_from_bake(app, settings.width, settings.height)
     };
@@ -709,10 +721,16 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
             | vk::ImageUsageFlags::TRANSFER_DST,
     );
 
+    let (target_width, target_height) = if app.config.is_preview {
+        (app.config.preview_width, app.config.preview_height)
+    } else {
+        (settings.width, settings.height)
+    };
+
     let diffuse_lightmap = Texture2D::new(
         &app.vk,
-        settings.width,
-        settings.height,
+        target_width,
+        target_height,
         vk::Format::R32G32B32A32_SFLOAT,
         vk::ImageUsageFlags::STORAGE
             | vk::ImageUsageFlags::TRANSFER_SRC
@@ -725,8 +743,8 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
         lights: app.gpu_lights.address(),
         lights_count: app.cpu_lights.len() as u32,
         sample_index: 0,
-        width: settings.width,
-        height: settings.height,
+        width: target_width,
+        height: target_height,
         max_samples: settings.max_samples,
         bounce_count: settings.bounce_count,
     };
@@ -786,6 +804,7 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
         albedo,
         diffuse_lightmap,
         push,
+        emission,
     }
 }
 
@@ -793,6 +812,7 @@ fn destroy_group(vk: &VulkanContext, group: &mut LightmapGroup) {
     group.albedo.destroy(vk);
     group.diffuse_lightmap.destroy(vk);
     group.visibility.destroy(vk);
+    group.emission.destroy(vk);
 }
 
 #[unsafe(no_mangle)]

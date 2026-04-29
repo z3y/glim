@@ -38,3 +38,27 @@ pub fn save_bmp(path: &str, width: u32, height: u32, pixels: &[f32]) -> std::io:
 
     Ok(())
 }
+
+pub fn load_bmp(path: &str) -> std::io::Result<(u32, u32, Vec<f32>)> {
+    let data = std::fs::read(path)?;
+
+    let width = u32::from_le_bytes(data[18..22].try_into().unwrap());
+    let height = u32::from_le_bytes(data[22..26].try_into().unwrap());
+    let data_offset = u32::from_le_bytes(data[10..14].try_into().unwrap()) as usize;
+
+    let mut pixels = vec![0.0f32; (width * height * 4) as usize];
+
+    for y in (0..height).rev() {
+        for x in 0..width {
+            let src = data_offset + ((height - 1 - y) * width + x) as usize * 4;
+            let dst = ((y * width + x) * 4) as usize;
+
+            pixels[dst + 0] = data[src + 2] as f32 / 255.0; // r
+            pixels[dst + 1] = data[src + 1] as f32 / 255.0; // g
+            pixels[dst + 2] = data[src + 0] as f32 / 255.0; // b
+            pixels[dst + 3] = data[src + 3] as f32 / 255.0; // a
+        }
+    }
+
+    Ok((width, height, pixels))
+}
