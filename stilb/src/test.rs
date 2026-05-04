@@ -349,10 +349,16 @@ mod tests {
 
         let app = app_new(config);
         let mesh = get_test_mesh_moneky();
+        let mut mesh2 = get_test_mesh_moneky();
+
+        for m in &mut mesh2.vertices {
+            m.position.x += 5.0;
+        }
 
         {
             let app = unsafe { &mut *app };
             app.cpu_meshes.push(mesh);
+            app.cpu_meshes.push(mesh2);
         }
 
         app_add_light(
@@ -361,35 +367,35 @@ mod tests {
                 ty: LightType::Point,
                 position: Vector3 {
                     x: 0.0,
-                    y: 1.0,
+                    y: 4.0,
                     z: 0.0,
                 },
                 direction: Vector3::ZERO,
                 range: 10.0,
-                color: Vector3::new(1.0, 1.0, 1.0) * 0.1,
+                color: Vector3::new(1.0, 1.0, 1.0) * 1.0,
                 shadow_range_or_angle: 0.01,
             },
         );
 
-        app_add_light(
-            app,
-            Light {
-                ty: lights::LightType::Directional,
-                position: Vector3 {
-                    x: 0.0,
-                    y: 1.0,
-                    z: 0.0,
-                },
-                direction: Vector3::new(1.0, 1.0, -1.0).normalize(),
-                range: 10.0,
-                color: Vector3::new(1.0, 1.0, 1.0),
-                shadow_range_or_angle: 0.5,
-            },
-        );
+        // app_add_light(
+        //     app,
+        //     Light {
+        //         ty: lights::LightType::Directional,
+        //         position: Vector3 {
+        //             x: 0.0,
+        //             y: 1.0,
+        //             z: 0.0,
+        //         },
+        //         direction: Vector3::new(1.0, 1.0, -1.0).normalize(),
+        //         range: 10.0,
+        //         color: Vector3::new(1.0, 1.0, 1.0),
+        //         shadow_range_or_angle: 0.5,
+        //     },
+        // );
 
         let (w, h, emission_pixels) = load_tga("..\\textures\\emission.tga").unwrap();
-
         let albedo_pixels = vec![1.0; (w * h * 4) as usize];
+        // let emission_pixels = vec![0.0; (w * h * 4) as usize];
 
         let settings = LightmapSettings {
             width: w,

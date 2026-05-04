@@ -323,9 +323,23 @@ fn start_bake(app: &mut Stilb) {
         app.gpu_lights = gpu_lights;
     }
 
-    // upload mesh
-    // TODO: merge meshes
-    app.gpu_mesh = GpuMesh::new(&app.vk, &app.cpu_meshes[0]);
+    // merge and upload mesh
+    let total_vertices = app.cpu_meshes.iter().map(|mesh| mesh.vertices.len()).sum();
+    let total_indices = app.cpu_meshes.iter().map(|mesh| mesh.indices.len()).sum();
+
+    let mut vertices = Vec::with_capacity(total_vertices);
+    let mut indices = Vec::with_capacity(total_indices);
+
+    for mesh in &app.cpu_meshes {
+        let offset = vertices.len() as u32;
+
+        vertices.extend(&mesh.vertices);
+        indices.extend(mesh.indices.iter().map(|i| i + offset));
+    }
+    // free cpu meshes
+    app.cpu_meshes = Vec::new();
+    let merged_mesh = Mesh { vertices, indices };
+    app.gpu_mesh = GpuMesh::new(&app.vk, &merged_mesh);
 
     let mesh::AccelerationStructureType::RayQuery(blas) = &app.gpu_mesh.acceleration_structure
     else {
