@@ -19,7 +19,12 @@ struct Vertex
 
     float2 GetUV()
     {
-        return float2(this.uvX, this.uvY);
+        return frac(float2(this.uvX, this.uvY));
+    }
+
+    uint GetLightmapGroup()
+    {
+        return (uint)this.uvX;
     }
 };
 

@@ -738,13 +738,7 @@ fn render_sample_camera(app: &mut Stilb, settings: &LightmapSettings) -> bool {
     true
 }
 
-fn render_sample(
-    app: &mut Stilb,
-    cmd: vk::CommandBuffer,
-    // group: &mut LightmapGroup,
-    width: u32,
-    height: u32,
-) {
+fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, width: u32, height: u32) {
     let vk = &app.vk;
     let shader = &app.bake_shader;
 

@@ -11,6 +11,7 @@ pub struct FfiMesh {
     pub indices: *const u32,
     pub vertices_length: u32,
     pub indices_length: u32,
+    pub lightmap_group: u32,
 }
 
 #[repr(C)]
@@ -38,12 +39,18 @@ impl Mesh {
         let mut vertices_copy = Vec::with_capacity(verts.len());
         let mut triangles_copy = Vec::with_capacity(indices.len());
 
+        let group = mesh.lightmap_group as f32;
+
         for i in 0..verts.len() {
+            let mut uv = uvs[i];
+            uv.x = uv.x.clamp(0.0, 1.0) + group;
+            uv.y = uv.y.clamp(0.0, 1.0) + group;
+
             let vertex = Vertex {
                 position: verts[i],
-                uv_x: uvs[i].x,
+                uv_x: uv.x,
                 normal: normals[i],
-                uv_y: uvs[i].y,
+                uv_y: uv.y,
             };
 
             vertices_copy.push(vertex);
