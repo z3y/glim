@@ -22,6 +22,7 @@ use crate::{
     window::{initialize_window, update_camera},
 };
 
+mod bindings;
 mod bmp;
 mod camera;
 mod compute_shader;
@@ -829,261 +830,185 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings) {
     app.preview_initialized = false;
 }
 
-// todo: albedo doesnt need f32
-fn create_lightmap_group(
-    app: &mut Stilb,
-    settings: LightmapSettings,
-    albedo_pixels: &[f32],
-    emission_pixels: &[f32],
-) -> LightmapGroup {
-    // println!("creating lightmap group {:?}", &settings);
+impl LightmapGroup {
+    // todo: albedo doesnt need f32
+    fn new(
+        app: &mut Stilb,
+        settings: LightmapSettings,
+        albedo_pixels: &[f32],
+        emission_pixels: &[f32],
+    ) -> LightmapGroup {
+        // println!("creating lightmap group {:?}", &settings);
 
-    let mut albedo = Texture2D::new(
-        &app.vk,
-        settings.width,
-        settings.height,
-        vk::Format::R32G32B32A32_SFLOAT,
-        vk::ImageUsageFlags::SAMPLED
-            | vk::ImageUsageFlags::TRANSFER_SRC
-            | vk::ImageUsageFlags::TRANSFER_DST,
-    );
-
-    let mut emission = Texture2D::new(
-        &app.vk,
-        settings.width,
-        settings.height,
-        vk::Format::R32G32B32A32_SFLOAT,
-        vk::ImageUsageFlags::SAMPLED
-            | vk::ImageUsageFlags::TRANSFER_SRC
-            | vk::ImageUsageFlags::TRANSFER_DST,
-    );
-
-    // if emission_pixels.len() > 0 {
-    emission.set_pixels(&app.vk, emission_pixels);
-    // }
-
-    // if albedo_pixels.len() > 0 {
-    albedo.set_pixels(&app.vk, albedo_pixels);
-    // }
-
-    println!("albedo: {:#x}", albedo.image().as_raw());
-    println!("emission: {:#x}", emission.image().as_raw());
-
-    let cmd = app.vk.begin_single_use_cmd();
-    unsafe {
-        // let clear = vk::ClearColorValue {
-        //     float32: [1.0, 1.0, 1.0, 1.0],
-        // };
-        // clear_texture(&app.vk, &mut albedo, cmd, clear);
-
-        let barrier = albedo.barrier(
-            vk::ImageLayout::GENERAL,
-            vk::AccessFlags::default(),
-            vk::AccessFlags::SHADER_READ,
-        );
-        let barrier1 = emission.barrier(
-            vk::ImageLayout::GENERAL,
-            vk::AccessFlags::default(),
-            vk::AccessFlags::SHADER_READ,
+        let mut albedo = Texture2D::new(
+            &app.vk,
+            settings.width,
+            settings.height,
+            vk::Format::R32G32B32A32_SFLOAT,
+            vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST,
         );
 
-        app.vk.device.cmd_pipeline_barrier(
-            cmd,
-            vk::PipelineStageFlags::TOP_OF_PIPE,
-            vk::PipelineStageFlags::COMPUTE_SHADER,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            &[barrier, barrier1],
+        let mut emission = Texture2D::new(
+            &app.vk,
+            settings.width,
+            settings.height,
+            vk::Format::R32G32B32A32_SFLOAT,
+            vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST,
         );
-    }
 
-    app.vk.end_single_use_cmd(cmd);
+        // if emission_pixels.len() > 0 {
+        emission.set_pixels(&app.vk, emission_pixels);
+        // }
 
-    LightmapGroup {
-        settings,
-        albedo,
-        emission,
-    }
-}
+        // if albedo_pixels.len() > 0 {
+        albedo.set_pixels(&app.vk, albedo_pixels);
+        // }
 
-fn destroy_group(vk: &VulkanContext, group: &mut LightmapGroup) {
-    group.albedo.destroy(vk);
-    group.emission.destroy(vk);
-}
+        println!("albedo: {:#x}", albedo.image().as_raw());
+        println!("emission: {:#x}", emission.image().as_raw());
 
-#[unsafe(no_mangle)]
-pub extern "C" fn app_initialize(app_config: StilbConfig) -> *mut Stilb {
-    let is_debug = cfg!(debug_assertions);
-
-    let mut vulkan_config = VulkanConfig {
-        enable_validation_layers: is_debug,
-        enable_window: app_config.is_preview,
-        window_extensions: Vec::new(),
-    };
-
-    let window = initialize_window(&app_config, &mut vulkan_config);
-
-    let create_surface_callback = |instance: &ash::Instance| unsafe {
-        let instance = instance.handle().as_raw() as glfw_sys::VkInstance;
-        let mut surface: glfw_sys::VkSurfaceKHR = ptr::null_mut();
-        glfwCreateWindowSurface(instance, window, std::ptr::null(), &mut surface);
-        ash::vk::SurfaceKHR::from_raw(surface as u64)
-    };
-
-    let mut vk = VulkanContext::new(&vulkan_config, create_surface_callback);
-    println!("Vulkan Initialized");
-
-    if app_config.is_preview {
-        vk.create_swapchain(app_config.preview_width, app_config.preview_height);
-    }
-
-    let bake_lights_shader = load_bake_lights_shader(&vk, app_config.is_preview);
-
-    let mut camera = Camera {
-        position: Vector3::new(0.0, 1.0, -5.0),
-        yaw: 0.0,
-        pitch: 0.0,
-        fov: 60.0,
-        last_cursor_pos: None,
-    };
-
-    camera.look_at(Vector3::ZERO);
-
-    let init_from_camera_shader = load_init_from_camera_shader(&vk);
-
-    let gpu_lights = GpuLights {
-        buffer: vk::Buffer::null(),
-        memory: vk::DeviceMemory::null(),
-        address: 0,
-        count: 0,
-    };
-
-    let sampler_info = vk::SamplerCreateInfo::default()
-        .mag_filter(vk::Filter::LINEAR)
-        .min_filter(vk::Filter::LINEAR)
-        .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
-        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .mip_lod_bias(0.0)
-        .anisotropy_enable(false)
-        .compare_enable(false)
-        .min_lod(0.0)
-        .max_lod(vk::LOD_CLAMP_NONE)
-        .border_color(vk::BorderColor::FLOAT_OPAQUE_BLACK)
-        .unnormalized_coordinates(false);
-
-    let sampler_linear_clamp = unsafe { vk.device.create_sampler(&sampler_info, None).unwrap() };
-
-    let push = BakePushConstants {
-        vertices: 0,
-        indices: 0,
-        lights: 0,
-        lights_count: 0,
-        sample_index: 0,
-        width: 0,
-        height: 0,
-        max_samples: 0,
-        bounce_count: 0,
-    };
-
-    let app = Stilb {
-        vk,
-        cpu_meshes: Vec::new(),
-        window: window,
-        config: app_config,
-        cpu_lights: Vec::new(),
-        bake_shader: bake_lights_shader,
-        gpu_mesh: GpuMesh::null(),
-        tlas: VulkanAs::null(),
-        groups: Vec::new(),
-        camera,
-        init_from_camera_shader,
-        preview_initialized: false,
-        gpu_lights,
-        sampler_linear_clamp,
-        push,
-        render_target: RenderTarget::None,
-    };
-
-    Box::into_raw(Box::new(app))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn app_add_mesh(app: *mut Stilb, raw: FfiMesh) {
-    let app = unsafe { &mut *app };
-    let mesh = Mesh::from_ffi_mesh(raw);
-    app.cpu_meshes.push(mesh);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn app_add_light(app: *mut Stilb, light: Light) {
-    let app = unsafe { &mut *app };
-    app.cpu_lights.push(light);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn app_add_lightmap_group(
-    app: *mut Stilb,
-    settings: LightmapSettings,
-    albedo_pixels: *const f32,
-    albedo_pixels_length: u32,
-    emission_pixels: *const f32,
-    emission_pixels_length: u32,
-) {
-    let app = unsafe { &mut *app };
-
-    let emission_pixels =
-        unsafe { slice::from_raw_parts(emission_pixels, emission_pixels_length as usize) };
-
-    let albedo_pixels =
-        unsafe { slice::from_raw_parts(albedo_pixels, albedo_pixels_length as usize) };
-
-    let group = create_lightmap_group(app, settings, albedo_pixels, emission_pixels);
-    app.groups.push(group);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn app_run(app: *mut Stilb) {
-    let app = unsafe { &mut *app };
-    start_bake(app);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn app_deinitialize(app: *mut Stilb) {
-    if !app.is_null() {
-        // Take ownership back from the pointer and let Box drop it
-        let mut app = unsafe { Box::from_raw(app) };
-
-        for group in &mut app.groups {
-            destroy_group(&app.vk, group);
-        }
-
-        if let RenderTarget::NonDirectional {
-            visibility,
-            diffuse,
-        } = &mut app.render_target
-        {
-            visibility.destroy(&app.vk);
-            diffuse.destroy(&app.vk);
-        };
-
-        app.bake_shader.destroy(&app.vk);
-        app.gpu_mesh.destroy(&app.vk);
-        app.tlas.destroy(&app.vk);
-        app.init_from_camera_shader.destroy(&app.vk);
-
-        if app.gpu_lights.address != 0 {
-            app.gpu_lights.destroy(&app.vk);
-        }
-
+        let cmd = app.vk.begin_single_use_cmd();
         unsafe {
-            app.vk
-                .device
-                .destroy_sampler(app.sampler_linear_clamp, None)
+            // let clear = vk::ClearColorValue {
+            //     float32: [1.0, 1.0, 1.0, 1.0],
+            // };
+            // clear_texture(&app.vk, &mut albedo, cmd, clear);
+
+            let barrier = albedo.barrier(
+                vk::ImageLayout::GENERAL,
+                vk::AccessFlags::default(),
+                vk::AccessFlags::SHADER_READ,
+            );
+            let barrier1 = emission.barrier(
+                vk::ImageLayout::GENERAL,
+                vk::AccessFlags::default(),
+                vk::AccessFlags::SHADER_READ,
+            );
+
+            app.vk.device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier, barrier1],
+            );
+        }
+
+        app.vk.end_single_use_cmd(cmd);
+
+        LightmapGroup {
+            settings,
+            albedo,
+            emission,
+        }
+    }
+
+    pub fn destroy(&mut self, vk: &VulkanContext) {
+        self.albedo.destroy(vk);
+        self.emission.destroy(vk);
+    }
+}
+
+impl Stilb {
+    pub fn new(config: StilbConfig) -> Stilb {
+        let is_debug = cfg!(debug_assertions);
+
+        let mut vulkan_config = VulkanConfig {
+            enable_validation_layers: is_debug,
+            enable_window: config.is_preview,
+            window_extensions: Vec::new(),
         };
 
-        println!("App destroyed");
+        let window = initialize_window(&config, &mut vulkan_config);
+
+        let create_surface_callback = |instance: &ash::Instance| unsafe {
+            let instance = instance.handle().as_raw() as glfw_sys::VkInstance;
+            let mut surface: glfw_sys::VkSurfaceKHR = ptr::null_mut();
+            glfwCreateWindowSurface(instance, window, std::ptr::null(), &mut surface);
+            ash::vk::SurfaceKHR::from_raw(surface as u64)
+        };
+
+        let mut vk = VulkanContext::new(&vulkan_config, create_surface_callback);
+        println!("Vulkan Initialized");
+
+        if config.is_preview {
+            vk.create_swapchain(config.preview_width, config.preview_height);
+        }
+
+        let bake_lights_shader = load_bake_lights_shader(&vk, config.is_preview);
+
+        let mut camera = Camera {
+            position: Vector3::new(0.0, 1.0, -5.0),
+            yaw: 0.0,
+            pitch: 0.0,
+            fov: 60.0,
+            last_cursor_pos: None,
+        };
+
+        camera.look_at(Vector3::ZERO);
+
+        let init_from_camera_shader = load_init_from_camera_shader(&vk);
+
+        let gpu_lights = GpuLights {
+            buffer: vk::Buffer::null(),
+            memory: vk::DeviceMemory::null(),
+            address: 0,
+            count: 0,
+        };
+
+        let sampler_info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .mip_lod_bias(0.0)
+            .anisotropy_enable(false)
+            .compare_enable(false)
+            .min_lod(0.0)
+            .max_lod(vk::LOD_CLAMP_NONE)
+            .border_color(vk::BorderColor::FLOAT_OPAQUE_BLACK)
+            .unnormalized_coordinates(false);
+
+        let sampler_linear_clamp =
+            unsafe { vk.device.create_sampler(&sampler_info, None).unwrap() };
+
+        let push = BakePushConstants {
+            vertices: 0,
+            indices: 0,
+            lights: 0,
+            lights_count: 0,
+            sample_index: 0,
+            width: 0,
+            height: 0,
+            max_samples: 0,
+            bounce_count: 0,
+        };
+
+        Self {
+            vk,
+            cpu_meshes: Vec::new(),
+            window: window,
+            config: config,
+            cpu_lights: Vec::new(),
+            bake_shader: bake_lights_shader,
+            gpu_mesh: GpuMesh::null(),
+            tlas: VulkanAs::null(),
+            groups: Vec::new(),
+            camera,
+            init_from_camera_shader,
+            preview_initialized: false,
+            gpu_lights,
+            sampler_linear_clamp,
+            push,
+            render_target: RenderTarget::None,
+        }
     }
 }
