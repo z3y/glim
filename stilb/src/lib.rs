@@ -92,8 +92,6 @@ pub struct LightmapGroup {
 
     pub albedo: Texture2D,
     pub emission: Texture2D,
-    // pub visibility: Texture2D,
-    // pub diffuse_lightmap: Texture2D,
 }
 
 #[repr(C)]
@@ -362,9 +360,7 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
         let window = app.window;
 
         update_lightmap_mode(app, &group.settings);
-
         update_push_constants(app, &group.settings);
-
         let LightmapMode::NonDirectional {
             visibility,
             diffuse,
@@ -372,7 +368,6 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
         else {
             unreachable!()
         };
-
         update_bake_lights_shader(
             &app.vk,
             &app.bake_shader,
@@ -383,7 +378,6 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
             &diffuse,
             app.sampler_linear_clamp,
         );
-
         app.push.sample_index = 0;
 
         let mut previous_time = std::time::Instant::now();
@@ -415,8 +409,26 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
                     app.config.preview_height = app.vk.swapchain.extent.height;
 
                     update_lightmap_mode(app, &group.settings);
-
+                    update_push_constants(app, &group.settings);
+                    let LightmapMode::NonDirectional {
+                        visibility,
+                        diffuse,
+                    } = &mut app.lightmap_mode
+                    else {
+                        unreachable!()
+                    };
+                    update_bake_lights_shader(
+                        &app.vk,
+                        &app.bake_shader,
+                        app.tlas.acceleration_structure(),
+                        &visibility,
+                        &group.albedo,
+                        &group.emission,
+                        &diffuse,
+                        app.sampler_linear_clamp,
+                    );
                     app.push.sample_index = 0;
+
                     app.preview_initialized = false;
                     continue;
                 }
@@ -789,6 +801,19 @@ fn render_sample(
 }
 
 fn update_lightmap_mode(app: &mut Stilb, settings: &LightmapSettings) {
+    if let LightmapMode::NonDirectional {
+        visibility,
+        diffuse,
+    } = &mut app.lightmap_mode
+    {
+        if !visibility.image().is_null() {
+            visibility.destroy(&app.vk);
+        }
+        if !diffuse.image().is_null() {
+            diffuse.destroy(&app.vk);
+        }
+    };
+
     let visibility = if app.config.is_preview {
         render_visibility_buffer_camera(app, app.config.preview_width, app.config.preview_height)
     } else {
@@ -801,8 +826,6 @@ fn update_lightmap_mode(app: &mut Stilb, settings: &LightmapSettings) {
         (settings.width, settings.height)
     };
 
-    // todo: destroy if not null
-
     let diffuse = Texture2D::new(
         &app.vk,
         target_width,
@@ -814,7 +837,7 @@ fn update_lightmap_mode(app: &mut Stilb, settings: &LightmapSettings) {
     );
 
     println!("visibility: {:#x}", visibility.image().as_raw());
-    println!("diffuse_lightmap: {:#x}", diffuse.image().as_raw());
+    println!("diffuse: {:#x}", diffuse.image().as_raw());
 
     if app.config.is_preview {
         app.lightmap_mode = LightmapMode::NonDirectional {
@@ -1040,6 +1063,15 @@ pub extern "C" fn app_deinitialize(app: *mut Stilb) {
     if !app.is_null() {
         // Take ownership back from the pointer and let Box drop it
         let mut app = unsafe { Box::from_raw(app) };
+
+        if let LightmapMode::NonDirectional {
+            visibility,
+            diffuse,
+        } = &mut app.lightmap_mode
+        {
+            visibility.destroy(&app.vk);
+            diffuse.destroy(&app.vk);
+        };
 
         app.bake_shader.destroy(&app.vk);
         app.gpu_mesh.destroy(&app.vk);
