@@ -399,6 +399,8 @@ mod tests {
 
         let (w, h, emission_pixels) = load_tga("..\\textures\\emission.tga").unwrap();
 
+        let albedo_pixels = vec![1.0; (w * h * 4) as usize];
+
         let settings = LightmapSettings {
             width: w,
             height: h,
@@ -410,6 +412,8 @@ mod tests {
         app_add_lightmap_group(
             app,
             settings,
+            albedo_pixels.as_ptr(),
+            albedo_pixels.len() as u32,
             emission_pixels.as_ptr(),
             emission_pixels.len() as u32,
         );

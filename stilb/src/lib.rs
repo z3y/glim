@@ -829,9 +829,11 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings) {
     app.preview_initialized = false;
 }
 
+// todo: albedo doesnt need f32
 fn create_lightmap_group(
     app: &mut Stilb,
     settings: LightmapSettings,
+    albedo_pixels: &[f32],
     emission_pixels: &[f32],
 ) -> LightmapGroup {
     // println!("creating lightmap group {:?}", &settings);
@@ -856,19 +858,23 @@ fn create_lightmap_group(
             | vk::ImageUsageFlags::TRANSFER_DST,
     );
 
-    if emission_pixels.len() > 0 {
-        emission.set_pixels(&app.vk, emission_pixels);
-    }
+    // if emission_pixels.len() > 0 {
+    emission.set_pixels(&app.vk, emission_pixels);
+    // }
+
+    // if albedo_pixels.len() > 0 {
+    albedo.set_pixels(&app.vk, albedo_pixels);
+    // }
 
     println!("albedo: {:#x}", albedo.image().as_raw());
     println!("emission: {:#x}", emission.image().as_raw());
 
     let cmd = app.vk.begin_single_use_cmd();
     unsafe {
-        let clear = vk::ClearColorValue {
-            float32: [1.0, 1.0, 1.0, 1.0],
-        };
-        clear_texture(&app.vk, &mut albedo, cmd, clear);
+        // let clear = vk::ClearColorValue {
+        //     float32: [1.0, 1.0, 1.0, 1.0],
+        // };
+        // clear_texture(&app.vk, &mut albedo, cmd, clear);
 
         let barrier = albedo.barrier(
             vk::ImageLayout::GENERAL,
@@ -880,6 +886,7 @@ fn create_lightmap_group(
             vk::AccessFlags::default(),
             vk::AccessFlags::SHADER_READ,
         );
+
         app.vk.device.cmd_pipeline_barrier(
             cmd,
             vk::PipelineStageFlags::TOP_OF_PIPE,
@@ -1020,6 +1027,8 @@ pub extern "C" fn app_add_light(app: *mut Stilb, light: Light) {
 pub extern "C" fn app_add_lightmap_group(
     app: *mut Stilb,
     settings: LightmapSettings,
+    albedo_pixels: *const f32,
+    albedo_pixels_length: u32,
     emission_pixels: *const f32,
     emission_pixels_length: u32,
 ) {
@@ -1028,7 +1037,10 @@ pub extern "C" fn app_add_lightmap_group(
     let emission_pixels =
         unsafe { slice::from_raw_parts(emission_pixels, emission_pixels_length as usize) };
 
-    let group = create_lightmap_group(app, settings, emission_pixels);
+    let albedo_pixels =
+        unsafe { slice::from_raw_parts(albedo_pixels, albedo_pixels_length as usize) };
+
+    let group = create_lightmap_group(app, settings, albedo_pixels, emission_pixels);
     app.groups.push(group);
 }
 
