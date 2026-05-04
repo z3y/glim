@@ -25,6 +25,7 @@ pub struct GpuLights {
     pub buffer: vk::Buffer,
     pub memory: vk::DeviceMemory,
     pub address: vk::DeviceAddress,
+    pub count: u32,
 }
 
 impl GpuLights {
@@ -50,6 +51,7 @@ impl GpuLights {
             buffer,
             memory,
             address,
+            count: lights.len() as u32,
         }
     }
 

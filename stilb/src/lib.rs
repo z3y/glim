@@ -8,7 +8,6 @@ use glfw_sys::{
 };
 
 use crate::{
-    bmp::save_bmp,
     camera::Camera,
     compute_shader::{
         BakePushConstants, ComputeShader, load_bake_lights_shader, load_init_from_camera_shader,
@@ -320,7 +319,6 @@ fn start_bake(app: &mut Stilb, settings: LightmapSettings) {
     assert!(app.cpu_meshes.len() > 0);
 
     app.gpu_mesh = GpuMesh::new(&app.vk, &app.cpu_meshes[0]);
-    app.cpu_meshes = Vec::new();
 
     let mesh::AccelerationStructureType::RayQuery(blas) = &app.gpu_mesh.acceleration_structure
     else {
@@ -333,7 +331,7 @@ fn start_bake(app: &mut Stilb, settings: LightmapSettings) {
     bake_lightmap_group(app, group);
 }
 
-fn update_push_constants(app: &mut Stilb, settings: &LightmapSettings) {
+fn initialize_bake_push_constants(app: &mut Stilb, settings: &LightmapSettings) {
     let (width, height) = if app.config.is_preview {
         (app.config.preview_width, app.config.preview_height)
     } else {
@@ -344,7 +342,7 @@ fn update_push_constants(app: &mut Stilb, settings: &LightmapSettings) {
         vertices: app.gpu_mesh.vertex_address(),
         indices: app.gpu_mesh.index_address(),
         lights: app.gpu_lights.address(),
-        lights_count: app.cpu_lights.len() as u32,
+        lights_count: app.gpu_lights.count,
         sample_index: 0,
         width: width,
         height: height,
@@ -360,7 +358,7 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
         let window = app.window;
 
         update_lightmap_mode(app, &group.settings);
-        update_push_constants(app, &group.settings);
+
         let LightmapMode::NonDirectional {
             visibility,
             diffuse,
@@ -378,7 +376,6 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
             &diffuse,
             app.sampler_linear_clamp,
         );
-        app.push.sample_index = 0;
 
         let mut previous_time = std::time::Instant::now();
 
@@ -409,7 +406,6 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
                     app.config.preview_height = app.vk.swapchain.extent.height;
 
                     update_lightmap_mode(app, &group.settings);
-                    update_push_constants(app, &group.settings);
                     let LightmapMode::NonDirectional {
                         visibility,
                         diffuse,
@@ -427,9 +423,7 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
                         &diffuse,
                         app.sampler_linear_clamp,
                     );
-                    app.push.sample_index = 0;
 
-                    app.preview_initialized = false;
                     continue;
                 }
 
@@ -546,7 +540,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
             };
 
             let LightmapMode::NonDirectional {
-                visibility,
+                visibility: _,
                 diffuse,
             } = &mut app.lightmap_mode
             else {
@@ -559,7 +553,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
         let vk = &app.vk.device;
 
         let LightmapMode::NonDirectional {
-            visibility,
+            visibility: _,
             diffuse,
         } = &mut app.lightmap_mode
         else {
@@ -592,7 +586,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
         }
 
         let LightmapMode::NonDirectional {
-            visibility,
+            visibility: _,
             diffuse,
         } = &mut app.lightmap_mode
         else {
@@ -750,32 +744,10 @@ fn render_sample(
 
     // println!("rendering sample: {}", group.push.sample_index);
 
-    // let barrier = group.diffuse_lightmap.barrier(
-    //     vk::ImageLayout::GENERAL,
-    //     vk::AccessFlags::default(),
-    //     vk::AccessFlags::SHADER_WRITE,
-    // );
-
-    // let barrier2 = group.visibility.barrier(
-    //     vk::ImageLayout::GENERAL,
-    //     vk::AccessFlags::default(),
-    //     vk::AccessFlags::SHADER_READ,
-    // );
-
     let groups_x = (width + 7) / 8;
     let groups_y = (height + 7) / 8;
 
     unsafe {
-        // vk.device.cmd_pipeline_barrier(
-        //     cmd,
-        //     vk::PipelineStageFlags::TOP_OF_PIPE,
-        //     vk::PipelineStageFlags::COMPUTE_SHADER,
-        //     vk::DependencyFlags::empty(),
-        //     &[],
-        //     &[],
-        //     &[barrier2],
-        // );
-
         vk.device
             .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
 
@@ -845,6 +817,9 @@ fn update_lightmap_mode(app: &mut Stilb, settings: &LightmapSettings) {
             diffuse,
         };
     }
+
+    initialize_bake_push_constants(app, settings);
+    app.preview_initialized = false;
 }
 
 fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> LightmapGroup {
@@ -970,6 +945,7 @@ pub extern "C" fn app_initialize(app_config: StilbConfig) -> *mut Stilb {
         buffer: vk::Buffer::null(),
         memory: vk::DeviceMemory::null(),
         address: 0,
+        count: 0,
     };
 
     let sampler_info = vk::SamplerCreateInfo::default()
