@@ -58,6 +58,8 @@ pub struct Stilb {
     pub preview_initialized: bool,
 
     pub sampler_linear_clamp: vk::Sampler,
+
+    pub push: BakePushConstants,
 }
 
 #[repr(C)]
@@ -77,10 +79,10 @@ pub struct LightmapSettings {
 
 pub struct LightmapGroup {
     pub settings: LightmapSettings,
-    pub push: BakePushConstants,
 
     pub albedo: Texture2D,
     pub emission: Texture2D,
+
     pub visibility: Texture2D,
     pub diffuse_lightmap: Texture2D,
 }
@@ -320,13 +322,34 @@ fn start_bake(app: &mut Stilb, settings: LightmapSettings) {
     bake_lightmap_group(app, group);
 }
 
+fn update_push_constants(app: &mut Stilb, settings: &LightmapSettings) {
+    let (width, height) = if app.config.is_preview {
+        (app.config.preview_width, app.config.preview_height)
+    } else {
+        (settings.width, settings.height)
+    };
+
+    app.push = BakePushConstants {
+        vertices: app.gpu_mesh.vertex_address(),
+        indices: app.gpu_mesh.index_address(),
+        lights: app.gpu_lights.address(),
+        lights_count: app.cpu_lights.len() as u32,
+        sample_index: 0,
+        width: width,
+        height: height,
+        max_samples: settings.max_samples,
+        bounce_count: settings.bounce_count,
+    };
+}
+
 fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
     let mut group = group;
 
     if app.config.is_preview {
         let window = app.window;
 
-        group.push.sample_index = 0;
+        update_push_constants(app, &group.settings);
+        app.push.sample_index = 0;
 
         let mut previous_time = std::time::Instant::now();
 
@@ -345,10 +368,10 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
                 update_camera(app, delta_time);
 
                 if !app.preview_initialized {
-                    group.push.sample_index = 0;
+                    app.push.sample_index = 0;
                 }
 
-                if group.push.sample_index >= group.settings.max_samples {
+                if app.push.sample_index >= group.settings.max_samples {
                     std::thread::sleep(Duration::from_millis(16));
                 }
 
@@ -358,7 +381,7 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
                     app.config.preview_height = app.vk.swapchain.extent.height;
                     group = create_lightmap_group(app, group.settings);
 
-                    group.push.sample_index = 0;
+                    app.push.sample_index = 0;
                     app.preview_initialized = false;
                     continue;
                 }
@@ -373,8 +396,10 @@ fn bake_lightmap_group(app: &mut Stilb, group: LightmapGroup) {
         let width = group.settings.width;
         let height = group.settings.height;
 
+        update_push_constants(app, &group.settings);
+
         for i in 0..group.settings.max_samples {
-            group.push.sample_index = i as u32;
+            app.push.sample_index = i as u32;
 
             let cmd = app.vk.begin_single_use_cmd();
             render_sample(app, cmd, &mut group, width, height);
@@ -458,7 +483,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
 
         vk.begin_command_buffer(cmd, &begin_info).unwrap();
 
-        if group.push.sample_index == 0 {
+        if app.push.sample_index == 0 {
             rasterize_visibility_from_camera(app, &mut group.visibility, cmd);
             app.preview_initialized = true;
             let clear = vk::ClearColorValue {
@@ -484,7 +509,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
             &[barrier],
         );
 
-        if group.push.sample_index < group.settings.max_samples {
+        if app.push.sample_index < group.settings.max_samples {
             render_sample(
                 app,
                 cmd,
@@ -492,7 +517,7 @@ fn render_sample_camera(app: &mut Stilb, group: &mut LightmapGroup) -> bool {
                 app.config.preview_width,
                 app.config.preview_height,
             );
-            group.push.sample_index += 1;
+            app.push.sample_index += 1;
         }
 
         let swapchain_image = &app.vk.swapchain.frames[image_index as usize];
@@ -642,7 +667,7 @@ fn render_sample(
     let vk = &app.vk;
     let shader = &app.bake_shader;
 
-    let constants_bytes = as_bytes(&group.push);
+    let constants_bytes = as_bytes(&app.push);
 
     // println!("rendering sample: {}", group.push.sample_index);
 
@@ -815,7 +840,6 @@ fn create_lightmap_group(app: &mut Stilb, settings: LightmapSettings) -> Lightma
         visibility,
         albedo,
         diffuse_lightmap,
-        push,
         emission,
     }
 }
@@ -890,6 +914,18 @@ pub extern "C" fn app_initialize(app_config: StilbConfig) -> *mut Stilb {
 
     let sampler_linear_clamp = unsafe { vk.device.create_sampler(&sampler_info, None).unwrap() };
 
+    let push = BakePushConstants {
+        vertices: 0,
+        indices: 0,
+        lights: 0,
+        lights_count: 0,
+        sample_index: 0,
+        width: 0,
+        height: 0,
+        max_samples: 0,
+        bounce_count: 0,
+    };
+
     let app = Stilb {
         vk,
         cpu_meshes: Vec::new(),
@@ -905,6 +941,7 @@ pub extern "C" fn app_initialize(app_config: StilbConfig) -> *mut Stilb {
         preview_initialized: false,
         gpu_lights,
         sampler_linear_clamp,
+        push,
     };
 
     Box::into_raw(Box::new(app))
