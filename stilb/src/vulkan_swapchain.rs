@@ -48,8 +48,6 @@ fn query_swapchain_support(
 
 impl VulkanContext {
     pub fn create_swapchain(&mut self, width: u32, height: u32) {
-        self.destroy_swapchain();
-
         let (capabilities, formats, present_modes) = query_swapchain_support(self);
 
         let mut selected_format = formats[0];
@@ -104,7 +102,7 @@ impl VulkanContext {
             composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
             present_mode: selected_present_mode,
             clipped: vk::TRUE,
-            old_swapchain: vk::SwapchainKHR::null(), // todo set old swapchain
+            old_swapchain: self.swapchain.swapchain,
             ..Default::default()
         };
 
@@ -194,6 +192,7 @@ impl VulkanContext {
             frames.push(frame);
         }
 
+        self.destroy_swapchain();
         self.swapchain = SwapchainData {
             frames,
             swapchain,

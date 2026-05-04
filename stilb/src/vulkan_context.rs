@@ -470,8 +470,6 @@ fn find_queue_families(
 
         // if prop.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
         //     graphics = Some(i as u32);
-
-        //     // todo: find present queue
         //     present = Some(i as u32);
         // }
 
