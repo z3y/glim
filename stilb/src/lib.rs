@@ -95,9 +95,12 @@ pub struct LightmapGroup {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct StilbConfig {
-    is_preview: bool,
-    preview_width: u32,
-    preview_height: u32,
+    pub is_preview: bool,
+    pub preview_width: u32,
+    pub preview_height: u32,
+
+    pub camera_position: Vector3,
+    pub camera_forward: Vector3,
 }
 
 #[inline]
@@ -963,14 +966,14 @@ impl Stilb {
         }
 
         let mut camera = Camera {
-            position: Vector3::new(0.0, 1.0, -5.0),
+            position: config.camera_position,
             yaw: 0.0,
             pitch: 0.0,
             fov: 60.0,
             last_cursor_pos: None,
         };
 
-        camera.look_at(Vector3::ZERO);
+        camera.set_forward(config.camera_forward);
 
         let init_from_camera_shader = load_init_from_camera_shader(&vk);
 

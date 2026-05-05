@@ -32,4 +32,9 @@ impl Camera {
         self.pitch = dir.y.asin();
         self.yaw = dir.z.atan2(dir.x);
     }
+
+    pub fn set_forward(&mut self, dir: Vector3) {
+        self.pitch = dir.y.asin();
+        self.yaw = dir.z.atan2(dir.x);
+    }
 }

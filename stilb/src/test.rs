@@ -345,6 +345,8 @@ mod tests {
             is_preview: true,
             preview_width: 1024,
             preview_height: 1024,
+            camera_position: Vector3::ONE,
+            camera_forward: Vector3::ONE.normalize(),
         };
 
         let app = app_new(config);
@@ -373,7 +375,7 @@ mod tests {
                 direction: Vector3::ZERO,
                 range: 10.0,
                 color: Vector3::new(1.0, 1.0, 1.0) * 1.0,
-                shadow_range_or_angle: 0.01,
+                shadow_radius_or_angle: 0.01,
             },
         );
 

@@ -69,7 +69,7 @@ struct Surface
         float3 N = normalize(n0 * w + n1 * u + n2 * v);
 
         float2 uv = uv0 * w + uv1 * u + uv2 * v;
-        uv.y = 1.0 - uv.y;
+        // uv.y = 1.0 - uv.y;
 
         float3 sp0 = P - n0 * dot(P - p0, n0);
         float3 sp1 = P - n1 * dot(P - p1, n1);

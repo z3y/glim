@@ -16,9 +16,9 @@ pub extern "C" fn app_new(config: StilbConfig) -> *mut Stilb {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_add_mesh(app: *mut Stilb, raw: FfiMesh) {
+pub extern "C" fn app_add_mesh(app: *mut Stilb, mesh: FfiMesh) {
     let app = unsafe { &mut *app };
-    let mesh = Mesh::from_ffi_mesh(raw);
+    let mesh = Mesh::from_ffi_mesh(mesh);
     app.cpu_mesh.merge_mesh(&mesh);
 }
 

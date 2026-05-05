@@ -18,7 +18,7 @@ pub struct Light {
     pub range: f32,
 
     pub color: Vector3,
-    pub shadow_range_or_angle: f32,
+    pub shadow_radius_or_angle: f32,
 }
 
 pub struct GpuLights {

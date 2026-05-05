@@ -1,0 +1,16 @@
+{
+  "name": "io.github.z3y.stilb",
+  "description": "GPU Lightmap Baker",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "displayName": "Stilb GPU Lightmapper",
+  "hideInEditor": false,
+  "gitDependencies": {},
+  "vpmDependencies": {},
+  "legacyFolders": {},
+  "legacyFiles": {},
+  "author": {
+    "name": "z3y",
+    "url": "https://github.com/z3y"
+  }
+}
