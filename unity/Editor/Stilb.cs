@@ -139,9 +139,7 @@ namespace stilb
             }
 
             // todo move to ui
-            var allRenderers = rootObjects.SelectMany(x => x.GetComponentsInChildren<MeshRenderer>(false)
-                    .Where(x => Stilb.IsLightmapStatic(x)));
-
+            var allRenderers = rootObjects.SelectMany(x => x.GetComponentsInChildren<MeshRenderer>(false));
             var unclaimedRenderers = new List<MeshRenderer>();
             foreach (var r in allRenderers)
             {
@@ -150,7 +148,10 @@ namespace stilb
                     continue;
                 }
 
-                unclaimedRenderers.Add(r);
+                if (Stilb.IsLightmapStatic(r))
+                {
+                    unclaimedRenderers.Add(r);
+                }
             }
             var globalGroup = ScriptableObject.CreateInstance<LightmapGroup>();
             if (unclaimedRenderers.Count > 0)
