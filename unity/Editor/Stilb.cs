@@ -185,7 +185,13 @@ namespace stilb
     {
         public static bool IsLightmapStatic(MeshRenderer renderer)
         {
+            if (!renderer.enabled)
+            {
+                return false;
+            }
+
             var gameObject = renderer.gameObject;
+
             if (gameObject.activeInHierarchy == false)
             {
                 return false;
@@ -213,16 +219,16 @@ namespace stilb
                 return false;
             }
 
-            if (filter.sharedMesh == null)
+            var mesh = filter.sharedMesh;
+
+            if (mesh == null)
             {
                 return false;
             }
 
-            var mesh = filter.sharedMesh;
+            var vertices = mesh.vertexCount;
 
-            var vertices = mesh.vertices;
-
-            if (vertices == null)
+            if (vertices <= 0)
             {
                 return false;
             }
@@ -232,12 +238,12 @@ namespace stilb
                 return false;
             }
 
-            var uv = mesh.HasVertexAttribute(VertexAttribute.TexCoord1) ? mesh.uv2 : mesh.uv;
+            // var uv = mesh.HasVertexAttribute(VertexAttribute.TexCoord1) ? mesh.uv2 : mesh.uv;
 
-            if (uv.Length != vertices.Length)
-            {
-                return false;
-            }
+            // if (uv.Length != vertices)
+            // {
+            //     return false;
+            // }
 
 
             return true;
