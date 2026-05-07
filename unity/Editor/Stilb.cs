@@ -121,7 +121,9 @@ namespace stilb
             {
                 if (selector.group == null) continue;
 
-                var renderers = selector.GetComponentsInChildren<MeshRenderer>(false);
+                var renderers = selector.GetComponentsInChildren<MeshRenderer>(false)
+                    .Where(x => Stilb.IsLightmapStatic(x));
+
                 foreach (var r in renderers)
                 {
                     if (claimed.Add(r))
@@ -134,6 +136,26 @@ namespace stilb
                         list.Add(r);
                     }
                 }
+            }
+
+            // todo move to ui
+            var allRenderers = rootObjects.SelectMany(x => x.GetComponentsInChildren<MeshRenderer>(false)
+                    .Where(x => Stilb.IsLightmapStatic(x)));
+
+            var unclaimedRenderers = new List<MeshRenderer>();
+            foreach (var r in allRenderers)
+            {
+                if (claimed.Contains(r))
+                {
+                    continue;
+                }
+
+                unclaimedRenderers.Add(r);
+            }
+            var globalGroup = ScriptableObject.CreateInstance<LightmapGroup>();
+            if (unclaimedRenderers.Count > 0)
+            {
+                groupMap[globalGroup] = unclaimedRenderers;
             }
 
             uint groupIndex = 0;
@@ -149,6 +171,8 @@ namespace stilb
             {
                 throw new InvalidOperationException("No lightmap groups found.");
             }
+
+            ScriptableObject.DestroyImmediate(globalGroup);
 
             Debug.Log($"Vertices: {sceneMesh.Sum(x => x.vertices.Length)}");
             Debug.Log($"Indices: {sceneMesh.Sum(x => x.triangles.Length)}");
@@ -227,7 +251,7 @@ namespace stilb
             public uint groupIndex;
         }
 
-        public static List<MeshData> ExtractMeshData(MeshRenderer[] renderers, uint groupIndex)
+        public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
         {
             var datas = new List<MeshData>();
 
