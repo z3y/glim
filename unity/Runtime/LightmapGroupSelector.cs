@@ -7,5 +7,7 @@ namespace stilb
     public class LightmapGroupSelector : MonoBehaviour
     {
         public LightmapGroup group;
+
+        void Start() { }
     }
 }

@@ -110,6 +110,7 @@ namespace stilb
 
             var allSelectors = rootObjects
                 .SelectMany(x => x.GetComponentsInChildren<LightmapGroupSelector>(false))
+                .Where(x => x.enabled)
                 .ToArray();
 
             Array.Sort(allSelectors, (a, b) => GetDepth(b.transform).CompareTo(GetDepth(a.transform)));
@@ -202,19 +203,19 @@ namespace stilb
                 return false;
             }
 
-            var filter = renderer.GetComponent<MeshFilter>();
-
-            if (!filter)
-            {
-                return false;
-            }
-
             if (renderer.receiveGI != ReceiveGI.Lightmaps)
             {
                 return false;
             }
 
             if (renderer.scaleInLightmap == 0)
+            {
+                return false;
+            }
+
+            var filter = renderer.GetComponent<MeshFilter>();
+
+            if (!filter)
             {
                 return false;
             }
@@ -233,7 +234,15 @@ namespace stilb
                 return false;
             }
 
-            if (!mesh.HasVertexAttribute(VertexAttribute.TexCoord0))
+            if (mesh.subMeshCount <= 0)
+            {
+                return false;
+            }
+
+            bool hasUv0 = mesh.HasVertexAttribute(VertexAttribute.TexCoord0);
+            bool hasUv1 = mesh.HasVertexAttribute(VertexAttribute.TexCoord1);
+
+            if (!(hasUv0 || hasUv1))
             {
                 return false;
             }
