@@ -8,7 +8,6 @@ use glfw_sys::{
 };
 
 use crate::{
-    bmp::save_bmp,
     camera::Camera,
     compute_shader::{
         BakePushConstants, ComputeShader, load_bake_lights_shader, load_init_from_camera_shader,
@@ -135,7 +134,12 @@ pub fn as_bytes<T>(v: &T) -> &[u8] {
 // pub fn blit_with_shader(vk: &VulkanContext, cmd: vk::CommandBuffer, image: vk::ImageView) {
 // }
 
-fn render_visibility_buffer_bake(app: &mut Stilb, width: u32, height: u32) -> Texture2D {
+fn render_visibility_buffer_bake(
+    app: &mut Stilb,
+    width: u32,
+    height: u32,
+    group_index: u32,
+) -> Texture2D {
     let vk = &mut app.vk;
     let mesh = &app.gpu_mesh;
 
@@ -181,7 +185,7 @@ fn render_visibility_buffer_bake(app: &mut Stilb, width: u32, height: u32) -> Te
         indices: mesh.index_address(),
         width: visibility.width(),
         height: visibility.height(),
-        pad0: 0,
+        group_index,
         pad1: 0,
     };
 
@@ -401,7 +405,7 @@ fn bake_lightmaps(app: &mut Stilb) {
 
         let preview_settings = app.config.preview_settings.clone();
 
-        update_render_target(app, &preview_settings);
+        update_render_target(app, &preview_settings, 0);
 
         let RenderTarget::NonDirectional {
             visibility,
@@ -450,7 +454,7 @@ fn bake_lightmaps(app: &mut Stilb) {
                     app.config.preview_settings.width = app.vk.swapchain.extent.width;
                     app.config.preview_settings.height = app.vk.swapchain.extent.height;
 
-                    update_render_target(app, &preview_settings);
+                    update_render_target(app, &preview_settings, 0);
                     let RenderTarget::NonDirectional {
                         visibility,
                         diffuse,
@@ -485,10 +489,12 @@ fn bake_lightmaps(app: &mut Stilb) {
     } else {
         println!("asdf");
         for i in 0..app.groups.len() {
+            let group_index = i as u32;
+
             let group = &app.groups[i];
             app.push.sample_index = 0;
             let settings = group.settings.clone();
-            update_render_target(app, &settings);
+            update_render_target(app, &settings, group_index);
 
             let RenderTarget::NonDirectional {
                 visibility,
@@ -535,7 +541,7 @@ fn bake_lightmaps(app: &mut Stilb) {
             let pixels_read = diffuse.read_pixels(&app.vk);
 
             let readback_data = ReadbackData {
-                group_index: i as u32,
+                group_index,
                 ty: 0,
                 pixels: pixels_read.as_ptr(),
                 pixels_count: pixels_read.len() as u32,
@@ -908,7 +914,7 @@ fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, width: u32, height: u3
     }
 }
 
-fn update_render_target(app: &mut Stilb, settings: &LightmapSettings) {
+fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_index: u32) {
     if let RenderTarget::NonDirectional {
         visibility,
         diffuse,
@@ -944,7 +950,7 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings) {
     let visibility = if app.config.is_preview {
         render_visibility_buffer_camera(app, target_width, target_height)
     } else {
-        render_visibility_buffer_bake(app, target_width, target_height)
+        render_visibility_buffer_bake(app, target_width, target_height, group_index)
     };
 
     println!("visibility: {:#x}", visibility.image().as_raw());

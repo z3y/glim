@@ -22,6 +22,7 @@ namespace stilb
                 width = resolution,
                 height = resolution,
                 useMipMap = false,
+                mipCount = 1,
                 colorFormat = type == AtlasType.Albedo ? RenderTextureFormat.ARGB32 : RenderTextureFormat.ARGBFloat,
                 sRGB = false,
                 volumeDepth = 1,
@@ -31,6 +32,7 @@ namespace stilb
 
             _metaAlphaMat = AssetDatabase.LoadAssetAtPath<Material>("Packages/io.github.z3y.stilb/Editor/AlphaMeta.mat");
             _rt = new RenderTexture(desc);
+            _rt.filterMode = FilterMode.Point;
         }
 
         public enum AtlasType

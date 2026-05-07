@@ -77,6 +77,14 @@ namespace stilb
                     continue;
                 }
 
+                light.bakingOutput = new LightBakingOutput
+                {
+                    isBaked = true,
+                    lightmapBakeType = LightmapBakeType.Baked,
+                    mixedLightingMode = MixedLightingMode.IndirectOnly
+                };
+                EditorUtility.SetDirty(light);
+
                 // todo color temperature
                 var linear = light.color.linear;
                 var color = new Vector3(linear.r, linear.g, linear.b) * light.intensity;
@@ -103,6 +111,7 @@ namespace stilb
                     color = color,
                     shadow_radius_or_angle = radiusOrAngle,
                 };
+
 
                 sceneLights.Add(l);
             }
@@ -164,6 +173,15 @@ namespace stilb
             foreach (var (lightmapGroup, renderers) in groupMap)
             {
                 var rendererArray = renderers.ToArray();
+
+                foreach (var mr in rendererArray)
+                {
+                    mr.lightmapIndex = (int)groupIndex;
+                    // todo scale and offset packing
+                    mr.lightmapScaleOffset = new Vector4(1, 1, 0, 0);
+                    EditorUtility.SetDirty(mr);
+                }
+
                 this.groups.Add(new BakeContextGroup(lightmapGroup, rendererArray));
                 sceneMesh.AddRange(Stilb.ExtractMeshData(rendererArray, groupIndex));
                 groupIndex++;

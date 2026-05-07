@@ -9,7 +9,7 @@ struct PushConstants
     uint *indices;
     uint width;
     uint height;
-    float padding0;
+    uint groupIndex;
     float padding1;
 };
 
@@ -81,7 +81,13 @@ void geometry(triangle VertexOutput input[3], uint primitiveID: SV_PrimitiveID, 
         uint vIndex = Push.indices[primitiveID * 3 + i];
         Vertex v = Push.vertices[vIndex];
 
+        if (v.GetLightmapGroup() != Push.groupIndex)
+        {
+            continue;
+        }
+
         float2 uv = v.GetUV() + jitter;
+
 
         Varyings outV;
         outV.positionCS = float4(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, 0.0, 1.0);

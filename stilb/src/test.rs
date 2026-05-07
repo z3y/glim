@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::bindings::*;
+    use crate::bmp::save_bmp;
     use crate::{lights::LightType, math::*, mesh::Vertex, *};
 
     // fn get_test_config() -> StilbConfig {

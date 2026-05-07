@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEditorInternal;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace stilb
 {
@@ -41,22 +44,47 @@ namespace stilb
 
             Debug.Log("Bake Complete");
 
+            string lightmapFolder = "Assets/StilbLightmaps/";
+            string lightmapFolderFull = Path.GetFullPath(lightmapFolder);
+
+            if (!Directory.Exists(lightmapFolderFull))
+            {
+                Directory.CreateDirectory(lightmapFolderFull);
+            }
+
+            List<LightmapData> lightmapDatas = new();
+
             foreach (var item in _bakeResults)
             {
                 var data = item.data;
 
-                var texture = new Texture2D((int)data.width, (int)data.height, TextureFormat.RGBAFloat, 1, false);
-                texture.SetPixels(item.pixelsDiffuseCopy);
+                var diffuseTex = new Texture2D((int)data.width, (int)data.height, TextureFormat.RGBAFloat, 1, false);
+                diffuseTex.SetPixels(item.pixelsDiffuseCopy);
                 var fileName = $"Diffuse{data.group_index}";
-                texture.name = fileName;
+                diffuseTex.name = fileName;
 
-                var assets = new UnityEngine.Object[] { texture };
-                InternalEditorUtility.SaveToSerializedFileAndForget(assets, $"Assets/{fileName}.asset", false);
+                var assets = new UnityEngine.Object[] { diffuseTex };
+                var path = $"Assets/{fileName}.asset";
+                InternalEditorUtility.SaveToSerializedFileAndForget(assets, path, false);
                 // AssetDatabase.CreateAsset(texture, $"Assets/{fileName}.asset");
+
+
+                AssetDatabase.ImportAsset(path);
+                var loadedAsset = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                var lmData = new LightmapData
+                {
+                    lightmapColor = loadedAsset,
+                    lightmapDir = null,
+                    shadowMask = null
+                };
+                lightmapDatas.Add(lmData);
             }
 
-            AssetDatabase.Refresh();
 
+            var scene = SceneManager.GetActiveScene();
+            LightmapSettings.lightmaps = lightmapDatas.ToArray();
+            LightmapSettings.lightmapsMode = LightmapsMode.NonDirectional;
+            EditorSceneManager.MarkSceneDirty(scene);
 
             _bakeResults = new();
             _isComplete = false;
