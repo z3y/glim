@@ -129,17 +129,15 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     uint lightCount = Push.lightCount;
 
-    uint pixelSeed = HashPcg3d(uint3(coords, 0)).x;
-
     // direct light
-    float2 xiLight = OwenHammersley(sampleIndex, sampleCount, 0, pixelSeed);
+    float2 xiLight = OwenHammersley(sampleIndex, sampleCount, 0, coords);
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         color += ShadeLight(Push.lights[lightIndex], surface, xiLight) * throughput;
     }
 
-    float2 xiBounce0 = OwenHammersley(sampleIndex, sampleCount, 1, pixelSeed);
+    float2 xiBounce0 = OwenHammersley(sampleIndex, sampleCount, 1, coords);
 
     Ray bounceRay;
     bounceRay.P = RayOffset(surface.P, surface.Ng);
@@ -170,8 +168,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
             throughput *= bounceAlbedo;
 
             uint dimOffset = (bounceIndex + 1) * 2;
-            float2 xiLight  = OwenHammersley(sampleIndex, sampleCount, dimOffset,     pixelSeed);
-            float2 xiBounce = OwenHammersley(sampleIndex, sampleCount, dimOffset + 1, pixelSeed);
+            float2 xiLight  = OwenHammersley(sampleIndex, sampleCount, dimOffset,     coords);
+            float2 xiBounce = OwenHammersley(sampleIndex, sampleCount, dimOffset + 1, coords);
 
             for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
             {

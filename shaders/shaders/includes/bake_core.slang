@@ -169,14 +169,13 @@ float OwenScrambledRadicalInverse(uint sampleIndex, uint seed)
     return float(reversebits(v)) * 2.3283064365386963e-10;
 }
 
-float2 OwenHammersley(uint sampleIndex, uint sampleCount, uint dimension, uint pixelSeed)
+float2 OwenHammersley(uint sampleIndex, uint sampleCount, uint dimension, uint2 coords)
 {
-    uint seed0 = HashPcg3d(uint3(pixelSeed, dimension * 2,     0)).x;
-    uint seed1 = HashPcg3d(uint3(pixelSeed, dimension * 2 + 1, 0)).x;
+    uint3 h = HashPcg3d(uint3(coords.x, coords.y, dimension));
 
     float xi0 = frac(float(sampleIndex) / float(sampleCount)
-                     + float(seed0) * 2.3283064365386963e-10);
-    float xi1 = OwenScrambledRadicalInverse(sampleIndex, seed1);
+                     + float(h.x) * 2.3283064365386963e-10);
+    float xi1 = OwenScrambledRadicalInverse(sampleIndex, h.y);
 
     return float2(xi0, xi1);
 }
