@@ -17,7 +17,7 @@ use crate::{
     lights::{GpuLights, Light},
     math::Vector3,
     mesh::{GpuMesh, Mesh, VulkanAs, create_tlas},
-    oidn::oidn_denoise,
+    oidn::Oidn,
     texture2d::Texture2D,
     vulkan_context::{VulkanConfig, VulkanContext},
     window::{initialize_window, update_camera},
@@ -489,6 +489,14 @@ fn bake_lightmaps(app: &mut Stilb) {
             }
         }
     } else {
+        let any_denoise = app.groups.iter().any(|x| x.settings.denoise);
+
+        let oidn = if any_denoise {
+            Some(Oidn::load().expect("failed to load oidn"))
+        } else {
+            None
+        };
+
         for i in 0..app.groups.len() {
             let group_index = i as u32;
 
@@ -542,11 +550,16 @@ fn bake_lightmaps(app: &mut Stilb) {
             let mut pixels_read = diffuse.read_pixels(&app.vk);
 
             if settings.denoise {
-                pixels_read = oidn_denoise(
-                    &mut pixels_read,
-                    settings.width as usize,
-                    settings.height as usize,
-                );
+                match &oidn {
+                    Some(oidn) => {
+                        pixels_read = oidn.denoise(
+                            &mut pixels_read,
+                            settings.width as usize,
+                            settings.height as usize,
+                        );
+                    }
+                    None => {}
+                }
             }
 
             let readback_data = ReadbackData {

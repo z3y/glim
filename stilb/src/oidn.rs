@@ -1,10 +1,10 @@
+use libloading::Library;
 use std::ffi::{CStr, c_char, c_void};
 
 #[repr(C)]
 pub struct OIDNDeviceImpl(c_void);
 #[repr(C)]
 pub struct OIDNFilterImpl(c_void);
-
 pub type OIDNDevice = *mut OIDNDeviceImpl;
 pub type OIDNFilter = *mut OIDNFilterImpl;
 
@@ -17,6 +17,7 @@ pub enum OIDNDeviceType {
     SYCL = 2,
     CUDA = 3,
     HIP = 4,
+    METAL = 5,
 }
 
 #[repr(C)]
@@ -47,102 +48,123 @@ pub enum OIDNFormat {
     Half4 = 260,
 }
 
-#[link(name = "OpenImageDenoise")]
-#[allow(non_snake_case)]
-#[allow(dead_code)]
-unsafe extern "C" {
-    pub fn oidnNewDevice(device_type: OIDNDeviceType) -> OIDNDevice;
-    pub fn oidnCommitDevice(device: OIDNDevice);
-    pub fn oidnReleaseDevice(device: OIDNDevice);
+type FnNewDevice = unsafe extern "C" fn(OIDNDeviceType) -> OIDNDevice;
+type FnCommitDevice = unsafe extern "C" fn(OIDNDevice);
+type FnReleaseDevice = unsafe extern "C" fn(OIDNDevice);
+type FnNewFilter = unsafe extern "C" fn(OIDNDevice, *const c_char) -> OIDNFilter;
+type FnCommitFilter = unsafe extern "C" fn(OIDNFilter);
+type FnExecuteFilter = unsafe extern "C" fn(OIDNFilter);
+type FnReleaseFilter = unsafe extern "C" fn(OIDNFilter);
+type FnSetFilterBool = unsafe extern "C" fn(OIDNFilter, *const c_char, bool);
+type FnGetDeviceError = unsafe extern "C" fn(OIDNDevice, *mut *const c_char) -> OIDNError;
+type FnSetSharedFilterImage = unsafe extern "C" fn(
+    OIDNFilter,
+    *const c_char,
+    *mut c_void,
+    OIDNFormat,
+    usize,
+    usize,
+    usize,
+    usize,
+    usize,
+);
 
-    pub fn oidnNewFilter(device: OIDNDevice, filter_type: *const c_char) -> OIDNFilter;
-    pub fn oidnCommitFilter(filter: OIDNFilter);
-    pub fn oidnExecuteFilter(filter: OIDNFilter);
-    pub fn oidnReleaseFilter(filter: OIDNFilter);
-
-    pub fn oidnSetFilterBool(filter: OIDNFilter, name: *const c_char, value: bool);
-    pub fn oidnGetDeviceError(device: OIDNDevice, out_message: *mut *const c_char) -> OIDNError;
-
-    pub fn oidnSetSharedFilterImage(
-        filter: OIDNFilter,
-        name: *const c_char,
-        ptr: *mut c_void,
-        format: OIDNFormat,
-        width: usize,
-        height: usize,
-        byte_offset: usize,
-        byte_pixel_stride: usize,
-        byte_row_stride: usize,
-    );
+pub struct Oidn {
+    _lib: Library,
+    new_device: FnNewDevice,
+    commit_device: FnCommitDevice,
+    release_device: FnReleaseDevice,
+    new_filter: FnNewFilter,
+    commit_filter: FnCommitFilter,
+    execute_filter: FnExecuteFilter,
+    release_filter: FnReleaseFilter,
+    set_filter_bool: FnSetFilterBool,
+    get_device_error: FnGetDeviceError,
+    set_shared_filter_image: FnSetSharedFilterImage,
 }
 
-pub fn oidn_denoise(pixels: &mut [f32], width: usize, height: usize) -> Vec<f32> {
-    let pixel_stride = 4 * std::mem::size_of::<f32>();
+impl Oidn {
+    pub fn load() -> Result<Self, libloading::Error> {
+        let lib_name = if cfg!(windows) {
+            "OpenImageDenoise.dll"
+        } else if cfg!(target_os = "macos") {
+            "libOpenImageDenoise.dylib"
+        } else {
+            "libOpenImageDenoise.so.2"
+        };
 
-    let mut output = vec![0.0f32; pixels.len()];
-
-    // todo GPU device
-    let device = unsafe { oidnNewDevice(OIDNDeviceType::CPU) };
-    unsafe { oidnCommitDevice(device) };
-
-    const FILTER_NAME: &CStr = c"RT";
-    let filter = unsafe { oidnNewFilter(device, FILTER_NAME.as_ptr()) };
-
-    const COLOR_NAME: &CStr = c"color";
-    const OUTPUT_NAME: &CStr = c"output";
-    let src_ptr = pixels.as_mut_ptr() as *mut c_void;
-    let dst_ptr = output.as_mut_ptr() as *mut c_void;
-
-    unsafe {
-        oidnSetSharedFilterImage(
-            filter,
-            COLOR_NAME.as_ptr(),
-            src_ptr,
-            OIDNFormat::Float3,
-            width,
-            height,
-            0,
-            pixel_stride,
-            0,
-        )
-    };
-
-    unsafe {
-        oidnSetSharedFilterImage(
-            filter,
-            OUTPUT_NAME.as_ptr(),
-            dst_ptr,
-            OIDNFormat::Float3,
-            width,
-            height,
-            0,
-            pixel_stride,
-            0,
-        )
-    };
-
-    const HDR_NAME: &CStr = c"hdr";
-
-    unsafe {
-        oidnSetFilterBool(filter, HDR_NAME.as_ptr(), true);
-        oidnCommitFilter(filter);
-        oidnExecuteFilter(filter);
-
-        let mut msg: *const c_char = std::ptr::null();
-        let err = oidnGetDeviceError(device, &mut msg as *mut *const c_char);
-
-        if err != OIDNError::None {
-            let s = if msg.is_null() {
-                "unknown error".into()
-            } else {
-                CStr::from_ptr(msg).to_string_lossy()
-            };
-            println!("OIDN error {:?}: {}", err, s);
+        unsafe {
+            let lib = Library::new(lib_name)?;
+            Ok(Self {
+                new_device: *lib.get(b"oidnNewDevice\0")?,
+                commit_device: *lib.get(b"oidnCommitDevice\0")?,
+                release_device: *lib.get(b"oidnReleaseDevice\0")?,
+                new_filter: *lib.get(b"oidnNewFilter\0")?,
+                commit_filter: *lib.get(b"oidnCommitFilter\0")?,
+                execute_filter: *lib.get(b"oidnExecuteFilter\0")?,
+                release_filter: *lib.get(b"oidnReleaseFilter\0")?,
+                set_filter_bool: *lib
+                    .get(b"oidnSetFilterBool\0")
+                    .or_else(|_| lib.get(b"oidnSetFilter1b\0"))?,
+                get_device_error: *lib.get(b"oidnGetDeviceError\0")?,
+                set_shared_filter_image: *lib.get(b"oidnSetSharedFilterImage\0")?,
+                _lib: lib,
+            })
         }
-
-        oidnReleaseFilter(filter);
-        oidnReleaseDevice(device);
     }
 
-    output
+    pub fn denoise(&self, pixels: &mut [f32], width: usize, height: usize) -> Vec<f32> {
+        let pixel_stride = 4 * std::mem::size_of::<f32>();
+        let mut output = vec![0.0f32; pixels.len()];
+
+        unsafe {
+            let device = (self.new_device)(OIDNDeviceType::CPU);
+            (self.commit_device)(device);
+
+            let filter = (self.new_filter)(device, c"RT".as_ptr());
+
+            (self.set_shared_filter_image)(
+                filter,
+                c"color".as_ptr(),
+                pixels.as_mut_ptr() as *mut c_void,
+                OIDNFormat::Float3,
+                width,
+                height,
+                0,
+                pixel_stride,
+                0,
+            );
+            (self.set_shared_filter_image)(
+                filter,
+                c"output".as_ptr(),
+                output.as_mut_ptr() as *mut c_void,
+                OIDNFormat::Float3,
+                width,
+                height,
+                0,
+                pixel_stride,
+                0,
+            );
+
+            (self.set_filter_bool)(filter, c"hdr".as_ptr(), true);
+            (self.commit_filter)(filter);
+            (self.execute_filter)(filter);
+
+            let mut msg: *const c_char = std::ptr::null();
+            let err = (self.get_device_error)(device, &mut msg);
+            if err != OIDNError::None {
+                let s = if msg.is_null() {
+                    "unknown error".into()
+                } else {
+                    CStr::from_ptr(msg).to_string_lossy()
+                };
+                eprintln!("OIDN error {:?}: {}", err, s);
+            }
+
+            (self.release_filter)(filter);
+            (self.release_device)(device);
+        }
+
+        output
+    }
 }
