@@ -71,16 +71,16 @@ type FnSetSharedFilterImage = unsafe extern "C" fn(
 
 pub struct Oidn {
     _lib: Library,
-    new_device: FnNewDevice,
-    commit_device: FnCommitDevice,
     release_device: FnReleaseDevice,
-    new_filter: FnNewFilter,
     commit_filter: FnCommitFilter,
     execute_filter: FnExecuteFilter,
     release_filter: FnReleaseFilter,
     set_filter_bool: FnSetFilterBool,
     get_device_error: FnGetDeviceError,
     set_shared_filter_image: FnSetSharedFilterImage,
+
+    device: OIDNDevice,
+    filter: OIDNFilter,
 }
 
 impl Oidn {
@@ -95,11 +95,17 @@ impl Oidn {
 
         unsafe {
             let lib = Library::new(lib_name)?;
+
+            let new_device: FnNewDevice = *lib.get(b"oidnNewDevice\0")?;
+            let commit_device: FnCommitDevice = *lib.get(b"oidnCommitDevice\0")?;
+            let new_filter: FnNewFilter = *lib.get(b"oidnNewFilter\0")?;
+
+            let device = new_device(OIDNDeviceType::CPU);
+            commit_device(device);
+            let filter = new_filter(device, c"RT".as_ptr());
+
             Ok(Self {
-                new_device: *lib.get(b"oidnNewDevice\0")?,
-                commit_device: *lib.get(b"oidnCommitDevice\0")?,
                 release_device: *lib.get(b"oidnReleaseDevice\0")?,
-                new_filter: *lib.get(b"oidnNewFilter\0")?,
                 commit_filter: *lib.get(b"oidnCommitFilter\0")?,
                 execute_filter: *lib.get(b"oidnExecuteFilter\0")?,
                 release_filter: *lib.get(b"oidnReleaseFilter\0")?,
@@ -109,6 +115,8 @@ impl Oidn {
                 get_device_error: *lib.get(b"oidnGetDeviceError\0")?,
                 set_shared_filter_image: *lib.get(b"oidnSetSharedFilterImage\0")?,
                 _lib: lib,
+                device,
+                filter,
             })
         }
     }
@@ -117,12 +125,10 @@ impl Oidn {
         let pixel_stride = 4 * std::mem::size_of::<f32>();
         let mut output = vec![0.0f32; pixels.len()];
 
+        let filter = self.filter;
+        let device = self.device;
+
         unsafe {
-            let device = (self.new_device)(OIDNDeviceType::CPU);
-            (self.commit_device)(device);
-
-            let filter = (self.new_filter)(device, c"RT".as_ptr());
-
             (self.set_shared_filter_image)(
                 filter,
                 c"color".as_ptr(),
@@ -160,11 +166,17 @@ impl Oidn {
                 };
                 eprintln!("OIDN error {:?}: {}", err, s);
             }
-
-            (self.release_filter)(filter);
-            (self.release_device)(device);
         }
 
         output
+    }
+}
+
+impl Drop for Oidn {
+    fn drop(&mut self) {
+        unsafe {
+            (self.release_filter)(self.filter);
+            (self.release_device)(self.device);
+        }
     }
 }
