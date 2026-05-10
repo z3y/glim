@@ -362,7 +362,7 @@ mod tests {
 
         let config = StilbConfig {
             coordinate_system: CoordinateSystem::Default,
-            is_preview: true,
+            is_preview: false,
             camera_position: Vector3::new(0.0, 0.0, 5.0),
             camera_forward: Vector3::FORWARD,
             preview_settings,
@@ -426,7 +426,7 @@ mod tests {
             height: h,
             bounce_count: 2,
             max_samples: 256,
-            denoise: false,
+            denoise: true,
         };
 
         app_add_lightmap_group(

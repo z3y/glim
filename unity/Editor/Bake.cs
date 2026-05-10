@@ -62,7 +62,7 @@ namespace stilb
                     var data = result.data;
                     var groupAsset = _context.groups[(int)data.group_index].groupAsset;
 
-                    var diffuseTex = new Texture2D((int)data.width, (int)data.height, TextureFormat.RGBAFloat, 1, false);
+                    var diffuseTex = new Texture2D((int)data.width, (int)data.height, TextureFormat.RGBAFloat, false, true);
                     diffuseTex.SetPixels(result.pixelsDiffuseCopy);
                     var fileName = $"{_context.scene.name} LightmapDiffuse_{data.group_index}";
                     diffuseTex.name = fileName;

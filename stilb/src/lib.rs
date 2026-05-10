@@ -489,7 +489,6 @@ fn bake_lightmaps(app: &mut Stilb) {
             }
         }
     } else {
-        println!("asdf");
         for i in 0..app.groups.len() {
             let group_index = i as u32;
 
@@ -544,7 +543,7 @@ fn bake_lightmaps(app: &mut Stilb) {
 
             if settings.denoise {
                 pixels_read = oidn_denoise(
-                    &pixels_read,
+                    &mut pixels_read,
                     settings.width as usize,
                     settings.height as usize,
                 );

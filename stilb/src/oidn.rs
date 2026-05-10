@@ -1,4 +1,4 @@
-use std::ffi::{CStr, c_void};
+use std::ffi::{CStr, c_char, c_void};
 
 #[repr(C)]
 pub struct OIDNDeviceImpl(c_void);
@@ -17,6 +17,19 @@ pub enum OIDNDeviceType {
     SYCL = 2,
     CUDA = 3,
     HIP = 4,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum OIDNError {
+    None = 0,
+    Unknown = 1,
+    InvalidArgument = 2,
+    InvalidOperation = 3,
+    OutOfMemory = 4,
+    UnsupportedHardware = 5,
+    Cancelled = 6,
 }
 
 #[repr(C)]
@@ -42,14 +55,17 @@ unsafe extern "C" {
     pub fn oidnCommitDevice(device: OIDNDevice);
     pub fn oidnReleaseDevice(device: OIDNDevice);
 
-    pub fn oidnNewFilter(device: OIDNDevice, filter_type: *const i8) -> OIDNFilter;
+    pub fn oidnNewFilter(device: OIDNDevice, filter_type: *const c_char) -> OIDNFilter;
     pub fn oidnCommitFilter(filter: OIDNFilter);
     pub fn oidnExecuteFilter(filter: OIDNFilter);
     pub fn oidnReleaseFilter(filter: OIDNFilter);
 
+    pub fn oidnSetFilterBool(filter: OIDNFilter, name: *const c_char, value: bool);
+    pub fn oidnGetDeviceError(device: OIDNDevice, out_message: *mut *const c_char) -> OIDNError;
+
     pub fn oidnSetSharedFilterImage(
         filter: OIDNFilter,
-        name: *const i8,
+        name: *const c_char,
         ptr: *mut c_void,
         format: OIDNFormat,
         width: usize,
@@ -60,12 +76,13 @@ unsafe extern "C" {
     );
 }
 
-pub fn oidn_denoise(pixels: &[f32], width: usize, height: usize) -> Vec<f32> {
+pub fn oidn_denoise(pixels: &mut [f32], width: usize, height: usize) -> Vec<f32> {
     let pixel_stride = 4 * std::mem::size_of::<f32>();
 
     let mut output = vec![0.0f32; pixels.len()];
 
-    let device = unsafe { oidnNewDevice(OIDNDeviceType::Default) };
+    // todo GPU device
+    let device = unsafe { oidnNewDevice(OIDNDeviceType::CPU) };
     unsafe { oidnCommitDevice(device) };
 
     const FILTER_NAME: &CStr = c"RT";
@@ -73,7 +90,7 @@ pub fn oidn_denoise(pixels: &[f32], width: usize, height: usize) -> Vec<f32> {
 
     const COLOR_NAME: &CStr = c"color";
     const OUTPUT_NAME: &CStr = c"output";
-    let src_ptr = pixels.as_ptr() as *mut c_void;
+    let src_ptr = pixels.as_mut_ptr() as *mut c_void;
     let dst_ptr = output.as_mut_ptr() as *mut c_void;
 
     unsafe {
@@ -104,9 +121,24 @@ pub fn oidn_denoise(pixels: &[f32], width: usize, height: usize) -> Vec<f32> {
         )
     };
 
+    const HDR_NAME: &CStr = c"hdr";
+
     unsafe {
+        oidnSetFilterBool(filter, HDR_NAME.as_ptr(), true);
         oidnCommitFilter(filter);
         oidnExecuteFilter(filter);
+
+        let mut msg: *const c_char = std::ptr::null();
+        let err = oidnGetDeviceError(device, &mut msg as *mut *const c_char);
+
+        if err != OIDNError::None {
+            let s = if msg.is_null() {
+                "unknown error".into()
+            } else {
+                CStr::from_ptr(msg).to_string_lossy()
+            };
+            println!("OIDN error {:?}: {}", err, s);
+        }
 
         oidnReleaseFilter(filter);
         oidnReleaseDevice(device);
