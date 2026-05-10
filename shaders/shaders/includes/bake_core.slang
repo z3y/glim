@@ -135,6 +135,20 @@ float3 RayOffset(float3 P, float3 Ng)
         abs(P.z) < origin ? P.z + floatScale * Ng.z : p_i.z);
 }
 
+float2 Hammersley(uint i, uint N)
+{
+    // radical inverse (Van der Corput) in base 2
+    uint bits = i;
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    float radicalInverse = float(bits) * 2.3283064365386963e-10; // / 2^32
+
+    return float2(float(i) / float(N), radicalInverse);
+}
+
 float3 RandomPointOnSphere(float3 center, float radius, float2 xi)
 {
     float z = 1.0 - 2.0 * xi.x;
@@ -158,24 +172,49 @@ uint3 HashPcg3d(uint3 v)
     return v;
 }
 
-float OwenScrambledRadicalInverse(uint sampleIndex, uint seed)
+float2 Scramble(float2 h, uint2 coords, uint dimension, uint frame)
 {
-    uint v = sampleIndex;
-    v ^= v * 0x3d20adeau;
-    v += seed;
-    v *= (seed >> 16) | 1u;
-    v ^= v * 0x05526c56u;
-    v ^= v * 0x53a22864u;
-    return float(reversebits(v)) * 2.3283064365386963e-10;
+    uint3 v = HashPcg3d(uint3(coords, dimension ^ (frame * 2971215073u)));
+    float2 shift = float2(v.xy) * (1.0 / 4294967295.0);
+    return frac(h + shift);
 }
 
+// Laine-Karras hash (fast Owen scramble for base 2)
+// From "Stratified Sampling for Stochastic Transparency" and
+// "Practical Hash-based Owen Scrambling" (Burley 2020)
+uint OwenHash(uint x, uint seed)
+{
+    x ^= x * 0x3d20adeau;
+    x += seed;
+    x *= (seed >> 16) | 1u;
+    x ^= x * 0x05526c56u;
+    x ^= x * 0x53a22864u;
+    return x;
+}
+
+float OwenScrambledRadicalInverse(uint sampleIndex, uint seed)
+{
+    uint bits = reversebits(sampleIndex);
+    bits = OwenHash(bits, seed);
+    return float(bits) * 2.3283064365386963e-10; // / 2^32
+}
+
+// 2D Owen-scrambled Hammersley
+// dimension: which 2D sample pair (0 = first, 1 = second, etc.)
+// pixelSeed: per-pixel hash to decorrelate pixels
 float2 OwenHammersley(uint sampleIndex, uint sampleCount, uint dimension, uint2 coords)
 {
+    // uint seed0 = HashPcg3d(uint3(pixelSeed, dimension * 2,     0)).x;
+    // uint seed1 = HashPcg3d(uint3(pixelSeed, dimension * 2 + 1, 0)).x;
+
     uint3 h = HashPcg3d(uint3(coords.x, coords.y, dimension));
 
-    float xi0 = frac(float(sampleIndex) / float(sampleCount)
-                     + float(h.x) * 2.3283064365386963e-10);
+    float xi0 = float(sampleIndex) / float(sampleCount);
     float xi1 = OwenScrambledRadicalInverse(sampleIndex, h.y);
+
+    uint bits0 = uint(xi0 * 4294967296.0);
+    bits0 = OwenHash(bits0, h.x);
+    xi0 = float(bits0) * 2.3283064365386963e-10;
 
     return float2(xi0, xi1);
 }

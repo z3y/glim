@@ -355,7 +355,7 @@ mod tests {
         let preview_settings = LightmapSettings {
             width: 1024,
             height: 1024,
-            max_samples: 256,
+            max_samples: 512,
             bounce_count: 3,
             denoise: false,
         };
