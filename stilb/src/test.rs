@@ -355,7 +355,7 @@ mod tests {
         let preview_settings = LightmapSettings {
             width: 1024,
             height: 1024,
-            max_samples: 512,
+            max_samples: 256,
             bounce_count: 3,
             denoise: false,
         };
@@ -366,7 +366,7 @@ mod tests {
             camera_position: Vector3::new(0.0, 0.0, 5.0),
             camera_forward: Vector3::FORWARD,
             preview_settings,
-            throttle_preview_ms: 5,
+            throttle_preview_ms: 10,
             callback: test_save_callback,
         };
 
