@@ -210,6 +210,11 @@ float2 OwenHammersley(uint sampleIndex, uint sampleCount, uint dimension, uint2 
     return float2(xi0, xi1);
 }
 
+float2 GetSample(uint sampleIndex, uint sampleCount, uint dimension, uint2 coords)
+{
+    return OwenHammersley(sampleIndex, sampleCount, dimension, coords);
+}
+
 float3 RandomDirectionInHemisphere(float3 normal, float2 rand)
 {
     // rand.x and rand.y are random numbers in [0,1)

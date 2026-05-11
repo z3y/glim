@@ -46,11 +46,15 @@ void main(uint3 threadID: SV_DispatchThreadID)
     ray.tMin = 0.001;
     ray.tMax = RAY_MAX;
 
+    // todo backface gi
+    bool backfaceGI = true;
+
     float4 result;
     Hit hit;
     if (TraceRay(ray, hit))
     {
-        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, hit.frontFace, false);
+        bool visible = backfaceGI || hit.frontFace;
+        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, visible, false);
     }
     else
     {

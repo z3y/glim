@@ -118,7 +118,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     {
         float3 emission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
         float3 albedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
-        color += emission * throughput;
+        color += emission;
         throughput = albedo;
     }
 
@@ -130,14 +130,15 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint lightCount = Push.lightCount;
 
     // direct light
-    float2 xiLight = OwenHammersley(sampleIndex, sampleCount, 0, coords);
+    uint dimension = 0;
+    float2 xiLight = GetSample(sampleIndex, sampleCount, dimension++, coords);
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         color += ShadeLight(Push.lights[lightIndex], surface, xiLight) * throughput;
     }
 
-    float2 xiBounce0 = OwenHammersley(sampleIndex, sampleCount, 1, coords);
+    float2 xiBounce0 = GetSample(sampleIndex, sampleCount, dimension++, coords);
 
     Ray bounceRay;
     bounceRay.P = RayOffset(surface.P, surface.Ng);
@@ -145,20 +146,27 @@ void main(uint3 threadID: SV_DispatchThreadID)
     bounceRay.tMin = 0;
     bounceRay.tMax = RAY_MAX;
 
+    // todo backface gi
+    bool backfaceGI = true;
+
     // bounces
     for (uint bounceIndex = 0; bounceIndex < bounceCount; bounceIndex++)
     {
         Hit bounceHit;
         if (TraceRay(bounceRay, bounceHit))
         {
+            Surface surfaceBounce = Surface::Get(Push.indices, Push.vertices, bounceHit.primitiveID, bounceHit.bary);
+
             if (!bounceHit.frontFace)
             {
-                continue;
-                // surfaceBounce.N = -surfaceBounce.N;
-                // surfaceBounce.Ng = -surfaceBounce.Ng;
-            }
+                if (!backfaceGI)
+                {
+                    break;
+                }
 
-            Surface surfaceBounce = Surface::Get(Push.indices, Push.vertices, bounceHit.primitiveID, bounceHit.bary);
+                surfaceBounce.N = -surfaceBounce.N;
+                surfaceBounce.Ng = -surfaceBounce.Ng;
+            }
 
             float3 bounceEmission = SampleEmission(surfaceBounce.uv, surfaceBounce.lightmapGroup).rgb;
             float3 bounceAlbedo = SampleAlbedo(surfaceBounce.uv, surfaceBounce.lightmapGroup).rgb;
@@ -167,9 +175,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
             throughput *= bounceAlbedo;
 
-            uint dimOffset = (bounceIndex + 1) * 2;
-            float2 xiLight  = OwenHammersley(sampleIndex, sampleCount, dimOffset,     coords);
-            float2 xiBounce = OwenHammersley(sampleIndex, sampleCount, dimOffset + 1, coords);
+            float2 xiLight  = GetSample(sampleIndex, sampleCount, dimension++, coords);
+            float2 xiBounce = GetSample(sampleIndex, sampleCount, dimension++, coords);
 
             for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
             {

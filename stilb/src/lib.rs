@@ -1,6 +1,6 @@
-use std::{ptr, time::Duration};
-
 use ash::vk::{self, Handle};
+use std::io::{self, Write};
+use std::{ptr, time::Duration};
 
 use glfw_sys::{
     GLFW_KEY_ESCAPE, GLFW_PRESS, GLFWwindow, glfwCreateWindowSurface, glfwGetKey, glfwPollEvents,
@@ -360,6 +360,11 @@ fn start_bake(app: &mut Stilb) {
     }
 
     app.gpu_mesh = GpuMesh::new(&app.vk, &app.cpu_mesh);
+    println!(
+        "Uploaded mesh Vertices: {} Triangles: {}",
+        app.cpu_mesh.vertices.len(),
+        app.cpu_mesh.indices.len()
+    );
     // free cpu mesh
     app.cpu_mesh = Mesh {
         vertices: Vec::new(),
@@ -433,6 +438,12 @@ fn bake_lightmaps(app: &mut Stilb) {
         unsafe {
             while glfwWindowShouldClose(window) == 0 {
                 glfwPollEvents();
+
+                print!(
+                    "\rSample: {} / {}",
+                    app.push.sample_index, preview_settings.max_samples
+                );
+                io::stdout().flush().unwrap();
 
                 let now = std::time::Instant::now();
 

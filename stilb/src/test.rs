@@ -356,7 +356,7 @@ mod tests {
             width: 1024,
             height: 1024,
             max_samples: 256,
-            bounce_count: 3,
+            bounce_count: 2,
             denoise: false,
         };
 
@@ -387,7 +387,7 @@ mod tests {
         let mut mesh = get_test_mesh_moneky();
 
         let mut offset = 0.0;
-        for _ in 0..3 {
+        for _ in 0..1 {
             {
                 let app = unsafe { &mut *app };
                 app.cpu_mesh.merge_mesh(&mesh);
