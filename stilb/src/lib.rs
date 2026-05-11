@@ -7,6 +7,7 @@ use glfw_sys::{
     glfwSetWindowShouldClose, glfwWindowShouldClose,
 };
 
+use crate::sobol::SobolBuffer;
 use crate::{
     camera::Camera,
     compute_shader::{
@@ -32,6 +33,7 @@ mod lights;
 mod math;
 mod mesh;
 mod oidn;
+mod sobol;
 mod test;
 mod texture2d;
 mod vulkan_cmd;
@@ -48,6 +50,7 @@ pub struct Stilb {
     pub cpu_mesh: Mesh,
     pub cpu_lights: Vec<Light>,
     pub groups: Vec<LightmapGroup>,
+    pub sobol: SobolBuffer,
 
     pub gpu_mesh: GpuMesh,
     pub gpu_lights: GpuLights,
@@ -431,6 +434,7 @@ fn bake_lightmaps(app: &mut Stilb) {
             &emissions,
             diffuse.view(),
             app.sampler_linear_clamp,
+            &app.sobol,
         );
 
         let mut previous_time = std::time::Instant::now();
@@ -485,6 +489,7 @@ fn bake_lightmaps(app: &mut Stilb) {
                         &emissions,
                         diffuse.view(),
                         app.sampler_linear_clamp,
+                        &app.sobol,
                     );
 
                     continue;
@@ -533,6 +538,7 @@ fn bake_lightmaps(app: &mut Stilb) {
                 &emissions,
                 diffuse.view(),
                 app.sampler_linear_clamp,
+                &app.sobol,
             );
 
             loop {
@@ -1174,6 +1180,8 @@ impl Stilb {
             indices: Vec::new(),
         };
 
+        let sobol = SobolBuffer::new(&vk);
+
         Self {
             vk,
             cpu_mesh,
@@ -1191,6 +1199,7 @@ impl Stilb {
             sampler_linear_clamp,
             push,
             render_target: RenderTarget::None,
+            sobol,
         }
     }
 }

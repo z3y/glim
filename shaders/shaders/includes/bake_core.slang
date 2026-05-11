@@ -1,4 +1,5 @@
 #include "bake_bindings.slang"
+#include "sobol.slang"
 
 static const float RAY_MAX = 10000.0;
 #define ALPHA_TEST 1

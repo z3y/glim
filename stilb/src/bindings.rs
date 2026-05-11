@@ -91,6 +91,8 @@ pub extern "C" fn app_destroy(app: *mut Stilb) {
         app.tlas.destroy(&app.vk);
         app.init_from_camera_shader.destroy(&app.vk);
 
+        app.sobol.destroy(&app.vk);
+
         if app.gpu_lights.address != 0 {
             app.gpu_lights.destroy(&app.vk);
         }

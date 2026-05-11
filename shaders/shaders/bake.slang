@@ -114,6 +114,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint sampleCount = Push.maxSamples;
     uint bounceCount = Push.bounceCount;
 
+    uint pixelSeed = SobolPixelSeed(coords);
+
     if (USE_CAMERA > 0)
     {
         float3 emission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
@@ -131,14 +133,14 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     // direct light
     uint dimension = 0;
-    float2 xiLight = GetSample(sampleIndex, sampleCount, dimension++, coords);
+    float2 xiLight = GetSampleSobol(sampleIndex, dimension++, pixelSeed);
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         color += ShadeLight(Push.lights[lightIndex], surface, xiLight) * throughput;
     }
 
-    float2 xiBounce0 = GetSample(sampleIndex, sampleCount, dimension++, coords);
+    float2 xiBounce0 = GetSampleSobol(sampleIndex, dimension++, pixelSeed);
 
     Ray bounceRay;
     bounceRay.P = RayOffset(surface.P, surface.Ng);
@@ -179,8 +181,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
             throughput *= bounceAlbedo;
 
-            float2 xiLight  = GetSample(sampleIndex, sampleCount, dimension++, coords);
-            float2 xiBounce = GetSample(sampleIndex, sampleCount, dimension++, coords);
+            float2 xiLight  = GetSampleSobol(sampleIndex, dimension++, pixelSeed);
+            float2 xiBounce = GetSampleSobol(sampleIndex, dimension++, pixelSeed);
 
             for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
             {
