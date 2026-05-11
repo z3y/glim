@@ -439,6 +439,9 @@ fn bake_lightmaps(app: &mut Stilb) {
 
         let mut previous_time = std::time::Instant::now();
 
+        let mut bake_start_time = std::time::Instant::now();
+        let mut bake_complete_printed = false;
+
         unsafe {
             while glfwWindowShouldClose(window) == 0 {
                 glfwPollEvents();
@@ -461,13 +464,23 @@ fn bake_lightmaps(app: &mut Stilb) {
 
                 if !app.preview_initialized {
                     app.push.sample_index = 0;
+                    bake_start_time = std::time::Instant::now();
+                    bake_complete_printed = false;
                 }
 
+                // render finished
                 if app.push.sample_index >= preview_settings.max_samples {
                     std::thread::sleep(Duration::from_millis(16));
+                    if !bake_complete_printed {
+                        io::stdout().flush().unwrap();
+                        let bake_time = now.duration_since(bake_start_time).as_secs_f32();
+                        println!("bake complete in {}s", bake_time);
+                        bake_complete_printed = true;
+                    }
                 }
 
                 if !render_sample_camera(app, &preview_settings) {
+                    // restart bake
                     app.config.preview_settings.width = app.vk.swapchain.extent.width;
                     app.config.preview_settings.height = app.vk.swapchain.extent.height;
 

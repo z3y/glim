@@ -366,7 +366,7 @@ mod tests {
             camera_position: Vector3::new(0.0, 0.0, 5.0),
             camera_forward: Vector3::FORWARD,
             preview_settings,
-            throttle_preview_ms: 10,
+            throttle_preview_ms: 5,
             callback: test_save_callback,
         };
 
@@ -427,7 +427,7 @@ mod tests {
         //         direction: Vector3::new(0.5, -1.0, 0.5).normalize(),
         //         range: 0.0,
         //         color: Vector3::new(1.0, 1.0, 1.0),
-        //         shadow_radius_or_angle: 0.01,
+        //         shadow_radius_or_angle: 0.1,
         //     },
         // );
 
