@@ -62,7 +62,7 @@ float sb_sample(uint sample_index, uint dimension, uint seed)
     // Build per-dimension scramble seed
     uint s  = seed * 0x9c8f2d3bu;
     uint ds = dimension >> 2;
-    uint offsets[4] = { 0x912f69bau, 0x174f18abu, 0x691e72cau, 0xb40cc1b8u };
+    static const uint offsets[4] = { 0x912f69bau, 0x174f18abu, 0x691e72cau, 0xb40cc1b8u };
     uint scramble = ds ^ s ^ offsets[dimension & 0x3u];
 
     uint sobol_owen_rev = sb_owen_scramble_rev(sobol, sb_hash(scramble));
