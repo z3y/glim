@@ -1,5 +1,4 @@
 #include "bake_bindings.slang"
-#include "sobol.slang"
 
 static const float RAY_MAX = 10000.0;
 #define ALPHA_TEST 1
@@ -20,7 +19,8 @@ struct Hit
     bool frontFace;
 }
 
-float4 EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP)
+float4
+EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP)
 {
     uint encoded = 0;
     if (isVisible)
@@ -60,7 +60,7 @@ void QueryHandleAlpha<let T : uint>(RayQuery<T> query)
 }
 
 // hit is not always initialized
-#pragma warning(disable: 41018)
+#pragma warning(disable : 41018)
 bool TraceRay(Ray ray, out Hit hit)
 {
     RayDesc rayDesc;
@@ -74,9 +74,9 @@ bool TraceRay(Ray ray, out Hit hit)
 
     while (query.Proceed())
     {
-        #if ALPHA_TEST > 0
+#if ALPHA_TEST > 0
         QueryHandleAlpha(query);
-        #endif
+#endif
     }
 
     if (query.CommittedStatus() != COMMITTED_NOTHING)
@@ -90,7 +90,7 @@ bool TraceRay(Ray ray, out Hit hit)
 
     return false;
 }
-#pragma warning(default: 41018)
+#pragma warning(default : 41018)
 
 bool TraceShadowRay(Ray ray)
 {
@@ -105,9 +105,9 @@ bool TraceShadowRay(Ray ray)
 
     while (query.Proceed())
     {
-        #if ALPHA_TEST > 0
+#if ALPHA_TEST > 0
         QueryHandleAlpha(query);
-        #endif
+#endif
     }
 
     return query.CommittedStatus() != COMMITTED_NOTHING;

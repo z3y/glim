@@ -3,10 +3,7 @@ use std::ffi::CStr;
 use ash::vk::{self, Handle};
 use shaders::{get_bake_shader, get_init_from_camera_shader};
 
-use crate::{
-    as_bytes, math::Vector3, sobol::SobolBuffer, texture2d::Texture2D,
-    vulkan_context::VulkanContext,
-};
+use crate::{as_bytes, math::Vector3, texture2d::Texture2D, vulkan_context::VulkanContext};
 
 pub struct ComputeShader {
     module: vk::ShaderModule,
@@ -317,15 +314,6 @@ pub fn load_bake_lights_shader(
         ..Default::default()
     });
 
-    // Sobol
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
     let size = std::mem::size_of::<u32>();
     let map_entries = [vk::SpecializationMapEntry {
         constant_id: 0,
@@ -365,7 +353,6 @@ pub fn update_bake_lights_shader(
     emissions: &[vk::ImageView],
     target_diffuse: vk::ImageView,
     sampler: vk::Sampler,
-    sobol: &SobolBuffer,
 ) {
     let mut descriptor_writes = Vec::new();
 
@@ -462,20 +449,6 @@ pub fn update_bake_lights_shader(
     };
     write = write.image_info(&info);
     descriptor_writes.push(write);
-
-    // Sobol Buffer
-    let sobol_info = [vk::DescriptorBufferInfo {
-        buffer: sobol.buffer,
-        offset: 0,
-        range: vk::WHOLE_SIZE, // Or specify the exact size in bytes
-    }];
-    let write_sobol = vk::WriteDescriptorSet::default()
-        .dst_set(shader.descriptor_set)
-        .dst_binding(9)
-        .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-        .buffer_info(&sobol_info);
-
-    descriptor_writes.push(write_sobol);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }

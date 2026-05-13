@@ -1,10 +1,10 @@
 #include "includes/bake_core.slang"
+#include "includes/sobol_burley.slang"
 
 [[vk::push_constant]]
 PushConstants Push;
 
-[vk::constant_id(0)]
-const uint USE_CAMERA;
+[vk::constant_id(0)] const uint USE_CAMERA;
 
 struct PushConstants
 {
@@ -52,12 +52,12 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
 
         float rangeSq = light.range * light.range;
 
-        // todo: add falloff type constant
-        #if 1
+// todo: add falloff type constant
+#if 1
         falloff = GetDefaultUnityAttenuation(distanceSquare, 1.0 / rangeSq);
-        #else
+#else
         falloff = GetLightFalloff(distanceSquare, 1.0 / rangeSq);
-        #endif
+#endif
 
         shadowRay.tMax = sqrt(distanceSquare);
     }
@@ -68,8 +68,7 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
 
     float3 color = cosTheta * falloff * light.color;
 
-    [branch]
-    if (any(color > 0.0))
+    [branch] if (any(color > 0.0))
     {
         if (TraceShadowRay(shadowRay))
         {
@@ -81,8 +80,8 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
 }
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
-void main(uint3 threadID: SV_DispatchThreadID)
+    [numthreads(8, 8, 1)] void
+    main(uint3 threadID : SV_DispatchThreadID)
 {
     uint2 coords = threadID.xy;
     uint2 resolution = uint2(Push.width, Push.height);
@@ -114,7 +113,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint sampleCount = Push.maxSamples;
     uint bounceCount = Push.bounceCount;
 
-    uint pixelSeed = SobolPixelSeed(coords);
+    uint pixelSeed = HashPcg3d(coords.xyy).x;
+    uint shuffledIndexMask = reversebits(NextPowerOfTwo(sampleCount - 1) - 1);
+    // uint shuffledIndexMask = ~0u;
 
     if (USE_CAMERA > 0)
     {
@@ -133,14 +134,14 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     // direct light
     uint dimension = 0;
-    float2 xiLight = GetSampleSobol(sampleIndex, dimension++, pixelSeed);
+    float2 xiLight = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         color += ShadeLight(Push.lights[lightIndex], surface, xiLight) * throughput;
     }
 
-    float2 xiBounce0 = GetSampleSobol(sampleIndex, dimension++, pixelSeed);
+    float2 xiBounce0 = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
 
     Ray bounceRay;
     bounceRay.P = RayOffset(surface.P, surface.Ng);
@@ -149,7 +150,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     bounceRay.tMax = RAY_MAX;
 
     // todo backface gi
-    bool backfaceGI = true;
+    bool backfaceGI = false;
 
     // todo:
     // fix emission and light bounce count mismatch
@@ -181,8 +182,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
             throughput *= bounceAlbedo;
 
-            float2 xiLight  = GetSampleSobol(sampleIndex, dimension++, pixelSeed);
-            float2 xiBounce = GetSampleSobol(sampleIndex, dimension++, pixelSeed);
+            float2 xiLight = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
+            float2 xiBounce = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
 
             for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
             {

@@ -47,7 +47,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     ray.tMax = RAY_MAX;
 
     // todo backface gi
-    bool backfaceGI = true;
+    bool backfaceGI = false;
 
     float4 result;
     Hit hit;

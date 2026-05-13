@@ -93,8 +93,15 @@ impl Oidn {
             "libOpenImageDenoise.so.2"
         };
 
+        // todo proper oidn path
+        let lib_path = if let Ok(root) = std::env::var("OpenImageDenoise_DIR") {
+            std::path::Path::new(&root).join("bin").join(lib_name)
+        } else {
+            std::path::Path::new(lib_name).to_path_buf()
+        };
+
         unsafe {
-            let lib = Library::new(lib_name)?;
+            let lib = Library::new(lib_path)?;
 
             let new_device: FnNewDevice = *lib.get(b"oidnNewDevice\0")?;
             let commit_device: FnCommitDevice = *lib.get(b"oidnCommitDevice\0")?;
@@ -110,9 +117,8 @@ impl Oidn {
                 commit_filter: *lib.get(b"oidnCommitFilter\0")?,
                 execute_filter: *lib.get(b"oidnExecuteFilter\0")?,
                 release_filter: *lib.get(b"oidnReleaseFilter\0")?,
-                set_filter_bool: *lib
-                    .get(b"oidnSetFilterBool\0")
-                    .or_else(|_| lib.get(b"oidnSetFilter1b\0"))?,
+                set_filter_bool: *lib.get(b"oidnSetFilterBool\0")?,
+                // .or_else(|_| lib.get(b"oidnSetFilter1b\0"))?,
                 get_device_error: *lib.get(b"oidnGetDeviceError\0")?,
                 set_shared_filter_image: *lib.get(b"oidnSetSharedFilterImage\0")?,
                 _lib: lib,

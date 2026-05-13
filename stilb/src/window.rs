@@ -70,7 +70,11 @@ pub fn update_camera(app: &mut Stilb, delta_time: f32) {
 
     let mut camera_moved = false;
 
+    let mut restart = false;
+
     unsafe {
+        restart = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;
+
         if glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS {
             move_speed *= 4.0;
         }
@@ -156,7 +160,7 @@ pub fn update_camera(app: &mut Stilb, delta_time: f32) {
         }
     }
 
-    if camera_moved {
+    if camera_moved || restart {
         app.preview_initialized = false;
     }
 }
