@@ -20,6 +20,7 @@ namespace stilb
         }
 
         static List<ReadbackResult> _bakeResults = new();
+        static List<Bindings.SHProbe> _bakeProbesResults = new();
         static volatile bool _isComplete = false;
         static volatile bool _running = false;
         static BakeContext _context = null;
@@ -35,6 +36,15 @@ namespace stilb
                 data = data,
                 pixelsDiffuseCopy = pixels,
             });
+        }
+
+        [AOT.MonoPInvokeCallback(typeof(Bindings.ReadbackProbesCallback))]
+        public static void OnReadbackProbes(Bindings.ReadbackProbeData data)
+        {
+            Debug.Log($"Received Probes {data.probes_count}");
+            var probes = data.GetProbes();
+
+            _bakeProbesResults.AddRange(probes);
         }
 
         static void PollBakeComplete()
@@ -148,12 +158,18 @@ namespace stilb
             }
             finally
             {
-                _bakeResults = new();
-                _isComplete = false;
-                _running = false;
-                _context = null;
-                EditorApplication.update -= PollBakeComplete;
+                ResetBake();
             }
+        }
+
+        static void ResetBake()
+        {
+            EditorApplication.update -= PollBakeComplete;
+            _bakeResults = new();
+            _bakeProbesResults = new();
+            _isComplete = false;
+            _running = false;
+            _context = null;
         }
 
         public static void Start(LightmapBaker baker, Bindings.StilbConfig config)
@@ -163,11 +179,13 @@ namespace stilb
                 Debug.LogError("Bake already running");
                 return;
             }
-            _isComplete = false;
-            _bakeResults = new();
-            EditorApplication.update -= PollBakeComplete;
-            EditorApplication.update += PollBakeComplete;
 
+            config.callback = OnReadback;
+            config.probes_callback = OnReadbackProbes;
+
+            ResetBake();
+
+            EditorApplication.update += PollBakeComplete;
 
             var ctx = new BakeContext(baker, config);
             _context = ctx;
@@ -233,6 +251,11 @@ namespace stilb
                             }
                         }
                         group.ClearPixels();
+                    }
+
+                    foreach (var position in ctx.probePositions)
+                    {
+                        Bindings.app_add_probe(app, position);
                     }
 
                     Bindings.app_run(app);

@@ -47,7 +47,6 @@ namespace stilb
             {
                 var config = new Bindings.StilbConfig
                 {
-                    callback = Bake.OnReadback,
                     is_preview = false,
                     coordinate_system = Bindings.CoordinateSystem.Unity,
                 };

@@ -70,7 +70,7 @@ pub fn update_camera(app: &mut Stilb, delta_time: f32) {
 
     let mut camera_moved = false;
 
-    let mut restart = false;
+    let restart;
 
     unsafe {
         restart = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;

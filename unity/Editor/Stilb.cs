@@ -63,6 +63,8 @@ namespace stilb
         public List<Stilb.MeshData> sceneMesh = new();
         public List<BakeContextGroup> groups = new();
 
+        public List<Vector3> probePositions = new();
+
         public LightingDataAsset storage;
         public Scene scene;
 
@@ -283,9 +285,19 @@ namespace stilb
                 lda.Dispose();
             }
 
+            foreach (var obj in rootObjects)
+            {
+                var probes = obj.GetComponentsInChildren<LightProbeGroup>(false);
+                foreach (var probe in probes)
+                {
+                    probePositions.AddRange(probe.probePositions);
+                }
+            }
+
             Debug.Log($"Vertices: {sceneMesh.Sum(x => x.vertices.Length)}");
             Debug.Log($"Indices: {sceneMesh.Sum(x => x.triangles.Length)}");
             Debug.Log($"Lights: {sceneLights.Count}");
+            Debug.Log($"LightProbes: {probePositions.Count}");
         }
     }
 

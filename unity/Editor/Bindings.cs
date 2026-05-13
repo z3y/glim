@@ -1,6 +1,7 @@
 using System;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
 namespace stilb
@@ -27,6 +28,7 @@ namespace stilb
             public Vector3 camera_forward;
 
             public ReadbackCallback callback;
+            public ReadbackProbesCallback probes_callback;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -55,6 +57,9 @@ namespace stilb
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_add_mesh(IntPtr app, Mesh mesh);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_add_probe(IntPtr app, Vector3 position);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_add_light(IntPtr app, Light light);
@@ -94,6 +99,53 @@ namespace stilb
             public Vector3 color;
             public float shadow_radius_or_angle;
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SHProbe
+        {
+            public Vector3 l0;
+            public uint sample_count;
+
+            public Vector3 l1x;
+            public float position_x;
+
+            public Vector3 l1y;
+            public float position_y;
+
+            public Vector3 l1z;
+            public float position_z;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct ReadbackProbeData
+        {
+            public IntPtr probes;
+            public uint probes_count;
+
+            public unsafe SHProbe[] GetProbes()
+            {
+                int count = (int)probes_count;
+                if (count == 0 || probes == IntPtr.Zero)
+                {
+                    return Array.Empty<SHProbe>();
+                }
+
+                SHProbe[] managedArray = new SHProbe[count];
+
+                int structSize = UnsafeUtility.SizeOf<SHProbe>();
+                long byteCount = count * structSize;
+
+                fixed (SHProbe* destPtr = managedArray)
+                {
+                    Buffer.MemoryCopy((void*)probes, destPtr, byteCount, byteCount);
+                }
+
+                return managedArray;
+            }
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void ReadbackProbesCallback(ReadbackProbeData data);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void ReadbackCallback(ReadbackData data);

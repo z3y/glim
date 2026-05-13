@@ -75,16 +75,21 @@ namespace stilb
 
             // todo copy light probes
 
-            // foreach (GameObject obj in scene.GetRootGameObjects())
-            // {
-            //     if (obj.GetComponentsInChildren<Light>(true).Length > 0 ||
-            //         obj.GetComponentsInChildren<LightProbeGroup>(true).Length > 0)
-            //     {
-            //         GameObject copy = Object.Instantiate(obj);
-            //         SceneManager.MoveGameObjectToScene(copy, tempScene);
-            //     }
-            // }
+            foreach (GameObject obj in targetScene.GetRootGameObjects())
+            {
+                var probes = obj.GetComponentsInChildren<LightProbeGroup>(false);
+                foreach (var probe in probes)
+                {
+                    GameObject copyObj = new($"Copy_{probe.gameObject.name}");
+                    copyObj.transform.SetPositionAndRotation(probe.transform.position, probe.transform.rotation);
+                    copyObj.transform.localScale = probe.transform.lossyScale;
 
+                    var targetGroup = copyObj.AddComponent<LightProbeGroup>();
+                    targetGroup.probePositions = probe.probePositions;
+
+                    SceneManager.MoveGameObjectToScene(copyObj, tempScene);
+                }
+            }
 
             EditorSceneManager.CloseScene(targetScene, true);
             EditorSceneManager.SaveScene(tempScene);
