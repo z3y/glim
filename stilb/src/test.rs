@@ -71,7 +71,7 @@ mod tests {
         let preview_settings = LightmapSettings {
             width: 1024,
             height: 1024,
-            max_samples: 1024,
+            max_samples: 512,
             bounce_count: 3,
             denoise: false,
         };
@@ -82,7 +82,7 @@ mod tests {
             camera_position: Vector3::new(0.0, 0.0, 5.0),
             camera_forward: Vector3::FORWARD,
             preview_settings,
-            throttle_preview_ms: 0,
+            throttle_preview_ms: 1,
             callback: test_save_callback,
         };
 
@@ -147,7 +147,7 @@ mod tests {
         //     },
         // );
 
-        let (w, h, emission_pixels) = load_tga("..\\textures\\emission.tga").unwrap();
+        let (w, h, emission_pixels) = load_tga("..\\textures\\emission_cute.tga").unwrap();
         let albedo_pixels = vec![255; (w * h * 4) as usize];
         // let emission_pixels = vec![0.0; (w * h * 4) as usize];
 

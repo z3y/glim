@@ -116,7 +116,7 @@ float2 SobolBurleySample2D(uint index, uint dimensionSet, uint seed, uint shuffl
     // sequences for different dimension sets via shuffling.
     seed ^= HashHPUint(dimensionSet);
 
-    // Shuffle and mask.  The masking is just for better
+    // Shuffle and mask. The masking is just for better
     // performance at low sample counts.
     index = ReversedBitOwen(reversebits(index), seed ^ 0xf8ade99a);
     index &= shuffledIndexMask;

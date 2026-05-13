@@ -7,6 +7,8 @@ use glfw_sys::{
     glfwSetWindowShouldClose, glfwWindowShouldClose,
 };
 
+use crate::buffer::Buffer;
+use crate::lights::light_buffer_flags;
 use crate::{
     camera::Camera,
     compute_shader::{
@@ -14,7 +16,7 @@ use crate::{
         update_bake_lights_shader, update_init_from_camera_shader,
     },
     graphics_shader::{VisibilityPushConstants, create_visibility_shader},
-    lights::{GpuLights, Light},
+    lights::Light,
     math::Vector3,
     mesh::{GpuMesh, Mesh, VulkanAs, create_tlas},
     oidn::Oidn,
@@ -25,6 +27,7 @@ use crate::{
 
 mod bindings;
 mod bmp;
+mod buffer;
 mod camera;
 mod compute_shader;
 mod graphics_shader;
@@ -32,6 +35,7 @@ mod lights;
 mod math;
 mod mesh;
 mod oidn;
+mod sh;
 mod test;
 mod texture2d;
 mod vulkan_cmd;
@@ -50,7 +54,7 @@ pub struct Stilb {
     pub groups: Vec<LightmapGroup>,
 
     pub gpu_mesh: GpuMesh,
-    pub gpu_lights: GpuLights,
+    pub gpu_lights: Buffer,
     pub tlas: VulkanAs,
 
     pub camera: Camera,
@@ -183,8 +187,8 @@ fn render_visibility_buffer_bake(
     render_pass_begin = render_pass_begin.clear_values(&clear_values);
 
     let push = VisibilityPushConstants {
-        vertices: mesh.vertex_address(),
-        indices: mesh.index_address(),
+        vertices: mesh.vertex_buffer.address,
+        indices: mesh.index_buffer.address,
         width: visibility.width(),
         height: visibility.height(),
         group_index,
@@ -355,7 +359,7 @@ fn start_bake(app: &mut Stilb) {
 
     // upload lights
     if app.cpu_lights.len() > 0 {
-        let gpu_lights = GpuLights::new(&app.vk, &app.cpu_lights);
+        let gpu_lights = Buffer::new(&app.vk, &app.cpu_lights, light_buffer_flags());
         app.gpu_lights = gpu_lights;
     }
 
@@ -389,10 +393,10 @@ fn initialize_bake_push_constants(
     bounce_count: u32,
 ) {
     app.push = BakePushConstants {
-        vertices: app.gpu_mesh.vertex_address(),
-        indices: app.gpu_mesh.index_address(),
-        lights: app.gpu_lights.address(),
-        lights_count: app.gpu_lights.count,
+        vertices: app.gpu_mesh.vertex_buffer.address,
+        indices: app.gpu_mesh.index_buffer.address,
+        lights: app.gpu_lights.address,
+        lights_count: app.cpu_lights.len() as u32,
         sample_index: 0,
         width: width,
         height: height,
@@ -1147,12 +1151,7 @@ impl Stilb {
 
         let init_from_camera_shader = load_init_from_camera_shader(&vk);
 
-        let gpu_lights = GpuLights {
-            buffer: vk::Buffer::null(),
-            memory: vk::DeviceMemory::null(),
-            address: 0,
-            count: 0,
-        };
+        let gpu_lights = Buffer::null();
 
         let sampler_info = vk::SamplerCreateInfo::default()
             .mag_filter(vk::Filter::LINEAR)

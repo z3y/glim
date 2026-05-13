@@ -1,6 +1,6 @@
 use ash::vk::{self, Handle};
 
-use crate::{CoordinateSystem, math::*, vulkan_context::VulkanContext};
+use crate::{CoordinateSystem, buffer::Buffer, math::*, vulkan_context::VulkanContext};
 use core::slice;
 
 #[repr(C)]
@@ -133,13 +133,8 @@ pub enum AccelerationStructureType {
 }
 
 pub struct GpuMesh {
-    vertex_buffer: vk::Buffer,
-    vertex_memory: vk::DeviceMemory,
-    vertex_address: vk::DeviceAddress,
-
-    index_buffer: vk::Buffer,
-    index_memory: vk::DeviceMemory,
-    index_address: vk::DeviceAddress,
+    pub vertex_buffer: Buffer,
+    pub index_buffer: Buffer,
 
     pub acceleration_structure: AccelerationStructureType,
 
@@ -157,43 +152,15 @@ impl GpuMesh {
         }
 
         // vertices
-
-        let size = (mesh.vertices.len() * std::mem::size_of::<Vertex>()) as vk::DeviceSize;
-        let (vertex_buffer, vertex_memory) =
-            vk.create_buffer(size, usage, vk::MemoryPropertyFlags::DEVICE_LOCAL);
-
-        let info = vk::BufferDeviceAddressInfo {
-            buffer: vertex_buffer,
-            ..Default::default()
-        };
-
-        let vertex_address = unsafe { vk.device.get_buffer_device_address(&info) };
-
-        let (_, bytes, _) = unsafe { mesh.vertices.align_to::<u8>() };
-        vk.upload_buffer(bytes, vertex_buffer);
-
-        // indices
-
-        let size = (mesh.indices.len() * std::mem::size_of::<u32>()) as vk::DeviceSize;
-        let (index_buffer, index_memory) =
-            vk.create_buffer(size, usage, vk::MemoryPropertyFlags::DEVICE_LOCAL);
-
-        let info = vk::BufferDeviceAddressInfo {
-            buffer: index_buffer,
-            ..Default::default()
-        };
-
-        let index_address = unsafe { vk.device.get_buffer_device_address(&info) };
-
-        let (_, bytes, _) = unsafe { mesh.indices.align_to::<u8>() };
-        vk.upload_buffer(bytes, index_buffer);
+        let vertex_buffer = Buffer::new(vk, &mesh.vertices, usage);
+        let index_buffer = Buffer::new(vk, &mesh.indices, usage);
 
         let bvh = if vk.as_device.is_some() {
             AccelerationStructureType::RayQuery(GpuMesh::create_vulkan_blas(
                 vk,
                 mesh,
-                vertex_address,
-                index_address,
+                vertex_buffer.address,
+                index_buffer.address,
             ))
         } else {
             AccelerationStructureType::CwBvh // todo
@@ -202,10 +169,6 @@ impl GpuMesh {
         Self {
             vertex_buffer,
             index_buffer,
-            vertex_memory,
-            index_memory,
-            vertex_address,
-            index_address,
             acceleration_structure: bvh,
             index_len: mesh.indices.len() as u32,
         }
@@ -345,14 +308,10 @@ impl GpuMesh {
 
     pub fn null() -> Self {
         Self {
-            vertex_buffer: vk::Buffer::null(),
-            vertex_memory: vk::DeviceMemory::null(),
-            vertex_address: 0,
-            index_buffer: vk::Buffer::null(),
-            index_memory: vk::DeviceMemory::null(),
-            index_address: 0,
             acceleration_structure: AccelerationStructureType::RayQuery(VulkanAs::null()),
             index_len: 0,
+            vertex_buffer: Buffer::null(),
+            index_buffer: Buffer::null(),
         }
     }
 
@@ -364,36 +323,8 @@ impl GpuMesh {
             AccelerationStructureType::CwBvh => todo!(),
         }
 
-        assert!(!self.vertex_buffer.is_null());
-        assert!(!self.vertex_memory.is_null());
-
-        assert!(!self.index_buffer.is_null());
-        assert!(!self.index_memory.is_null());
-
-        unsafe {
-            vk.device.destroy_buffer(self.vertex_buffer, None);
-            vk.device.free_memory(self.vertex_memory, None);
-
-            vk.device.destroy_buffer(self.index_buffer, None);
-            vk.device.free_memory(self.index_memory, None);
-        };
-
-        self.vertex_buffer = vk::Buffer::null();
-        self.vertex_memory = vk::DeviceMemory::null();
-
-        self.index_buffer = vk::Buffer::null();
-        self.index_memory = vk::DeviceMemory::null();
-
-        self.index_address = 0;
-        self.vertex_address = 0;
-    }
-
-    pub fn vertex_address(&self) -> u64 {
-        self.vertex_address
-    }
-
-    pub fn index_address(&self) -> u64 {
-        self.index_address
+        self.index_buffer.destroy(vk);
+        self.vertex_buffer.destroy(vk);
     }
 }
 

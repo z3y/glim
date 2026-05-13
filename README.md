@@ -21,6 +21,8 @@
 - [ ] Include OIDN dlls
 - [ ] Configurable nearest and linear sampler
 - [ ] Clamp max samples and bounces
+- [ ] Blue noise
+- [ ] Light tree
 
 # Complete
 - [x] Set all the globals in the unity meta pass
