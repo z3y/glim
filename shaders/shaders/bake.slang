@@ -26,7 +26,7 @@ float Luminance(float3 rgb)
     return dot(rgb, float3(0.2126, 0.7152, 0.0722));
 }
 
-float3 ShadeLight(Light light, Surface surface, float2 xi)
+void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi, float3 throughput)
 {
     Ray shadowRay;
     shadowRay.P = RayOffset(surface.P, surface.Ng);
@@ -66,17 +66,15 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
 
     shadowRay.D = L;
 
-    float3 color = cosTheta * falloff * light.color;
+    float3 color = cosTheta * falloff * light.color * throughput;
 
     [branch] if (any(color > 0.0))
     {
-        if (TraceShadowRay(shadowRay))
+        if (!TraceShadowRay(shadowRay))
         {
-            color = float3(0.0);
+            SpectrumAdd(spectrum, color, L);
         }
     }
-
-    return color;
 }
 
 [shader("compute")]
@@ -104,9 +102,10 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
     float2 bary = visibility.xy;
     bool useSmoothP = (encoded & (1 << 1)) != 0;
 
+    Spectrum spectrum = SpectrumZero();
+
     Surface surface = Surface::Get(Push.indices, Push.vertices, primitiveID, bary);
 
-    float3 color = float3(0.0);
     float3 throughput = float3(1.0);
 
     uint sampleIndex = Push.sampleIndex;
@@ -114,6 +113,7 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
     uint bounceCount = Push.bounceCount;
 
     uint pixelSeed = HashPcg3d(coords.xyy).x;
+    // todo set constant
     uint shuffledIndexMask = reversebits(NextPowerOfTwo(sampleCount - 1) - 1);
     // uint shuffledIndexMask = ~0u;
 
@@ -121,7 +121,7 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
     {
         float3 emission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
         float3 albedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
-        color += emission;
+        spectrum.color += emission;
         throughput = albedo;
     }
 
@@ -138,7 +138,7 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
-        color += ShadeLight(Push.lights[lightIndex], surface, xiLight) * throughput;
+        ShadeLight(spectrum, Push.lights[lightIndex], surface, xiLight, throughput);
     }
 
     float2 xiBounce0 = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
@@ -178,7 +178,7 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
             float3 bounceEmission = SampleEmission(surfaceBounce.uv, surfaceBounce.lightmapGroup).rgb;
             float3 bounceAlbedo = SampleAlbedo(surfaceBounce.uv, surfaceBounce.lightmapGroup).rgb;
 
-            color += bounceEmission * throughput;
+            SpectrumAdd(spectrum, bounceEmission * throughput, bounceRay.D);
 
             throughput *= bounceAlbedo;
 
@@ -187,7 +187,7 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
 
             for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
             {
-                color += ShadeLight(Push.lights[lightIndex], surfaceBounce, xiLight) * throughput;
+                ShadeLight(spectrum, Push.lights[lightIndex], surfaceBounce, xiLight, throughput);
             }
 
             bounceRay.P = RayOffset(surfaceBounce.P, surfaceBounce.Ng);
@@ -199,5 +199,5 @@ float3 ShadeLight(Light light, Surface surface, float2 xi)
         }
     }
 
-    AccumulateColor(LightmapDiffuse, coords, sampleIndex, float4(color, 0));
+    AccumulateColor(LightmapDiffuse, coords, sampleIndex, float4(spectrum.color, 0));
 }

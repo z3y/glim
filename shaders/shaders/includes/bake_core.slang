@@ -252,3 +252,40 @@ void AccumulateColor(RWTexture2D<float4> tex, uint2 coords, uint sample, float4 
         tex[coords] = accumulatedColor;
     }
 }
+
+struct Spectrum
+{
+    float3 color;
+
+    float3 l1x;
+    float3 l1y;
+    float3 l1z;
+
+    uint samples;
+};
+
+Spectrum SpectrumZero()
+{
+    Spectrum spectrum;
+
+    spectrum.color = 0;
+
+    spectrum.l1x = 0;
+    spectrum.l1y = 0;
+    spectrum.l1z = 0;
+
+    spectrum.samples = 0;
+
+    return spectrum;
+}
+
+void SpectrumAdd(inout Spectrum spectrum, float3 color, float3 wi)
+{
+    spectrum.samples++;
+
+    spectrum.color += color;
+
+    spectrum.l1x += color * wi.x;
+    spectrum.l1y += color * wi.y;
+    spectrum.l1z += color * wi.z;
+}
