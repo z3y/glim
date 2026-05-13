@@ -281,23 +281,26 @@ namespace stilb
 
             if (!config.is_preview)
             {
+                var lightProbesRef = lda.FindProperty("m_LightProbes").objectReferenceValue;
+                using var probesSo = new SerializedObject(lightProbesRef);
+                LightingData.InspectorModeObject.SetValue(probesSo, InspectorMode.DebugInternal);
+                var probePositions = probesSo.FindProperty("m_Data").FindPropertyRelative("m_Positions");
+                int probesCount = probePositions.arraySize;
+
+                for (int i = 0; i < probesCount; i++)
+                {
+                    var element = probePositions.GetArrayElementAtIndex(i);
+                    this.probePositions.Add(element.vector3Value);
+                }
+
                 lda.ApplyModifiedPropertiesWithoutUndo();
                 lda.Dispose();
-            }
-
-            foreach (var obj in rootObjects)
-            {
-                var probes = obj.GetComponentsInChildren<LightProbeGroup>(false);
-                foreach (var probe in probes)
-                {
-                    probePositions.AddRange(probe.probePositions);
-                }
             }
 
             Debug.Log($"Vertices: {sceneMesh.Sum(x => x.vertices.Length)}");
             Debug.Log($"Indices: {sceneMesh.Sum(x => x.triangles.Length)}");
             Debug.Log($"Lights: {sceneLights.Count}");
-            Debug.Log($"LightProbes: {probePositions.Count}");
+            Debug.Log($"LightProbes: {this.probePositions.Count}");
         }
     }
 

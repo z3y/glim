@@ -77,14 +77,25 @@ namespace stilb
 
             foreach (GameObject obj in targetScene.GetRootGameObjects())
             {
+                if (!obj.activeInHierarchy)
+                {
+                    continue;
+                }
+
                 var probes = obj.GetComponentsInChildren<LightProbeGroup>(false);
                 foreach (var probe in probes)
                 {
+                    if (!probe.enabled)
+                    {
+                        continue;
+                    }
+
                     GameObject copyObj = new($"Copy_{probe.gameObject.name}");
                     copyObj.transform.SetPositionAndRotation(probe.transform.position, probe.transform.rotation);
                     copyObj.transform.localScale = probe.transform.lossyScale;
-
                     var targetGroup = copyObj.AddComponent<LightProbeGroup>();
+
+                    // todo maybe deduplicate probe positions here
                     targetGroup.probePositions = probe.probePositions;
 
                     SceneManager.MoveGameObjectToScene(copyObj, tempScene);

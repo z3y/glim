@@ -7,6 +7,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditorInternal;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 
 namespace stilb
@@ -127,6 +128,37 @@ namespace stilb
 
 
                 lda.FindProperty("m_LightmapsMode").intValue = (int)LightmapsMode.NonDirectional;
+
+
+                // apply light probes
+                var lightProbesRef = lda.FindProperty("m_LightProbes").objectReferenceValue;
+                using var probesSo = new SerializedObject(lightProbesRef);
+                LightingData.InspectorModeObject.SetValue(probesSo, InspectorMode.DebugInternal);
+                var bakedCoeff = probesSo.FindProperty("m_BakedCoefficients");
+                int bakedCoeffCount = bakedCoeff.arraySize;
+                Debug.Assert(bakedCoeffCount == _bakeProbesResults.Count);
+                for (int i = 0; i < bakedCoeffCount; i++)
+                {
+                    SerializedProperty prop = bakedCoeff.GetArrayElementAtIndex(i);
+                    Bindings.SHProbe probeData = _bakeProbesResults[i];
+
+                    float[] flatCoefficients = new float[27]
+                    {
+                        probeData.l0.x, probeData.l1x.x, probeData.l1y.x, probeData.l1z.x, 0f, 0f, 0f, 0f, 0f,
+                        probeData.l0.y, probeData.l1x.y, probeData.l1y.y, probeData.l1z.y, 0f, 0f, 0f, 0f, 0f,
+                        probeData.l0.z, probeData.l1x.z, probeData.l1y.z, probeData.l1z.z, 0f, 0f, 0f, 0f, 0f
+                    };
+
+                    prop.Next(true);
+
+                    for (int j = 0; j < flatCoefficients.Length; j++)
+                    {
+                        prop.floatValue = flatCoefficients[j];
+                        prop.Next(false);
+                    }
+                }
+                probesSo.ApplyModifiedPropertiesWithoutUndo();
+
 
                 var storagePath = Path.Combine(sceneDirectory, $"{_context.scene.name} LightmapStorage.asset");
 
