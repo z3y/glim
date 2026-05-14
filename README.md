@@ -1,7 +1,6 @@
 # Todo
 
 ## Priority
-- [ ] Export light probe positions and accumulate SH
 - [ ] Spot lights
 - [ ] Spot light cookie with default unity cookie
 - [ ] Area lights
@@ -23,7 +22,11 @@
 - [ ] Clamp max samples and bounces
 - [ ] Blue noise
 - [ ] Light tree
+- [ ] Figure out why light probes are a bit darker
+- [ ] Deringing
+- [ ] L2 SH
 
 # Complete
+- [x] Export light probe positions and accumulate SH
 - [x] Set all the globals in the unity meta pass
 - [x] OIDN2 bindings and apply denoise
