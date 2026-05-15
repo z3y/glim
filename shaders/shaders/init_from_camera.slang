@@ -54,9 +54,9 @@ struct PushConstants
     if (TraceRay(ray, hit))
     {
         bool visible = backfaceGI || hit.frontFace;
-        // Surface surface = Surface::Get(Push.indices, Push.vertices, hit.primitiveID, hit.bary);
-        // bool smooth = UseSmoothPosition();
-        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, visible, false);
+        Surface surface = Surface::Get(hit.primitiveID, hit.bary);
+        bool smooth = UseSmoothPosition(surface);
+        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, visible, smooth);
     }
     else
     {
