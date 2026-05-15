@@ -89,7 +89,7 @@ mod tests {
             camera_position: Vector3::new(0.0, 0.0, 5.0),
             camera_forward: Vector3::FORWARD,
             preview_settings,
-            throttle_preview_ms: 1,
+            throttle_preview_ms: 2,
             callback: test_save_callback,
             probes_callback: test_probes_callback,
         };
@@ -195,7 +195,7 @@ mod tests {
         let test_probes = false;
         if test_probes {
             let mut offset = 0.1;
-            for _ in 0..10 {
+            for _ in 0..5 {
                 app_add_probe(app, Vector3::new(0.0, offset, 0.0));
                 app_add_probe(app, Vector3::new(0.0, offset, 0.0));
                 app_add_probe(app, Vector3::new(0.0, offset, 0.0));

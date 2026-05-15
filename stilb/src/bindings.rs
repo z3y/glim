@@ -116,11 +116,11 @@ pub extern "C" fn app_destroy(app: *mut Stilb) {
             app.init_from_camera_shader.destroy(&app.vk);
         }
 
-        if app.cpu_lights.len() > 0 {
+        if !app.gpu_lights.buffer.is_null() {
             app.gpu_lights.destroy(&app.vk);
         }
 
-        if app.probes.len() > 0 {
+        if !app.probes_buffer.buffer.is_null() {
             app.probes_buffer.destroy(&app.vk);
             app.bake_probes_shader.destroy(&app.vk);
         }

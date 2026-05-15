@@ -405,8 +405,17 @@ fn start_bake(app: &mut Stilb) {
 
     // upload lights
     if app.cpu_lights.len() > 0 {
-        let gpu_lights = Buffer::new(&app.vk, &app.cpu_lights, light_buffer_flags());
-        app.gpu_lights = gpu_lights;
+        app.gpu_lights = Buffer::new(&app.vk, &app.cpu_lights, light_buffer_flags());
+    } else {
+        let dummy_buffer = [Light {
+            position: Vector3::ZERO,
+            ty: lights::LightType::Directional,
+            direction: Vector3::ZERO,
+            range: 0.0,
+            color: Vector3::ZERO,
+            shadow_radius_or_angle: 0.0,
+        }];
+        app.gpu_lights = Buffer::new(&app.vk, &dummy_buffer, light_buffer_flags());
     }
 
     app.gpu_mesh = GpuMesh::new(&app.vk, &app.cpu_mesh);
