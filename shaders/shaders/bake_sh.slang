@@ -215,7 +215,7 @@ void ShadeLightDirect(inout Spectrum spectrum, Light light, float3 position, flo
         }
     }
 
-    SpectrumAdd(spectrum, indirect * float.getPi(), wi);
+    SpectrumAddIndirect(spectrum, indirect, wi);
 
     AccumulateSH(SHProbes, probeIndex, spectrum);
 }
