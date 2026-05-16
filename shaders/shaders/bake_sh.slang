@@ -148,21 +148,23 @@ void ShadeLightDirect(inout Spectrum spectrum, Light light, float3 position, flo
     uint sampleCount = Push.maxSamples;
     uint bounceCount = Push.bounceCount;
     uint lightCount = Push.lightCount;
-    uint dimension = 0;
     // todo set constant
-    uint shuffledIndexMask = reversebits(NextPowerOfTwo(sampleCount - 1) - 1);
-    // uint shuffledIndexMask = ~0u;
+    uint sobolIndexMask = reversebits(NextPowerOfTwo(sampleCount - 1) - 1);
+    sobolIndexMask = ~0u;
 
-    uint pixelSeed = HashPcg3d(probeIndex.xxx).x;
+    SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
+    uint pixelSeed = RNGPixelInit(uint2(probeIndex.x, 0), pattern);
+    uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
+    uint dimension = 0;
 
-    float2 xiLight = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
+    float2 xiLight = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         ShadeLightDirect(spectrum, Lights[lightIndex], probePosition, xiLight, throughput);
     }
 
-    float2 xiBounce0 = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
+    float2 xiBounce0 = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
     Ray bounceRay;
     bounceRay.P = probePosition;
@@ -197,8 +199,8 @@ void ShadeLightDirect(inout Spectrum spectrum, Light light, float3 position, flo
 
             throughput *= bounceAlbedo;
 
-            float2 xiLight = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
-            float2 xiBounce = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
+            float2 xiLight = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
+            float2 xiBounce = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
             for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
             {

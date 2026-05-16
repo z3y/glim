@@ -68,7 +68,7 @@ static const uint SobolBurleyTable[4][32] =
 //
 // This is equivalent to the Laine-Karras permutation, but much higher
 // quality. See https://psychopath.io/post/2021_01_30_building_a_better_lk_hash
-uint ReversedBitOwen(uint n, const uint seed)
+uint ReversedBitOwen(uint n, uint seed)
 {
     n ^= n * 0x3d20adea;
     n += seed;
@@ -124,4 +124,91 @@ float2 SobolBurleySample2D(uint index, uint dimensionSet, uint seed, uint shuffl
 
     return float2(SobolBurley(index, 0, seed ^ 0xe0aaaf76),
                   SobolBurley(index, 1, seed ^ 0x94964d4e));
+}
+
+enum SamplingPattern
+{
+    SobolBurley = 0,
+    BlueNoisePure = 1,
+    BlueNoiseFirst = 2,
+};
+
+// Performs base-4 Owen scrambling on a reversed-bit unsigned integer.
+// See https://psychopath.io/post/2022_08_14_a_fast_hash_for_base_4_owen_scrambling
+uint reversed_bit_owen_base4(uint n, const uint seed)
+{
+    n ^= n * 0x3d20adea;
+    n ^= (n >> 1) & (n << 1) & 0x55555555;
+    n += seed;
+    n *= (seed >> 16) | 1;
+    n ^= (n >> 1) & (n << 1) & 0x55555555;
+    n ^= n * 0x05526c56;
+    n ^= n * 0x53a22864;
+
+    return n;
+}
+
+uint nested_uniform_scramble_base4(const uint i, const uint seed)
+{
+    return reversebits(reversed_bit_owen_base4(reversebits(i), seed));
+}
+
+// 2D hash recommended from "Hash Functions for GPU Rendering" JCGT Vol. 9, No. 3, 2020
+// See https://www.shadertoy.com/view/4tXyWN and https://www.shadertoy.com/view/XlGcRh
+// http://www.jcgt.org/published/0009/03/02/paper.pdf
+uint hash_iqnt2d(const uint x, const uint y)
+{
+    const uint qx = 1103515245U * ((x >> 1U) ^ (y));
+    const uint qy = 1103515245U * ((y >> 1U) ^ (x));
+    const uint n = 1103515245U * ((qx) ^ (qy >> 3U));
+
+    return n;
+}
+
+uint RNGPixelInit(uint2 coords, SamplingPattern pattern)
+{
+    uint seed = 0;
+    if (pattern == SamplingPattern::SobolBurley)
+    {
+        return HashPcg3d(coords.xyy).x;
+        // The white-noise samplers use a random per-pixel hash to generate independent sequences
+        return hash_iqnt2d(coords.x, coords.y) ^ seed;
+    }
+
+    // The blue-noise samplers use a single sequence for all pixels, but offset the index within
+    // the sequence for each pixel. We use a hierarchically shuffled 2D morton curve to determine
+    // each pixel's offset along the sequence.
+    //
+    // Based on:
+    // https://psychopath.io/post/2022_07_24_owen_scrambling_based_dithered_blue_noise_sampling.
+    //
+    // TODO(lukas): Use a precomputed Hilbert curve to avoid directionality bias in the noise
+    // distribution. We can just precompute a small-ish tile and repeat it in morton code order.
+    return nested_uniform_scramble_base4(MortonEncode(coords.x, coords.y), seed);
+}
+
+uint3 BlueNoiseIndexing(uint pixelIndex,
+                        uint sample,
+                        uint sobolIndexMask,
+                        uint blueNoiseSequenceLength,
+                        SamplingPattern pattern)
+{
+    if (pattern == SamplingPattern::SobolBurley)
+    {
+        return uint3(sample, pixelIndex, sobolIndexMask);
+    }
+    else if (pattern == SamplingPattern::BlueNoisePure)
+    {
+        uint globalSampleIndex = sample + (pixelIndex * blueNoiseSequenceLength);
+        return uint3(globalSampleIndex, 0, 0xffffffff);
+    }
+    else // SamplingPattern::BlueNoiseFirst
+    {
+        if (sample == 0)
+        {
+            return uint3(pixelIndex, 0x0cd0519f, 0xffffffff);
+        }
+        uint globalSampleIndex = (sample - 1) + (pixelIndex * blueNoiseSequenceLength);
+        return uint3(globalSampleIndex, 0, 0xffffffff);
+    }
 }

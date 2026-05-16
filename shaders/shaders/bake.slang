@@ -105,14 +105,20 @@ void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi
 
     Surface surface = Surface::Get(primitiveID, bary);
 
+    // todo backface gi
+    bool backfaceGI = false;
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
     uint bounceCount = Push.bounceCount;
-
-    uint pixelSeed = HashPcg3d(coords.xyy).x;
+    uint lightCount = Push.lightCount;
     // todo set constant
-    uint shuffledIndexMask = reversebits(NextPowerOfTwo(sampleCount - 1) - 1);
-    // uint shuffledIndexMask = ~0u;
+    uint sobolIndexMask = reversebits(NextPowerOfTwo(sampleCount - 1) - 1);
+    sobolIndexMask = ~0u;
+
+    SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
+    uint pixelSeed = RNGPixelInit(coords, pattern);
+    uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
+    uint dimension = 0;
 
     if (USE_CAMERA > 0)
     {
@@ -127,27 +133,21 @@ void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi
         surface.P = surface.smoothP;
     }
 
-    uint lightCount = Push.lightCount;
-
     // direct light
-    uint dimension = 0;
-    float2 xiLight = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
+    float2 xiLight = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         ShadeLight(spectrum, Lights[lightIndex], surface, xiLight, throughput);
     }
 
-    float2 xiBounce0 = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
+    float2 xiBounce0 = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
     Ray bounceRay;
     bounceRay.P = RayOffset(surface.P, surface.Ng);
     bounceRay.D = RandomDirectionInHemisphere(surface.N, xiBounce0);
     bounceRay.tMin = 0;
     bounceRay.tMax = RAY_MAX;
-
-    // todo backface gi
-    bool backfaceGI = false;
 
     // todo:
     // fix emission and light bounce count mismatch
@@ -179,8 +179,8 @@ void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi
 
             throughput *= bounceAlbedo;
 
-            float2 xiLight = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
-            float2 xiBounce = SobolBurleySample2D(sampleIndex, dimension++, pixelSeed, shuffledIndexMask);
+            float2 xiLight = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
+            float2 xiBounce = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
             for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
             {

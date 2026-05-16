@@ -162,19 +162,6 @@ float3 RandomPointOnSphere(float3 center, float radius, float2 xi)
     return center + dir * radius;
 }
 
-uint3 HashPcg3d(uint3 v)
-{
-    v = v * 1664525u + 1013904223u;
-    v.x += v.y * v.z;
-    v.y += v.z * v.x;
-    v.z += v.x * v.y;
-    v = v ^ (v >> 16u);
-    v.x += v.y * v.z;
-    v.y += v.z * v.x;
-    v.z += v.x * v.y;
-    return v;
-}
-
 float3 RandomDirectionSphere(float2 xi)
 {
     float z = 1.0 - 2.0 * xi.x;
