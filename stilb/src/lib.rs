@@ -124,7 +124,7 @@ pub struct LightmapGroup {
 }
 
 #[repr(u32)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum CoordinateSystem {
     Default = 0,
     Unity = 1,

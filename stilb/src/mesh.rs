@@ -60,6 +60,7 @@ impl Mesh {
 
         let lightmap_group = mesh.lightmap_group;
         let backface_gi = mesh.backface_gi;
+        let unity = system == CoordinateSystem::Unity;
 
         self.vertices.reserve(verts.len());
 
@@ -73,10 +74,15 @@ impl Mesh {
                 flags |= 1 << 16;
             }
 
+            let mut uv = uvs[i];
+            if unity {
+                uv.y = 1.0 - uv.y;
+            }
+
             let mut vertex = Vertex {
                 position: verts[i],
                 normal: encode_normal_octahedron(normal),
-                uv: uvs[i],
+                uv: uv,
                 flags,
             };
 

@@ -246,6 +246,7 @@ namespace stilb
                                     vertices_length = (uint)data.vertices.Length,
                                     indices_length = (uint)data.triangles.Length,
                                     lightmap_group = data.groupIndex,
+                                    backface_gi = data.backfaceGI,
                                 };
 
                                 Bindings.app_add_mesh(app, exportedMesh);

@@ -393,6 +393,7 @@ namespace stilb
             public Vector2[] uvs;
             public int[] triangles;
             public uint groupIndex;
+            public bool backfaceGI;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -415,7 +416,7 @@ namespace stilb
                 var triangles = mesh.triangles;
 
                 var uvs = mesh.HasVertexAttribute(VertexAttribute.TexCoord1) ? mesh.uv2 : mesh.uv;
-
+                bool backfaceGI = false;
                 if (renderers[i] is MeshRenderer mr)
                 {
                     var evs = mr.enlightenVertexStream;
@@ -428,6 +429,21 @@ namespace stilb
                     else if (avs && avs.HasVertexAttribute(VertexAttribute.TexCoord1))
                     {
                         uvs = avs.uv2;
+                    }
+
+                    var mats = mr.sharedMaterials;
+                    // todo backfacegi per submesh instead of entire mesh
+                    foreach (var mat in mats)
+                    {
+                        if (mat == null)
+                        {
+                            continue;
+                        }
+
+                        if (mat.doubleSidedGI)
+                        {
+                            backfaceGI = true;
+                        }
                     }
                 }
 
@@ -461,6 +477,7 @@ namespace stilb
                 //     uvs[j] = uvs[j] + scale + offset;
                 // }
 
+
                 var data = new MeshData
                 {
                     vertices = vertices,
@@ -468,6 +485,7 @@ namespace stilb
                     uvs = uvs,
                     triangles = triangles,
                     groupIndex = groupIndex,
+                    backfaceGI = backfaceGI,
                 };
 
                 datas.Add(data);

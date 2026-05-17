@@ -1,5 +1,4 @@
 using System;
-using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
@@ -112,6 +111,9 @@ namespace stilb
             public uint vertices_length;
             public uint indices_length;
             public uint lightmap_group;
+
+            [MarshalAs(UnmanagedType.I1)]
+            public bool backface_gi;
         }
 
         public enum LightType : uint
