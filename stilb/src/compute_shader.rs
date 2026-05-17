@@ -584,7 +584,7 @@ pub fn update_bake_sh_shader(
     write = write.image_info(&infos);
     descriptor_writes.push(write);
 
-    // SamplerLinearClamp
+    // TextureSampler
     let info = [vk::DescriptorImageInfo {
         sampler,
         ..Default::default()
@@ -741,7 +741,7 @@ pub fn update_bake_lights_shader(
     write = write.image_info(&infos);
     descriptor_writes.push(write);
 
-    // SamplerLinearClamp
+    // TextureSampler
     let info = [vk::DescriptorImageInfo {
         sampler,
         ..Default::default()

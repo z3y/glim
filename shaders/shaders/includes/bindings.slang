@@ -27,7 +27,7 @@ Texture2D<float4> Emission[];
 RWTexture2D<float4> LightmapDiffuse;
 
 [[vk::binding(6, 0)]]
-SamplerState SamplerLinearClamp;
+SamplerState TextureSampler;
 
 [[vk::binding(7, 0)]]
 RWStructuredBuffer<SHProbe> SHProbes;
@@ -41,13 +41,12 @@ StructuredBuffer<Vertex> Vertices;
 [[vk::binding(10, 0)]]
 StructuredBuffer<Light> Lights;
 
-// maybe NonUniformResourceIndex()?
 float4 SampleAlbedo(float2 uv, uint lightmapGroup)
 {
-    return Albedo[lightmapGroup].SampleLevel(SamplerLinearClamp, uv, 0);
+    return Albedo[NonUniformResourceIndex(lightmapGroup)].SampleLevel(TextureSampler, uv, 0);
 }
 
 float4 SampleEmission(float2 uv, uint lightmapGroup)
 {
-    return Emission[lightmapGroup].SampleLevel(SamplerLinearClamp, uv, 0);
+    return Emission[NonUniformResourceIndex(lightmapGroup)].SampleLevel(TextureSampler, uv, 0);
 }
