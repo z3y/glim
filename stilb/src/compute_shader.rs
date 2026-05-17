@@ -1,7 +1,9 @@
 use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
-use shaders::{get_bake_sh_shader, get_bake_shader, get_init_from_camera_shader};
+use shaders::{
+    get_bake_sh_shader, get_bake_shader, get_init_from_camera_shader, get_render_normals_shader,
+};
 
 use crate::{as_bytes, math::Vector3, texture2d::Texture2D, vulkan_context::VulkanContext};
 
@@ -813,6 +815,130 @@ pub fn update_bake_lights_shader(
         ..Default::default()
     };
     write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
+}
+
+pub fn load_render_normals_shader(vk: &VulkanContext) -> ComputeShader {
+    let mut bindings = Vec::new();
+
+    // VisibilityBuffer
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 2,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+
+    // Indices
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 8,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+
+    // Vertices
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 9,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+
+    // NormalsBuffer
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 11,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+
+    let specialization_info = vk::SpecializationInfo::default();
+    let push_constant_ranges = [vk::PushConstantRange::default()];
+
+    ComputeShader::new(
+        vk,
+        get_render_normals_shader(),
+        &bindings,
+        &push_constant_ranges,
+        &specialization_info,
+    )
+}
+
+pub fn update_render_normals_shader(
+    vk: &VulkanContext,
+    shader: &ComputeShader,
+    visibility: vk::ImageView,
+    normals: vk::ImageView,
+    vertices: vk::Buffer,
+    indices: vk::Buffer,
+) {
+    let mut descriptor_writes = Vec::new();
+
+    // VisibilityBuffer
+    let info = [vk::DescriptorImageInfo {
+        image_view: visibility,
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 2,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
+
+    // Indices
+    let info = [vk::DescriptorBufferInfo {
+        buffer: indices,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 8,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // Vertices
+    let info = [vk::DescriptorBufferInfo {
+        buffer: vertices,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 9,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // NormalsBuffer
+    let info = [vk::DescriptorImageInfo {
+        image_view: normals,
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 11,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
     descriptor_writes.push(write);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };

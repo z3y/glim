@@ -49,6 +49,12 @@ fn main() {
 
     shaders.push(Shader {
         ty: ShaderType::Compute,
+        src: "render_normals.slang".into(),
+        dst: "render_normals.spv".into(),
+    });
+
+    shaders.push(Shader {
+        ty: ShaderType::Compute,
         src: "bake_sh.slang".into(),
         dst: "bake_sh.spv".into(),
     });

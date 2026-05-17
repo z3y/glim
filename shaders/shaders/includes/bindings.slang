@@ -41,6 +41,9 @@ StructuredBuffer<Vertex> Vertices;
 [[vk::binding(10, 0)]]
 StructuredBuffer<Light> Lights;
 
+[[vk::binding(11, 0)]] [[vk::image_format("rgba32f")]]
+RWTexture2D<float4> NormalsBuffer;
+
 float4 SampleAlbedo(float2 uv, uint lightmapGroup)
 {
     return Albedo[NonUniformResourceIndex(lightmapGroup)].SampleLevel(TextureSampler, uv, 0);

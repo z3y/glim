@@ -24,6 +24,15 @@ pub fn get_bake_shader() -> &'static [u32] {
     &SHADER
 }
 
+pub fn get_render_normals_shader() -> &'static [u32] {
+    const LEN: usize = include_bytes!(concat!(env!("OUT_DIR"), "/render_normals.spv")).len() / 4;
+
+    static SHADER: [u32; LEN] =
+        include_transmute!(concat!(env!("OUT_DIR"), "/render_normals.spv"), [u32; LEN]);
+
+    &SHADER
+}
+
 pub fn get_bake_sh_shader() -> &'static [u32] {
     const LEN: usize = include_bytes!(concat!(env!("OUT_DIR"), "/bake_sh.spv")).len() / 4;
 

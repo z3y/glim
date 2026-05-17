@@ -128,18 +128,49 @@ impl Oidn {
         }
     }
 
-    pub fn denoise(&self, pixels: &mut [f32], width: usize, height: usize) -> Vec<f32> {
+    pub fn denoise(
+        &self,
+        pixels: &mut [f32],
+        normals: &mut [f32],
+        width: usize,
+        height: usize,
+    ) -> Vec<f32> {
         let pixel_stride = 4 * std::mem::size_of::<f32>();
         let mut output = vec![0.0f32; pixels.len()];
 
         let filter = self.filter;
         let device = self.device;
 
+        let mut albedo = vec![1.0f32; pixels.len()];
+
+        // todo add albedo and normal buffers
         unsafe {
             (self.set_shared_filter_image)(
                 filter,
                 c"color".as_ptr(),
                 pixels.as_mut_ptr() as *mut c_void,
+                OIDNFormat::Float3,
+                width,
+                height,
+                0,
+                pixel_stride,
+                0,
+            );
+            (self.set_shared_filter_image)(
+                filter,
+                c"albedo".as_ptr(),
+                albedo.as_mut_ptr() as *mut c_void,
+                OIDNFormat::Float3,
+                width,
+                height,
+                0,
+                pixel_stride,
+                0,
+            );
+            (self.set_shared_filter_image)(
+                filter,
+                c"normal".as_ptr(),
+                normals.as_mut_ptr() as *mut c_void,
                 OIDNFormat::Float3,
                 width,
                 height,

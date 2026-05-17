@@ -8,7 +8,10 @@ use glfw_sys::{
 };
 
 use crate::buffer::Buffer;
-use crate::compute_shader::{BakeSHPushConstants, load_bake_sh_shader, update_bake_sh_shader};
+use crate::compute_shader::{
+    BakeSHPushConstants, load_bake_sh_shader, load_render_normals_shader, update_bake_sh_shader,
+    update_render_normals_shader,
+};
 use crate::graphics_shader::update_visibility_shader;
 use crate::lights::light_buffer_flags;
 use crate::sh::SHProbe;
@@ -629,6 +632,11 @@ fn bake_lightmaps(app: &mut Stilb) {
             None
         };
 
+        let mut render_normals_shader = ComputeShader::null();
+        if any_denoise {
+            render_normals_shader = load_render_normals_shader(&app.vk);
+        }
+
         for i in 0..app.groups.len() {
             let group_index = i as u32;
 
@@ -673,7 +681,7 @@ fn bake_lightmaps(app: &mut Stilb) {
             }
 
             let RenderTarget::NonDirectional {
-                visibility: _,
+                visibility,
                 diffuse,
             } = &mut app.render_target
             else {
@@ -685,16 +693,88 @@ fn bake_lightmaps(app: &mut Stilb) {
             let mut pixels_read = diffuse.read_pixels(&app.vk);
 
             if settings.denoise {
+                let width = visibility.width();
+                let height = visibility.width();
+                let mut normals_buffer = Texture2D::new(
+                    &app.vk,
+                    width,
+                    height,
+                    vk::Format::R32G32B32A32_SFLOAT,
+                    vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+                );
+
+                update_render_normals_shader(
+                    &app.vk,
+                    &render_normals_shader,
+                    visibility.view(),
+                    normals_buffer.view(),
+                    app.gpu_mesh.vertex_buffer.buffer,
+                    app.gpu_mesh.index_buffer.buffer,
+                );
+
+                let groups_x = (width + 7) / 8;
+                let groups_y = (height + 7) / 8;
+
+                unsafe {
+                    let shader = &render_normals_shader;
+                    let cmd = app.vk.begin_single_use_cmd();
+
+                    let vk = &app.vk.device;
+
+                    let barrier = normals_buffer.barrier(
+                        vk::ImageLayout::GENERAL,
+                        vk::AccessFlags::default(),
+                        vk::AccessFlags::SHADER_WRITE,
+                    );
+                    vk.cmd_pipeline_barrier(
+                        cmd,
+                        vk::PipelineStageFlags::TOP_OF_PIPE,
+                        vk::PipelineStageFlags::COMPUTE_SHADER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[barrier],
+                    );
+
+                    vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+                    vk.cmd_bind_descriptor_sets(
+                        cmd,
+                        vk::PipelineBindPoint::COMPUTE,
+                        shader.pipeline_layout,
+                        0,
+                        &[shader.descriptor_set],
+                        &[],
+                    );
+
+                    vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+
+                    app.vk.end_single_use_cmd(cmd);
+                }
+
+                let mut normals_read = normals_buffer.read_pixels(&app.vk);
+
+                // save_bmp(
+                //     "../temp/normals_buffer{}.bmp",
+                //     visibility.width(),
+                //     visibility.height(),
+                //     &normals_read,
+                // )
+                // .unwrap();
+
                 match &oidn {
                     Some(oidn) => {
                         pixels_read = oidn.denoise(
                             &mut pixels_read,
+                            &mut normals_read,
                             settings.width as usize,
                             settings.height as usize,
                         );
                     }
                     None => {}
                 }
+
+                normals_buffer.destroy(&app.vk);
             }
 
             let readback_data = ReadbackData {
@@ -707,6 +787,10 @@ fn bake_lightmaps(app: &mut Stilb) {
             };
 
             callback(readback_data);
+        }
+
+        if !render_normals_shader.pipeline.is_null() {
+            render_normals_shader.destroy(&app.vk);
         }
     }
 

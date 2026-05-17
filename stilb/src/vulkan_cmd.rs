@@ -31,10 +31,10 @@ impl VulkanContext {
             self.device.end_command_buffer(cmd).unwrap();
 
             self.device
-                .queue_submit(self.graphics_queue, &[submit], vk::Fence::null())
+                .queue_submit(self.compute_queue, &[submit], vk::Fence::null())
                 .unwrap();
 
-            self.device.queue_wait_idle(self.graphics_queue).unwrap()
+            self.device.queue_wait_idle(self.compute_queue).unwrap()
         };
     }
 }
