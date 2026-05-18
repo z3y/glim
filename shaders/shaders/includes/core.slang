@@ -388,5 +388,11 @@ float4 AdjustSamplePositions(Surface surface, float4 visibility)
     visibility.xy = bary;
     visibility.z = asfloat(primitiveID);
 
+    bool smoothP = UseSmoothPosition(surface);
+    uint encoded = asuint(visibility.a);
+    bool visible = encoded != 0;
+
+    visibility = EncodeVisibilityBuffer(bary, primitiveID, visible, smoothP);
+
     return visibility;
 }
