@@ -4,6 +4,13 @@ using UnityEngine;
 
 namespace stilb
 {
+    public enum LightFalloffType
+    {
+        Auto = 0,
+        InverseSquare = 1,
+        UnityBuiltIn = 2,
+    }
+
     public class LightmapBaker : MonoBehaviour
     {
 
@@ -29,7 +36,7 @@ namespace stilb
 
         [Header("Bake Settings")]
         public LightmapGroup globalGroup;
-
+        public LightFalloffType lightFalloff = LightFalloffType.Auto;
     }
 }
 #endif

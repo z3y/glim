@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace stilb
 {
@@ -39,6 +40,7 @@ namespace stilb
             public readonly TextureSamplerFilter texture_filter;
             public readonly uint probe_samples;
             public readonly uint probe_bounces;
+            public readonly uint light_falloff;
 
             public StilbConfig(CoordinateSystem coordinate_system,
                                bool is_preview,
@@ -48,7 +50,8 @@ namespace stilb
                                Vector3 camera_forward,
                                TextureSamplerFilter texture_filter,
                                uint probe_samples,
-                               uint probe_bounces)
+                               uint probe_bounces,
+                               LightFalloffType falloff)
             {
                 this.coordinate_system = coordinate_system;
                 this.is_preview = is_preview;
@@ -61,6 +64,21 @@ namespace stilb
                 this.texture_filter = texture_filter;
                 this.probe_samples = probe_samples;
                 this.probe_bounces = probe_bounces;
+
+                var currentPipeline = GraphicsSettings.currentRenderPipeline;
+                uint autoFalloff = 0;
+                if (currentPipeline == null) // BuiltIn
+                {
+                    autoFalloff = 1;
+                }
+
+                this.light_falloff = falloff switch
+                {
+                    LightFalloffType.Auto => autoFalloff,
+                    LightFalloffType.InverseSquare => 0,
+                    LightFalloffType.UnityBuiltIn => 1,
+                    _ => 0,
+                };
             }
         }
 
