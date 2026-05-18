@@ -128,7 +128,7 @@ void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi
         }
     }
 
-    SamplingPattern pattern = SamplingPattern::SobolBurley;
+    SamplingPattern pattern = SamplingPattern::BlueNoisePure;
     if (USE_CAMERA > 0)
     {
         pattern = SamplingPattern::BlueNoiseFirst;
