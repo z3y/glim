@@ -9,17 +9,17 @@ mod tests {
     fn test_preview() {
         let mut config = make_config();
         config.is_preview = true;
-        test_render(config);
+        test_render(config, false);
     }
 
     #[test]
     fn test_bake() {
         let mut config = make_config();
         config.is_preview = false;
-        test_render(config);
+        test_render(config, true);
     }
 
-    fn test_render(mut config: StilbConfig) {
+    fn test_render(mut config: StilbConfig, test_probes: bool) {
         config.camera_forward = Vector3 {
             x: -0.42446527,
             y: -0.4595601,
@@ -75,7 +75,7 @@ mod tests {
         //             z: -1.5,
         //         },
         //         direction: Vector3::ZERO,
-        //         range: 100.0,
+        //         range: 5.0,
         //         color: Vector3::new(1.0, 1.0, 1.0),
         //         shadow_radius_or_angle: 0.0,
         //     },
@@ -114,13 +114,9 @@ mod tests {
             emission_pixels.len() as u32,
         );
 
-        let test_probes = false;
         if test_probes {
             let mut offset = 0.1;
             for _ in 0..5 {
-                app_add_probe(app, Vector3::new(0.0, offset, 0.0));
-                app_add_probe(app, Vector3::new(0.0, offset, 0.0));
-                app_add_probe(app, Vector3::new(0.0, offset, 0.0));
                 app_add_probe(app, Vector3::new(0.0, offset, 0.0));
                 offset += 0.1;
             }
@@ -235,6 +231,6 @@ mod tests {
     pub extern "C" fn test_probes_callback(data: ReadbackProbesData) {
         let probes = unsafe { std::slice::from_raw_parts(data.probes, data.pixels_count as usize) };
 
-        println!("Baked Probes:\n {:#?}", &probes);
+        println!("Baked Probes:\n {:?}", &probes);
     }
 }
