@@ -710,7 +710,7 @@ fn bake_lightmaps(app: &mut Stilb) {
                 }
             }
 
-            fix_seams(&mut pixels, &app.seams, 256.);
+            fix_seams(&mut pixels, width, height, &app.seams, 256.);
 
             let readback_data = ReadbackData {
                 group_index,
