@@ -69,14 +69,20 @@ impl Mesh {
         let indices = unsafe { slice::from_raw_parts(mesh.indices, mesh.indices_length as usize) };
 
         // let sample_scale = 20.0;
-        let seams = find_seams(indices, positions, normals, uvs);
+        let unity = system == CoordinateSystem::Unity;
+
+        let mut flip = true;
+        if unity {
+            flip = false;
+        }
+
+        let seams = find_seams(indices, positions, normals, uvs, flip);
         all_seams.extend(seams);
 
         let offset = self.vertices.len() as u32;
 
         let lightmap_group = mesh.lightmap_group;
         let backface_gi = mesh.backface_gi;
-        let unity = system == CoordinateSystem::Unity;
 
         self.vertices.reserve(positions.len());
 

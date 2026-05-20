@@ -28,6 +28,8 @@ namespace stilb
 
             [MarshalAs(UnmanagedType.I1)]
             public readonly bool is_preview;
+            [MarshalAs(UnmanagedType.I1)]
+            public readonly bool vulkan_validation_layers;
             public readonly uint throttle_preview_ms;
             public readonly LightmapSettings preview_settings;
 
@@ -64,6 +66,7 @@ namespace stilb
                 this.texture_filter = texture_filter;
                 this.probe_samples = probe_samples;
                 this.probe_bounces = probe_bounces;
+                this.vulkan_validation_layers = false;
 
                 var currentPipeline = GraphicsSettings.currentRenderPipeline;
                 uint autoFalloff = 0;

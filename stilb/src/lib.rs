@@ -153,7 +153,7 @@ pub struct StilbConfig {
     pub coordinate_system: CoordinateSystem,
 
     pub is_preview: bool,
-    pub vulkan_validation_layers: bool, // todo add to unity
+    pub vulkan_validation_layers: bool,
     pub throttle_preview_ms: u32,
     pub preview_settings: LightmapSettings,
 

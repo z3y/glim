@@ -71,6 +71,7 @@ pub fn find_seams(
     positions: &[Vector3],
     normals: &[Vector3],
     uvs: &[Vector2],
+    flip_uv_y: bool,
 ) -> Vec<Seam> {
     let mut edges = HashSet::new();
 
@@ -158,11 +159,13 @@ pub fn find_seams(
                     normals[e1.i1 as usize]
                 ));
 
-                edge0_uv0.y = 1.0 - edge0_uv0.y;
-                edge0_uv1.y = 1.0 - edge0_uv1.y;
+                if flip_uv_y {
+                    edge0_uv0.y = 1.0 - edge0_uv0.y;
+                    edge0_uv1.y = 1.0 - edge0_uv1.y;
 
-                edge1_uv0.y = 1.0 - edge1_uv0.y;
-                edge1_uv1.y = 1.0 - edge1_uv1.y;
+                    edge1_uv0.y = 1.0 - edge1_uv0.y;
+                    edge1_uv1.y = 1.0 - edge1_uv1.y;
+                }
 
                 seams.push(Seam {
                     position0,
