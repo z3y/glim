@@ -11,7 +11,7 @@ use crate::buffer::Buffer;
 use crate::compute_shader::{BakeSHPushConstants, load_bake_sh_shader, update_bake_sh_shader};
 use crate::graphics_shader::update_visibility_shader;
 use crate::lights::light_buffer_flags;
-use crate::seams::{Seam, fix_seams};
+use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbe;
 use crate::{
     camera::Camera,
@@ -701,6 +701,8 @@ fn bake_lightmaps(app: &mut Stilb) {
 
             let mut pixels = diffuse.read_pixels(&app.vk);
 
+            dilate(&mut pixels, width, height);
+
             if settings.denoise {
                 match &oidn {
                     Some(oidn) => {
@@ -710,7 +712,7 @@ fn bake_lightmaps(app: &mut Stilb) {
                 }
             }
 
-            fix_seams(&mut pixels, width, height, &app.seams, 256.);
+            fix_seams(&mut pixels, width, height, &app.seams);
 
             let readback_data = ReadbackData {
                 group_index,

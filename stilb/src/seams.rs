@@ -183,12 +183,73 @@ pub fn find_seams(
     seams
 }
 
-fn is_inside_chart(pixels: &[f32]) -> bool {
-    false
+pub fn dilate(pixels: &mut [f32], width: u32, height: u32) {
+    let w = width as usize;
+    let h = height as usize;
+
+    loop {
+        let mut any_filled = false;
+
+        let prev = pixels.to_vec();
+
+        for y in 0..h {
+            for x in 0..w {
+                let idx = (y * w + x) * 4;
+
+                if prev[idx + 3] > 0.0 {
+                    continue;
+                }
+
+                let neighbors = [
+                    (x.wrapping_sub(1), y),
+                    (x + 1, y),
+                    (x, y.wrapping_sub(1)),
+                    (x, y + 1),
+                ];
+
+                let mut r = 0.0_f32;
+                let mut g = 0.0_f32;
+                let mut b = 0.0_f32;
+                let mut count = 0_u32;
+
+                for (nx, ny) in neighbors {
+                    if nx >= w || ny >= h {
+                        continue;
+                    }
+                    let nidx = (ny * w + nx) * 4;
+                    if prev[nidx + 3] > 0.0 {
+                        r += prev[nidx];
+                        g += prev[nidx + 1];
+                        b += prev[nidx + 2];
+                        count += 1;
+                    }
+                }
+
+                if count > 0 {
+                    let inv = 1.0 / count as f32;
+                    pixels[idx] = r * inv;
+                    pixels[idx + 1] = g * inv;
+                    pixels[idx + 2] = b * inv;
+                    pixels[idx + 3] = 1.0;
+                    any_filled = true;
+                }
+            }
+        }
+
+        if !any_filled {
+            break;
+        }
+    }
 }
 
-pub fn fix_seams(pixels: &mut [f32], width: u32, height: u32, seams: &[Seam], sample_scale: f32) {
+pub fn fix_seams(pixels: &mut [f32], width: u32, height: u32, seams: &[Seam]) {
     let mut sample_points = Vec::new();
+
+    let sample_scale = width as f32;
+
+    let edge_constraint_weight = 5.0;
+    let tolerance = 0.001;
+    let iterations = 100;
 
     for seam in seams {
         let position0 = seam.position0;
@@ -219,8 +280,8 @@ pub fn fix_seams(pixels: &mut [f32], width: u32, height: u32, seams: &[Seam], sa
     let mut other_pixel_map: HashMap<Vector2Int, usize> = HashMap::new();
 
     for point in &sample_points {
-        let uv_a = point.uv_a * Vector2::new(width as f32, width as f32) + Vector2::new(0.5, 0.5);
-        let uv_b = point.uv_b * Vector2::new(height as f32, height as f32) + Vector2::new(0.5, 0.5);
+        let uv_a = point.uv_a * Vector2::new(width as f32, width as f32) - Vector2::new(0.5, 0.5);
+        let uv_b = point.uv_b * Vector2::new(height as f32, height as f32) - Vector2::new(0.5, 0.5);
 
         let width = width as i32;
         let height = height as i32;
@@ -298,10 +359,6 @@ pub fn fix_seams(pixels: &mut [f32], width: u32, height: u32, seams: &[Seam], sa
         VectorX::new(total_pixels),
         VectorX::new(total_pixels),
     ];
-
-    let edge_constraint_weight = 5.0;
-    let tolerance = 0.001;
-    let iterations = 100;
 
     setup_least_squares(
         width,
@@ -394,9 +451,9 @@ fn setup_least_squares(
 
     for point in sample_points {
         let scaled_uv_a =
-            point.uv_a * Vector2::new(width as f32, width as f32) + Vector2::new(0.5, 0.5);
+            point.uv_a * Vector2::new(width as f32, height as f32) - Vector2::new(0.5, 0.5);
         let scaled_uv_b =
-            point.uv_b * Vector2::new(height as f32, height as f32) + Vector2::new(0.5, 0.5);
+            point.uv_b * Vector2::new(width as f32, height as f32) - Vector2::new(0.5, 0.5);
 
         bilinear_sample(
             &self_pixel_map,

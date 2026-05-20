@@ -36,6 +36,12 @@ impl Vector2 {
         }
     }
 
+    pub fn distance(a: Self, b: Self) -> f32 {
+        let dx = a.x - b.x;
+        let dy = a.y - b.y;
+        (dx * dx + dy * dy).sqrt()
+    }
+
     pub fn abs(self) -> Self {
         Self {
             x: f32::abs(self.x),
