@@ -1,4 +1,5 @@
 // expose seam fix parameters
+// todo license https://gist.github.com/ssylvan/18fb6875824c14aa2b8c
 
 use std::collections::{HashMap, HashSet};
 
@@ -140,8 +141,6 @@ pub fn find_seams(
 
     let edges: Vec<Edge> = edges.into_iter().collect();
 
-    let mut seam_edges = Vec::new();
-
     let reference_dir = Vector2::new(1.0, 1.0).normalize();
 
     // todo slow
@@ -152,9 +151,6 @@ pub fn find_seams(
             let e1 = &edges[j];
 
             if is_seam(e0, e1) {
-                seam_edges.push(e0.clone());
-                seam_edges.push(e1.clone());
-
                 let mut edge0_uv0 = uvs[e0.i0 as usize];
                 let mut edge0_uv1 = uvs[e0.i1 as usize];
 
@@ -168,11 +164,6 @@ pub fn find_seams(
                     edge1_uv0.y = 1.0 - edge1_uv0.y;
                     edge1_uv1.y = 1.0 - edge1_uv1.y;
                 }
-
-                // if e0.swapped {
-                //     std::mem::swap(&mut edge0_uv0, &mut edge1_uv0);
-                //     std::mem::swap(&mut edge0_uv1, &mut edge1_uv1);
-                // }
 
                 let seam_dir = (edge0_uv0 - edge1_uv0).normalize();
 
@@ -199,6 +190,7 @@ pub fn find_seams(
     seams
 }
 
+// todo slow
 pub fn dilate(pixels: &mut [f32], width: u32, height: u32) {
     let w = width as usize;
     let h = height as usize;

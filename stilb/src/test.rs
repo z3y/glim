@@ -199,9 +199,15 @@ mod tests {
                     }
                 }
 
-                if let Some(iter) = reader.read_tex_coords(0) {
+                if let Some(iter) = reader.read_tex_coords(1) {
                     for uv in iter.into_f32() {
                         uvs.push(Vector2::new(uv[0], uv[1]));
+                    }
+                } else {
+                    if let Some(iter) = reader.read_tex_coords(0) {
+                        for uv in iter.into_f32() {
+                            uvs.push(Vector2::new(uv[0], uv[1]));
+                        }
                     }
                 }
 
