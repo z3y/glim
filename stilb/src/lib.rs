@@ -776,6 +776,7 @@ fn bake_lightmaps(app: &mut Stilb) {
                     height,
                     &app.seams,
                     app.config.seams_debug,
+                    group_index,
                 );
 
                 let now = std::time::Instant::now();

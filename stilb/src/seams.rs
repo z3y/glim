@@ -31,6 +31,7 @@ pub struct Seam {
     edge1_uv0: Vector2,
     edge0_uv1: Vector2,
     edge1_uv1: Vector2,
+    group: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +76,7 @@ pub fn find_seams(
     normals: &[Vector3],
     uvs: &[Vector2],
     flip_uv_y: bool,
+    group: u32,
 ) -> Vec<Seam> {
     let mut edges = HashSet::new();
 
@@ -210,6 +212,7 @@ pub fn find_seams(
                     edge0_uv1,
                     edge1_uv0,
                     edge1_uv1,
+                    group,
                 });
             }
         }
@@ -281,7 +284,14 @@ pub fn dilate(pixels: &mut [f32], width: u32, height: u32) {
     }
 }
 
-pub fn fix_seams(pixels: &mut [f32], width: u32, height: u32, seams: &[Seam], debug: bool) {
+pub fn fix_seams(
+    pixels: &mut [f32],
+    width: u32,
+    height: u32,
+    seams: &[Seam],
+    debug: bool,
+    group: u32,
+) {
     let mut sample_points = Vec::new();
 
     let sample_scale = width as f32;
@@ -291,6 +301,9 @@ pub fn fix_seams(pixels: &mut [f32], width: u32, height: u32, seams: &[Seam], de
     let iterations = 100;
 
     for seam in seams {
+        if seam.group != group {
+            continue;
+        }
         let position0 = seam.position0;
         let position1 = seam.position1;
 
@@ -306,6 +319,10 @@ pub fn fix_seams(pixels: &mut [f32], width: u32, height: u32, seams: &[Seam], de
 
             sample_points.push(SamplePoint { uv_a, uv_b });
         }
+    }
+
+    if sample_points.len() == 0 {
+        return;
     }
 
     let mut pixel_info = Vec::new();
@@ -452,12 +469,28 @@ fn bilinear_sample(
     let ys = [truncv, truncv, truncv + 1, truncv + 1];
 
     for i in 0..4 {
-        let x = xs[i].clamp(0, width as i32 - 1);
-        let y = ys[i].clamp(0, height as i32 - 1);
+        let x = (xs[i].rem_euclid(width as i32)) as i32;
+        let y = (ys[i].rem_euclid(height as i32)) as i32;
 
         // todo something fails here
         let key = Vector2Int { x, y };
-        ixs[i] = *pixel_map.get(&key).unwrap();
+        // ixs[i] = *pixel_map.get(&key).unwrap();
+
+        if let Some(&pixel_idx) = pixel_map.get(&key) {
+            ixs[i] = pixel_idx;
+        } else {
+            let x = xs[i].clamp(0, width as i32 - 1);
+            let y = ys[i].clamp(0, height as i32 - 1);
+
+            // todo something fails here
+            let key = Vector2Int { x, y };
+            if let Some(&pixel_idx) = pixel_map.get(&key) {
+                ixs[i] = pixel_idx;
+            } else {
+                println!("no pixel");
+                ixs[i] = 0;
+            }
+        }
     }
 
     let frac_x = sample.x - truncu as f32;

@@ -77,7 +77,7 @@ impl Mesh {
             if unity {
                 flip = false;
             }
-            let seams = find_seams(indices, positions, normals, uvs, flip);
+            let seams = find_seams(indices, positions, normals, uvs, flip, mesh.lightmap_group);
             all_seams.extend(seams);
         }
 
