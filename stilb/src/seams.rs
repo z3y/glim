@@ -1,5 +1,3 @@
-// todo seams with different lightmap groups
-// split meshes by group
 // expose seam fix parameters
 
 use std::collections::{HashMap, HashSet};
@@ -25,8 +23,6 @@ impl Edge {
 
 #[derive(Debug, Clone)]
 pub struct Seam {
-    position0: Vector3,
-    position1: Vector3,
     edge0_uv0: Vector2,
     edge1_uv0: Vector2,
     edge0_uv1: Vector2,
@@ -159,31 +155,11 @@ pub fn find_seams(
                 seam_edges.push(e0.clone());
                 seam_edges.push(e1.clone());
 
-                let position0 = positions[e0.i0 as usize];
-                let position1 = positions[e0.i1 as usize];
-
                 let mut edge0_uv0 = uvs[e0.i0 as usize];
                 let mut edge0_uv1 = uvs[e0.i1 as usize];
 
                 let mut edge1_uv0 = uvs[e1.i0 as usize];
                 let mut edge1_uv1 = uvs[e1.i1 as usize];
-
-                debug_assert!(approx_eq_vec3(
-                    positions[e0.i0 as usize],
-                    positions[e1.i0 as usize]
-                ));
-                debug_assert!(approx_eq_vec3(
-                    positions[e0.i1 as usize],
-                    positions[e1.i1 as usize]
-                ));
-                debug_assert!(approx_eq_vec3(
-                    normals[e0.i0 as usize],
-                    normals[e1.i0 as usize]
-                ));
-                debug_assert!(approx_eq_vec3(
-                    normals[e0.i1 as usize],
-                    normals[e1.i1 as usize]
-                ));
 
                 if flip_uv_y {
                     edge0_uv0.y = 1.0 - edge0_uv0.y;
@@ -206,8 +182,6 @@ pub fn find_seams(
                 }
 
                 seams.push(Seam {
-                    position0,
-                    position1,
                     edge0_uv0,
                     edge0_uv1,
                     edge1_uv0,
@@ -294,7 +268,7 @@ pub fn fix_seams(
 ) {
     let mut sample_points = Vec::new();
 
-    let sample_scale = width as f32;
+    let sample_scale = (width * height).isqrt() as f32;
 
     let edge_constraint_weight = 5.0;
     let tolerance = 0.001;
@@ -304,11 +278,8 @@ pub fn fix_seams(
         if seam.group != group {
             continue;
         }
-        let position0 = seam.position0;
-        let position1 = seam.position1;
 
-        let length = Vector3::distance(position0, position1);
-
+        let length = Vector2::distance(seam.edge0_uv0, seam.edge0_uv1);
         let samples = u32::max(3, (length * sample_scale).ceil() as u32);
 
         for i in 0..samples {
@@ -330,8 +301,8 @@ pub fn fix_seams(
     let mut other_pixel_map: HashMap<Vector2Int, usize> = HashMap::new();
 
     for point in &sample_points {
-        let uv_a = point.uv_a * Vector2::new(width as f32, width as f32) - Vector2::new(0.5, 0.5);
-        let uv_b = point.uv_b * Vector2::new(height as f32, height as f32) - Vector2::new(0.5, 0.5);
+        let uv_a = point.uv_a * Vector2::new(width as f32, height as f32) - Vector2::new(0.5, 0.5);
+        let uv_b = point.uv_b * Vector2::new(width as f32, height as f32) - Vector2::new(0.5, 0.5);
 
         let width = width as i32;
         let height = height as i32;
@@ -343,7 +314,11 @@ pub fn fix_seams(
             let pos_self = Vector2Int::new(uv_a.x as i32 + offset_x, uv_a.y as i32 + offset_y);
             let pos_other = Vector2Int::new(uv_b.x as i32 + offset_x, uv_b.y as i32 + offset_y);
 
-            if !self_pixel_map.contains_key(&pos_self) && pos_self.x < width && pos_self.y < height
+            if !self_pixel_map.contains_key(&pos_self)
+                && pos_self.x >= 0
+                && pos_self.x < width as i32
+                && pos_self.y >= 0
+                && pos_self.y < height as i32
             {
                 let pixel_index = ((pos_self.y * width + pos_self.x) * 4) as usize;
 
@@ -368,8 +343,10 @@ pub fn fix_seams(
             }
 
             if !other_pixel_map.contains_key(&pos_other)
-                && pos_other.x < width
-                && pos_other.y < height
+                && pos_other.x >= 0
+                && pos_other.x < width as i32
+                && pos_other.y >= 0
+                && pos_other.y < height as i32
             {
                 let pixel_index = ((pos_other.y * width + pos_other.x) * 4) as usize;
 
@@ -637,9 +614,7 @@ fn conjugate_gradient_optimize(
         }
 
         let beta = rsq_new / rsq;
-
         p.mul_add_assign(beta, &r);
-
         rsq = rsq_new;
     }
 
@@ -659,9 +634,19 @@ impl Row {
         Self::default()
     }
 
-    pub fn get(&mut self, column: usize) -> f32 {
-        let index = self.get_column_index_and_grow_if_needed(column);
-        self.coefficients[index]
+    // pub fn get(&mut self, column: usize) -> f32 {
+    //     let index = self.get_column_index_and_grow_if_needed(column);
+    //     self.coefficients[index]
+    // }
+
+    pub fn get(&self, column: usize) -> f32 {
+        for i in 0..self.size {
+            if self.indices[i] == column {
+                return self.coefficients[i];
+            }
+        }
+
+        0.0
     }
 
     pub fn set(&mut self, column: usize, value: f32) {
