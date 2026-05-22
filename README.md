@@ -13,6 +13,7 @@
 - [ ] Area lights
 - [ ] Add support for CWBVH
 - [ ] UV Packing per chart
+- [ ] Tiles
 - [ ] Deringing
 - [ ] Make seam detection faster
 - [ ] SH Lightmaps

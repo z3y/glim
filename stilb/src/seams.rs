@@ -290,7 +290,7 @@ pub fn inpaint(
     pixels: &mut [f32],
     width: u32,
     height: u32,
-    valid_threshold: f32,
+    backface_threshold: f32,
     iterations: usize,
 ) {
     let w = width as usize;
@@ -303,7 +303,7 @@ pub fn inpaint(
             for x in 0..w {
                 let idx = (y * w + x) * 4;
 
-                if prev[idx + 3] > valid_threshold {
+                if prev[idx + 3] > backface_threshold {
                     continue;
                 }
 
@@ -327,7 +327,7 @@ pub fn inpaint(
 
                         let nidx = (ny * w + nx) * 4;
 
-                        let neighbor_has_data = prev[nidx + 3] > valid_threshold
+                        let neighbor_has_data = prev[nidx + 3] > backface_threshold
                             || (prev[nidx] > 0.0 || prev[nidx + 1] > 0.0 || prev[nidx + 2] > 0.0);
 
                         if neighbor_has_data {
@@ -337,7 +337,7 @@ pub fn inpaint(
                                 1.0_f32
                             };
 
-                            let reliability_weight = if prev[nidx + 3] > valid_threshold {
+                            let reliability_weight = if prev[nidx + 3] > backface_threshold {
                                 1.0
                             } else {
                                 0.5
