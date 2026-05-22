@@ -333,7 +333,7 @@ float4 AdjustSamplePositions(Surface surface, float4 visibility)
     float3 worldTexelV = dPdV * texelSizeUV.y;
 
     // some ideas from https://ndotl.wordpress.com/2018/08/29/baking-artifact-free-lightmaps/
-    float rayLength = (length(worldTexelU) + length(worldTexelV)) * (sqrt(2.0) / 2.0);
+    float rayLength = (length(worldTexelU) + length(worldTexelV)) * sqrt(2.0);
 
     float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
     float3 v = normalize(worldTexelV - dot(worldTexelV, surface.Ng) * surface.Ng);
@@ -352,7 +352,7 @@ float4 AdjustSamplePositions(Surface surface, float4 visibility)
         {
             if (!leakHit.frontFace)
             {
-                return 0;
+                // return 0;
             }
         }
     }

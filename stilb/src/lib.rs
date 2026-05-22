@@ -11,7 +11,7 @@ use crate::buffer::Buffer;
 use crate::compute_shader::{BakeSHPushConstants, load_bake_sh_shader, update_bake_sh_shader};
 use crate::graphics_shader::update_visibility_shader;
 use crate::lights::light_buffer_flags;
-use crate::seams::{Seam, dilate, fix_seams};
+use crate::seams::{Seam, fix_seams, inpaint};
 use crate::sh::SHProbe;
 use crate::{
     camera::Camera,
@@ -790,9 +790,9 @@ fn bake_lightmaps(app: &mut Stilb) {
 
             if settings.dilate {
                 let start_time = std::time::Instant::now();
+                let texel_validity = 0.65;
 
-                let texel_validity = 0.9;
-                dilate(&mut pixels, width, height, 1.0 - texel_validity);
+                inpaint(&mut pixels, width, height, texel_validity, 32);
 
                 let now = std::time::Instant::now();
                 let elapsed = now.duration_since(start_time).as_secs_f32();

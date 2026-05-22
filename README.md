@@ -1,7 +1,6 @@
 # Todo
 
 ## Priority
-- [ ] Conservative rasterization
 - [ ] Alpha test
 - [ ] Spot lights
 - [ ] Spot light cookie with default unity cookie
@@ -15,6 +14,7 @@
 - [ ] Add support for CWBVH
 - [ ] UV Packing per chart
 - [ ] Deringing
+- [ ] Make seam detection faster
 - [ ] SH Lightmaps
 - [ ] Light tree
 - [ ] Proper sync for bake loop
@@ -28,6 +28,7 @@
 - [ ] Match shadow radius
 
 # Complete
+- [x] Conservative rasterization
 - [x] Return codes for bake success, fail, cancel
 - [x] Better panic handling
 - [x] Seam stitching

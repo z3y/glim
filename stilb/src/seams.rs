@@ -286,6 +286,88 @@ pub fn dilate(pixels: &mut [f32], width: u32, height: u32, valid_threshold: f32)
     }
 }
 
+pub fn inpaint(
+    pixels: &mut [f32],
+    width: u32,
+    height: u32,
+    valid_threshold: f32,
+    iterations: usize,
+) {
+    let w = width as usize;
+    let h = height as usize;
+
+    for _ in 0..iterations {
+        let prev = pixels.to_vec();
+
+        for y in 0..h {
+            for x in 0..w {
+                let idx = (y * w + x) * 4;
+
+                if prev[idx + 3] > valid_threshold {
+                    continue;
+                }
+
+                let mut r = 0.0_f32;
+                let mut g = 0.0_f32;
+                let mut b = 0.0_f32;
+                let mut total_weight = 0.0_f32;
+
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        if dx == 0 && dy == 0 {
+                            continue;
+                        }
+
+                        let nx = (x as isize + dx) as usize;
+                        let ny = (y as isize + dy) as usize;
+
+                        if nx >= w || ny >= h {
+                            continue;
+                        }
+
+                        let nidx = (ny * w + nx) * 4;
+
+                        let neighbor_has_data = prev[nidx + 3] > valid_threshold
+                            || (prev[nidx] > 0.0 || prev[nidx + 1] > 0.0 || prev[nidx + 2] > 0.0);
+
+                        if neighbor_has_data {
+                            let distance_weight = if dx != 0 && dy != 0 {
+                                0.7071_f32
+                            } else {
+                                1.0_f32
+                            };
+
+                            let reliability_weight = if prev[nidx + 3] > valid_threshold {
+                                1.0
+                            } else {
+                                0.5
+                            };
+
+                            let final_weight = distance_weight * reliability_weight;
+
+                            r += prev[nidx] * final_weight;
+                            g += prev[nidx + 1] * final_weight;
+                            b += prev[nidx + 2] * final_weight;
+                            total_weight += final_weight;
+                        }
+                    }
+                }
+
+                if total_weight > 0.0 {
+                    let inv = 1.0 / total_weight;
+                    pixels[idx] = r * inv;
+                    pixels[idx + 1] = g * inv;
+                    pixels[idx + 2] = b * inv;
+                }
+            }
+        }
+    }
+
+    for pixel in pixels.chunks_exact_mut(4) {
+        pixel[3] = 1.0
+    }
+}
+
 pub fn fix_seams(
     pixels: &mut [f32],
     width: u32,
