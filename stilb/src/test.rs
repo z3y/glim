@@ -88,7 +88,9 @@ mod tests {
         //     false,
         // )
         // .expect("failed to load mesh");
-        let (w, h, emission_pixels) = load_tga_f32("../textures/emission_cute.tga").unwrap();
+        // let (w, h, emission_pixels) = load_tga_f32("../textures/emission_cute.tga").unwrap();
+        let (w, h, emission_pixels) =
+            load_tga_f32("../textures/emission_cute_wall_only.tga").unwrap();
         // let w = 512;
         // let h = 512;
         // let emission_pixels = vec![0.0; (w * h * 4) as usize];

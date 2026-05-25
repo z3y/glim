@@ -28,7 +28,7 @@ void ShadeTriangleLight(inout Spectrum spectrum, uint primitiveID, Surface surfa
 
     Surface emissiveSurface = Surface::Get(primitiveID, bary);
 
-    float3 lightColor = SampleEmission(emissiveSurface.uv, emissiveSurface.lightmapGroup).rgb;
+    float3 lightColor = SampleEmission(emissiveSurface.uv, emissiveSurface.lightmapGroup).rgb / float.getPi();
 
     if (!any(lightColor > 0.0f))
     {
@@ -147,12 +147,26 @@ void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi
     {
         return;
     }
+    uint emissiveTriangleCount = EMISSIVE_TRIANGLES_COUNT;
 
     uint primitiveID = asuint(visibility.z);
     float2 bary = visibility.xy;
     bool useSmoothP = (encoded & (1 << 1)) != 0;
 
     Surface surface = Surface::Get(primitiveID, bary);
+
+    // debug emissive triangles
+    // for (uint i = 0; i < emissiveTriangleCount; i++)
+    // {
+    //     uint emissivePrimitiveID = EmissiveTriangles[i];
+    //     if (primitiveID == emissivePrimitiveID)
+    //     {
+    //         LightmapDiffuse[coords] = 0.5;
+    //         return;
+    //     }
+    // }
+    // LightmapDiffuse[coords] = 0.0;
+    // return;
 
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
@@ -208,6 +222,7 @@ void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi
 
     // direct light
     float2 xiLight = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
+    float2 xiBounce0 = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
     float sampleWeight = 1.0;
     // todo use t as weight for backface tolerance
@@ -218,16 +233,13 @@ void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi
         ShadeLight(spectrum, Lights[lightIndex], surface, xiLight, throughput);
     }
 
-    uint emissiveTriangleCount = EMISSIVE_TRIANGLES_COUNT;
     float emissivePdf = 1.0 / emissiveTriangleCount;
 
     if (emissiveTriangleCount > 0)
     {
-        uint emissivePrimitiveID = EmissiveTriangles[uint(xiLight.x * (float)emissiveTriangleCount)];
+        uint emissivePrimitiveID = EmissiveTriangles[uint(xiBounce0.y * (float)emissiveTriangleCount)];
         ShadeTriangleLight(spectrum, emissivePrimitiveID, surface, xiLight, throughput, emissivePdf);
     }
-
-    float2 xiBounce0 = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
     Ray bounceRay;
     bounceRay.P = RayOffset(surface.P, surface.Ng);
@@ -267,13 +279,13 @@ void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi
             float3 bounceEmission = SampleEmission(surfaceBounce.uv, surfaceBounce.lightmapGroup).rgb;
             float3 bounceAlbedo = SampleAlbedo(surfaceBounce.uv, surfaceBounce.lightmapGroup).rgb;
 
-            // SpectrumAdd(spectrum, bounceEmission * throughput, bounceRay.D);
+            SpectrumAdd(spectrum, bounceEmission * throughput, bounceRay.D);
             float2 xiLight = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
             float2 xiBounce = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
             if (emissiveTriangleCount > 0)
             {
-                uint emissivePrimitiveID = EmissiveTriangles[uint(xiLight.x * (float)emissiveTriangleCount)];
+                uint emissivePrimitiveID = EmissiveTriangles[uint(xiBounce.x * (float)emissiveTriangleCount)];
                 ShadeTriangleLight(spectrum, emissivePrimitiveID, surfaceBounce, xiLight, throughput, emissivePdf);
             }
 

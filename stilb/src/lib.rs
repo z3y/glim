@@ -117,6 +117,10 @@ impl Drop for Stilb {
             self.bake_probes_shader.destroy(&self.vk);
         }
 
+        if !self.emissive_triangles_buffer.buffer.is_null() {
+            self.emissive_triangles_buffer.destroy(&self.vk);
+        }
+
         unsafe { self.vk.device.destroy_sampler(self.texture_sampler, None) };
     }
 }
