@@ -394,6 +394,7 @@ namespace stilb
             public int[] triangles;
             public uint groupIndex;
             public bool backfaceGI;
+            public bool transparent;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -417,6 +418,7 @@ namespace stilb
 
                 var uvs = mesh.HasVertexAttribute(VertexAttribute.TexCoord1) ? mesh.uv2 : mesh.uv;
                 bool backfaceGI = false;
+                bool transparent = false;
                 if (renderers[i] is MeshRenderer mr)
                 {
                     var evs = mr.enlightenVertexStream;
@@ -432,7 +434,7 @@ namespace stilb
                     }
 
                     var mats = mr.sharedMaterials;
-                    // todo backfacegi per submesh instead of entire mesh
+                    // todo backfacegi and transparent per submesh instead of entire mesh
                     foreach (var mat in mats)
                     {
                         if (mat == null)
@@ -444,6 +446,11 @@ namespace stilb
                         {
                             backfaceGI = true;
                         }
+
+                        if (MetaTexture.IsMaterialTransparent(mat))
+                        {
+                            transparent = true;
+                        }
                     }
                 }
 
@@ -451,6 +458,7 @@ namespace stilb
                 transform.TransformPoints(vertices);
                 transform.TransformDirections(normals);
 
+                // todo this still isnt always correct
                 bool isNegativeScale = (transform.lossyScale.x * transform.lossyScale.y * transform.lossyScale.z) < 0;
 
                 // todo move to rust
@@ -486,6 +494,7 @@ namespace stilb
                     triangles = triangles,
                     groupIndex = groupIndex,
                     backfaceGI = backfaceGI,
+                    transparent = transparent
                 };
 
                 datas.Add(data);

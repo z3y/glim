@@ -124,7 +124,11 @@ pub struct InitFromCameraPushConstants {
     pub pad: u32,
 }
 
-pub fn load_init_from_camera_shader(vk: &VulkanContext, lightmap_groups: u32) -> ComputeShader {
+pub fn load_init_from_camera_shader(
+    vk: &VulkanContext,
+    lightmap_groups: u32,
+    transparent_primitive_offset: u32,
+) -> ComputeShader {
     let mut bindings = Vec::new();
 
     // VisibilityBuffer
@@ -181,7 +185,19 @@ pub fn load_init_from_camera_shader(vk: &VulkanContext, lightmap_groups: u32) ->
         ..Default::default()
     });
 
-    let specialization_info = vk::SpecializationInfo::default();
+    let size = std::mem::size_of::<u32>();
+    let map_entries = [vk::SpecializationMapEntry {
+        constant_id: 2,
+        offset: 0 * (size as u32),
+        size: size,
+    }];
+
+    let data = [transparent_primitive_offset];
+    let data_bytes = as_bytes(&data);
+
+    let specialization_info = vk::SpecializationInfo::default()
+        .map_entries(&map_entries)
+        .data(data_bytes);
 
     let push_constant_ranges = [vk::PushConstantRange {
         stage_flags: vk::ShaderStageFlags::COMPUTE,
@@ -369,6 +385,7 @@ pub fn load_bake_lights_shader(
     use_camera: bool,
     light_falloff_type: LightFalloffType,
     lightmap_groups: u32,
+    transparent_primitive_offset: u32,
 ) -> ComputeShader {
     let mut bindings = Vec::new();
 
@@ -465,10 +482,19 @@ pub fn load_bake_lights_shader(
             offset: 1 * (size as u32),
             size: size,
         },
+        vk::SpecializationMapEntry {
+            constant_id: 2,
+            offset: 2 * (size as u32),
+            size: size,
+        },
     ];
 
     let use_camera: u32 = if use_camera { 1 } else { 0 };
-    let data = [use_camera, light_falloff_type as u32];
+    let data = [
+        use_camera,
+        light_falloff_type as u32,
+        transparent_primitive_offset,
+    ];
     let data_bytes = as_bytes(&data);
 
     let specialization_info = vk::SpecializationInfo::default()

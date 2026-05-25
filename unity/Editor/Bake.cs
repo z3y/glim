@@ -280,6 +280,7 @@ namespace stilb
                                     indices_length = (uint)data.triangles.Length,
                                     lightmap_group = data.groupIndex,
                                     backface_gi = data.backfaceGI,
+                                    transparent = data.transparent,
                                 };
 
                                 int result0 = Bindings.app_add_mesh(app, exportedMesh);

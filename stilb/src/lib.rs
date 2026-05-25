@@ -519,6 +519,7 @@ fn start_bake(app: &mut Stilb) {
         app.config.is_preview,
         app.config.light_falloff,
         app.groups.len() as u32,
+        (app.opaque_mesh.indices.len() / 3) as u32,
     );
 
     if app.probes.len() > 0 {
@@ -606,8 +607,6 @@ fn initialize_bake_sh_push_constants(app: &mut Stilb, max_samples: u32, bounce_c
 }
 
 fn bake_lightmaps(app: &mut Stilb) {
-    // let mut group = group;
-
     let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
     let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
 
@@ -616,8 +615,11 @@ fn bake_lightmaps(app: &mut Stilb) {
 
         let preview_settings = app.config.preview_settings.clone();
 
-        app.init_from_camera_shader =
-            load_init_from_camera_shader(&app.vk, app.groups.len() as u32);
+        app.init_from_camera_shader = load_init_from_camera_shader(
+            &app.vk,
+            app.groups.len() as u32,
+            (app.opaque_mesh.indices.len() / 3) as u32,
+        );
 
         update_render_target(app, &preview_settings, 0);
 

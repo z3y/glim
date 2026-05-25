@@ -152,8 +152,8 @@ namespace stilb
             public uint indices_length;
             public uint lightmap_group;
 
-            [MarshalAs(UnmanagedType.I1)]
-            public bool backface_gi;
+            [MarshalAs(UnmanagedType.I1)] public bool backface_gi;
+            [MarshalAs(UnmanagedType.I1)] public bool transparent;
         }
 
         public enum LightType : uint

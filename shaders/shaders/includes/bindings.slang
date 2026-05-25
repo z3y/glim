@@ -46,6 +46,7 @@ RWTexture2D<float4> NormalsBuffer;
 
 [vk::constant_id(0)] const uint USE_CAMERA;
 [vk::constant_id(1)] const uint LIGHT_FALLOFF_TYPE;
+[vk::constant_id(2)] const uint TRANSPARENT_PRIMITIVE_ID_OFFSET;
 
 float4 SampleAlbedo(float2 uv, uint lightmapGroup)
 {

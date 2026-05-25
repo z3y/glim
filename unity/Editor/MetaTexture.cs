@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -60,6 +59,8 @@ namespace stilb
             request.WaitForCompletion();
             return request;
         }
+
+        static int _Cutoff = Shader.PropertyToID("_Cutoff");
 
         void RenderMeta(IList<Renderer> renderers, AtlasType type, CommandBuffer cmd)
         {
@@ -133,7 +134,6 @@ namespace stilb
 
             var _MainTex = Shader.PropertyToID("_MainTex");
             var _Color = Shader.PropertyToID("_Color");
-            var _Cutoff = Shader.PropertyToID("_Cutoff");
             var unity_LightmapST = Shader.PropertyToID("unity_LightmapST");
 
             for (int offsetIndex = 0; offsetIndex < uvOffset.Length; offsetIndex++)
@@ -163,13 +163,7 @@ namespace stilb
 
                         if (type == AtlasType.Alpha)
                         {
-
-                            if (mat.renderQueue <= (int)RenderQueue.Geometry)
-                            {
-                                continue;
-                            }
-
-                            if (!mat.HasFloat(_Cutoff))
+                            if (!IsMaterialTransparent(mat))
                             {
                                 continue;
                             }
@@ -202,6 +196,24 @@ namespace stilb
             Graphics.ExecuteCommandBuffer(cmd);
         }
 
+        public static bool IsMaterialTransparent(Material mat)
+        {
+            if (!mat) return false;
+            if (!mat.shader) return false;
+
+            string surfaceType = mat.GetTag("SurfaceType", false, "");
+            if (surfaceType == "Transparent" || surfaceType == "TransparentCutout") return true;
+
+            string renderType = mat.GetTag("RenderType", false, "");
+            if (renderType == "Transparent" || renderType == "TransparentCutout") return true;
+
+            // if (mat.renderQueue >= (int)RenderQueue.AlphaTest)
+            // {
+            //     return true;
+            // }
+
+            return false;
+        }
 
         public void Dispose()
         {

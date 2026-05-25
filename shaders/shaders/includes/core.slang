@@ -49,6 +49,11 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
     }
 
     uint primitiveID = query.CandidatePrimitiveIndex();
+    uint geometryID = query.CandidateGeometryIndex();
+    if (geometryID > 0)
+    {
+        primitiveID += TRANSPARENT_PRIMITIVE_ID_OFFSET;
+    }
     float2 bary = query.CandidateTriangleBarycentrics();
 
     Surface surf = Surface::Get(primitiveID, bary);
@@ -82,6 +87,11 @@ bool TraceRay(Ray ray, out Hit hit)
     {
         hit.bary = query.CommittedTriangleBarycentrics();
         hit.primitiveID = query.CommittedPrimitiveIndex();
+        uint geometryID = query.CommittedGeometryIndex();
+        if (geometryID > 0)
+        {
+            hit.primitiveID += TRANSPARENT_PRIMITIVE_ID_OFFSET;
+        }
         hit.t = query.CommittedRayT();
         hit.frontFace = query.CommittedTriangleFrontFace();
         return true;

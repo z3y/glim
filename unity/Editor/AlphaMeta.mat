@@ -33,7 +33,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Cutoff: 0.884
+    - _Cutoff: 0.5
     - _DstBlend: 0
     - _Mode: 0
     - _SrcBlend: 1
