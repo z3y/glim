@@ -26,7 +26,7 @@ mod tests {
             throttle_preview_ms: 2,
             callback: test_save_callback,
             probes_callback: test_probes_callback,
-            texture_filter: TextureSamplerFilter::Linear,
+            texture_filter: TextureSamplerFilter::Nearest,
             probe_samples: 4096,
             probe_bounces: 3,
             light_falloff: LightFalloffType::InverseSquare,
@@ -69,8 +69,16 @@ mod tests {
         // for _ in 0..1 {
         // {
         // add_mesh(app, "../meshes/monkey.glb").expect("failed to load mesh");
-        add_mesh(app, "../meshes/random.glb", false, false, Vector3::ZERO, 0)
-            .expect("failed to load mesh");
+        add_mesh(
+            app,
+            "../meshes/random.glb",
+            false,
+            false,
+            Vector3::ZERO,
+            0,
+            false,
+        )
+        .expect("failed to load mesh");
         // let (w, h, emission_pixels) = load_tga("../textures/emission_cute.tga").unwrap();
         let w = 512;
         let h = 512;
@@ -139,7 +147,7 @@ mod tests {
             max_samples: 2048,
             denoise: true,
             dilate: true,
-            fix_seams: true,
+            fix_seams: false,
         };
 
         app_add_lightmap_group(
@@ -152,8 +160,16 @@ mod tests {
         );
 
         // flower
-        add_mesh(app, "../meshes/flower.glb", true, true, Vector3::ZERO, 1)
-            .expect("failed to load mesh");
+        add_mesh(
+            app,
+            "../meshes/flower.glb",
+            true,
+            true,
+            Vector3::new(0.0, -1.05, 0.0),
+            1,
+            true,
+        )
+        .expect("failed to load mesh");
         let (w, h, albedo_pixels) = load_tga_u8("../textures/flower.tga").unwrap();
         let emission_pixels = vec![0.0; (w * h * 4) as usize];
         app_add_lightmap_group(
@@ -209,6 +225,7 @@ mod tests {
         transparent: bool,
         position_offset: Vector3,
         group: u32,
+        backface_gi: bool,
     ) -> std::io::Result<()> {
         let (document, buffers, _) =
             gltf::import(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -268,7 +285,7 @@ mod tests {
                     vertices_length: vertices.len() as u32,
                     indices_length: indices.len() as u32,
                     lightmap_group: group,
-                    backface_gi: false,
+                    backface_gi,
                     transparent,
                 };
                 app_add_mesh(app, mesh);

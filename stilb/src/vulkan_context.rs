@@ -122,11 +122,20 @@ impl VulkanContext {
         physical_devices.sort_by_key(|&pd| {
             let props = unsafe { instance.get_physical_device_properties(pd) };
             match props.device_type {
-                vk::PhysicalDeviceType::DISCRETE_GPU => 0,
-                vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
-                vk::PhysicalDeviceType::VIRTUAL_GPU => 2,
-                vk::PhysicalDeviceType::CPU => 3,
-                _ => 4,
+                vk::PhysicalDeviceType::DISCRETE_GPU => {
+                    let avalilable_extensions =
+                        unsafe { instance.enumerate_device_extension_properties(pd).unwrap() };
+                    for ext in avalilable_extensions {
+                        if ext.extension_name_as_c_str().unwrap() == vk::KHR_RAY_QUERY_NAME {
+                            return 0;
+                        }
+                    }
+                    return 1;
+                }
+                vk::PhysicalDeviceType::INTEGRATED_GPU => 2,
+                vk::PhysicalDeviceType::VIRTUAL_GPU => 3,
+                vk::PhysicalDeviceType::CPU => 4,
+                _ => 5,
             }
         });
 

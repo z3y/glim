@@ -20,7 +20,7 @@ namespace stilb
             Linear = 1,
         }
 
-        public TextureSamplerFilter filter = TextureSamplerFilter.Linear;
+        public TextureSamplerFilter filter = TextureSamplerFilter.Nearest;
 
         [Header("Light Probes")]
         public uint probeSamples = 4096;
