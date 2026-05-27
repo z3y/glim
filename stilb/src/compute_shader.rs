@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
-use shaders::{get_bake_sh_shader, get_bake_shader, get_init_from_camera_shader};
+use shaders::*;
 
 use crate::{
     LightFalloffType, as_bytes, math::Vector3, shader_bindings::*, texture2d::Texture2D,
@@ -140,11 +140,52 @@ pub struct BakePushConstants {
 pub struct BakeSHPushConstants {
     pub lights_count: u32,
     pub max_samples: u32,
-
     pub sample_index: u32,
     pub probes_count: u32,
+
     pub pad0: u32,
     pub bounce_count: u32,
+}
+
+#[repr(C)]
+pub struct BakeDirectPushConstants {
+    pub width: u32,
+    pub height: u32,
+    pub sample_index: u32,
+    pub max_samples: u32,
+
+    pub lights_count: u32,
+    pub pad0: u32,
+    pub pad1: u32,
+    pub pad2: u32,
+}
+
+fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 4] {
+    let size = std::mem::size_of::<u32>();
+
+    let map_entries = [
+        vk::SpecializationMapEntry {
+            constant_id: 0,
+            offset: 0 * (size as u32),
+            size: size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 1,
+            offset: 1 * (size as u32),
+            size: size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 2,
+            offset: 2 * (size as u32),
+            size: size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 3,
+            offset: 3 * (size as u32),
+            size: size,
+        },
+    ];
+    map_entries
 }
 
 pub fn load_init_from_camera_shader(
@@ -315,29 +356,7 @@ pub fn load_bake_shader(
     bind_lights(&mut bindings);
     bind_emissive_triangles(&mut bindings);
 
-    let size = std::mem::size_of::<u32>();
-    let map_entries = [
-        vk::SpecializationMapEntry {
-            constant_id: 0,
-            offset: 0 * (size as u32),
-            size: size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 1,
-            offset: 1 * (size as u32),
-            size: size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 2,
-            offset: 2 * (size as u32),
-            size: size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 3,
-            offset: 3 * (size as u32),
-            size: size,
-        },
-    ];
+    let map_entries = create_specialization_map_entries();
 
     let use_camera: u32 = if use_camera { 1 } else { 0 };
     let data = [
@@ -347,6 +366,8 @@ pub fn load_bake_shader(
         emissive_triangles_count,
     ];
     let data_bytes = as_bytes(&data);
+
+    debug_assert!(data.len() == map_entries.len());
 
     let specialization_info = vk::SpecializationInfo::default()
         .map_entries(&map_entries)
@@ -361,6 +382,56 @@ pub fn load_bake_shader(
     ComputeShader::new(
         vk,
         get_bake_shader(),
+        &bindings,
+        &push_constant_ranges,
+        &specialization_info,
+    )
+}
+
+pub fn load_bake_direct_shader(
+    vk: &VulkanContext,
+    light_falloff_type: LightFalloffType,
+    lightmap_group_count: u32,
+    transparent_primitive_offset: u32,
+) -> ComputeShader {
+    let mut bindings = Vec::new();
+
+    bind_tlas(&mut bindings);
+    bind_visibility(&mut bindings);
+    bind_albedos(&mut bindings, lightmap_group_count);
+    bind_emissions(&mut bindings, lightmap_group_count);
+    bind_lightmap_diffuse(&mut bindings);
+    bind_sampler(&mut bindings);
+    bind_indices(&mut bindings);
+    bind_vertices(&mut bindings);
+    bind_lights(&mut bindings);
+    bind_emissive_triangles(&mut bindings);
+
+    let map_entries = create_specialization_map_entries();
+
+    let data = [
+        0,
+        light_falloff_type as u32,
+        transparent_primitive_offset,
+        0,
+    ];
+    let data_bytes = as_bytes(&data);
+
+    debug_assert!(data.len() == map_entries.len());
+
+    let specialization_info = vk::SpecializationInfo::default()
+        .map_entries(&map_entries)
+        .data(data_bytes);
+
+    let push_constant_ranges = [vk::PushConstantRange {
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        offset: 0,
+        size: std::mem::size_of::<BakeDirectPushConstants>() as u32,
+    }];
+
+    ComputeShader::new(
+        vk,
+        get_bake_direct_shader(),
         &bindings,
         &push_constant_ranges,
         &specialization_info,
@@ -717,6 +788,163 @@ pub fn update_bake_shader(
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
         dst_binding: 12,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
+}
+
+pub fn update_bake_direct_shader(
+    vk: &VulkanContext,
+    shader: &ComputeShader,
+    tlas: vk::AccelerationStructureKHR,
+    target_visibility: vk::ImageView,
+    albedos: &[vk::ImageView],
+    emissions: &[vk::ImageView],
+    target_diffuse: vk::ImageView,
+    sampler: vk::Sampler,
+    indices: vk::Buffer,
+    vertices: vk::Buffer,
+    lights: vk::Buffer,
+) {
+    let mut descriptor_writes = Vec::new();
+
+    // TopLevelAS
+    let tlas = [tlas];
+    let mut info =
+        vk::WriteDescriptorSetAccelerationStructureKHR::default().acceleration_structures(&tlas);
+    let write = vk::WriteDescriptorSet::default()
+        .push_next(&mut info)
+        .dst_set(shader.descriptor_set)
+        .dst_binding(0)
+        .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
+        .descriptor_count(1);
+    descriptor_writes.push(write);
+
+    // VisibilityBuffer
+    let info = [vk::DescriptorImageInfo {
+        image_view: target_visibility,
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 2,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
+
+    // Albedo
+    let infos: Vec<vk::DescriptorImageInfo> = albedos
+        .iter()
+        .map(|tex| vk::DescriptorImageInfo {
+            image_view: *tex,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ..Default::default()
+        })
+        .collect();
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 3,
+        dst_array_element: 0,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&infos);
+    descriptor_writes.push(write);
+
+    // Emission
+    let infos: Vec<vk::DescriptorImageInfo> = emissions
+        .iter()
+        .map(|tex| vk::DescriptorImageInfo {
+            image_view: *tex,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ..Default::default()
+        })
+        .collect();
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 5,
+        dst_array_element: 0,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&infos);
+    descriptor_writes.push(write);
+
+    // TextureSampler
+    let info = [vk::DescriptorImageInfo {
+        sampler,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 6,
+        descriptor_type: vk::DescriptorType::SAMPLER,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
+
+    // LightmapDiffuse
+    let info = [vk::DescriptorImageInfo {
+        image_view: target_diffuse,
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 4,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
+
+    // Indices
+    let info = [vk::DescriptorBufferInfo {
+        buffer: indices,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 8,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // Vertices
+    let info = [vk::DescriptorBufferInfo {
+        buffer: vertices,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 9,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // Lights
+    let info = [vk::DescriptorBufferInfo {
+        buffer: lights,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 10,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };

@@ -8,7 +8,7 @@ use glfw_sys::{
 };
 
 use crate::buffer::Buffer;
-use crate::compute_shader::{BakeSHPushConstants, load_bake_sh_shader, update_bake_sh_shader};
+use crate::compute_shader::*;
 use crate::graphics_shader::update_visibility_shader;
 use crate::lights::light_buffer_flags;
 use crate::seams::{Seam, fix_seams, inpaint};
@@ -753,121 +753,267 @@ fn bake_lightmaps(app: &mut Stilb) {
             None
         };
 
-        for i in 0..app.groups.len() {
-            let group_index = i as u32;
-            let bake_start_time = std::time::Instant::now();
+        let mut bake_direct_shader = load_bake_direct_shader(
+            &app.vk,
+            app.config.light_falloff,
+            app.groups.len() as u32,
+            (app.opaque_mesh.indices.len() / 3) as u32,
+        );
 
-            let group = &app.groups[i];
-            let width = group.settings.width;
-            let height = group.settings.height;
-            app.push.sample_index = 0;
-            let settings = group.settings.clone();
-            update_render_target(app, &settings, group_index);
+        let group = &app.groups[0];
+        let width = group.settings.width;
+        let height = group.settings.height;
+        app.push.sample_index = 0;
+        let settings = group.settings.clone();
+        update_render_target(app, &settings, 0);
 
-            let RenderTarget::NonDirectional {
-                visibility,
-                diffuse,
-            } = &mut app.render_target
-            else {
-                unreachable!()
-            };
+        let RenderTarget::NonDirectional {
+            visibility,
+            diffuse,
+        } = &mut app.render_target
+        else {
+            unreachable!()
+        };
 
-            update_bake_shader(
-                &app.vk,
-                &app.bake_shader,
-                app.tlas.acceleration_structure(),
-                visibility.view(),
-                &albedos,
-                &emissions,
-                diffuse.view(),
-                app.texture_sampler,
-                app.gpu_mesh.index_buffer.buffer,
-                app.gpu_mesh.vertex_buffer.buffer,
-                app.gpu_lights.buffer,
-                app.emissive_triangles_buffer.buffer,
-            );
+        let shader = &bake_direct_shader;
 
-            loop {
-                render_sample_bake(app, &settings);
-                if app.push.sample_index >= settings.max_samples {
-                    break;
-                }
-            }
+        update_bake_direct_shader(
+            &app.vk,
+            shader,
+            app.tlas.acceleration_structure(),
+            visibility.view(),
+            &albedos,
+            &emissions,
+            diffuse.view(),
+            app.texture_sampler,
+            app.gpu_mesh.index_buffer.buffer,
+            app.gpu_mesh.vertex_buffer.buffer,
+            app.gpu_lights.buffer,
+        );
 
-            let now = std::time::Instant::now();
-            let bake_time = now.duration_since(bake_start_time).as_secs_f32();
-            println!("bake complete in {}s", bake_time);
+        let cmd = app.vk.command_buffer;
+        let vk = &app.vk.device;
 
+        let groups_x = (width + 7) / 8;
+        let groups_y = (height + 7) / 8;
+
+        let mut push = BakeDirectPushConstants {
+            width,
+            height,
+            sample_index: 0,
+            max_samples: settings.max_samples,
+            lights_count: app.cpu_lights.len() as u32,
+            pad0: 0,
+            pad1: 0,
+            pad2: 0,
+        };
+
+        let begin_info = vk::CommandBufferBeginInfo {
+            flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+            ..Default::default()
+        };
+
+        loop {
             unsafe {
-                app.vk.device.device_wait_idle().unwrap();
-            }
+                vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
+                    .unwrap();
 
-            let RenderTarget::NonDirectional {
-                visibility: _visibility,
-                diffuse,
-            } = &mut app.render_target
-            else {
-                unreachable!()
-            };
+                vk.begin_command_buffer(cmd, &begin_info).unwrap();
 
-            let callback = app.config.callback;
-
-            let mut pixels = diffuse.read_pixels(&app.vk);
-
-            if settings.dilate {
-                let start_time = std::time::Instant::now();
-                let backface_threshold = 0.9;
-
-                inpaint(&mut pixels, width, height, backface_threshold, 32);
-
-                let now = std::time::Instant::now();
-                let elapsed = now.duration_since(start_time).as_secs_f32();
-                println!("dilated in {}s", elapsed);
-            }
-
-            if settings.denoise {
-                let start_time = std::time::Instant::now();
-
-                match &oidn {
-                    Some(oidn) => {
-                        oidn.denoise(&mut pixels, width as usize, height as usize);
-                    }
-                    None => {}
+                if diffuse.layout() != vk::ImageLayout::GENERAL {
+                    let barrier = diffuse.barrier(
+                        vk::ImageLayout::GENERAL,
+                        vk::AccessFlags::default(),
+                        vk::AccessFlags::SHADER_WRITE,
+                    );
+                    vk.cmd_pipeline_barrier(
+                        cmd,
+                        vk::PipelineStageFlags::TOP_OF_PIPE,
+                        vk::PipelineStageFlags::COMPUTE_SHADER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[barrier],
+                    );
                 }
 
-                let now = std::time::Instant::now();
-                let elapsed = now.duration_since(start_time).as_secs_f32();
-                println!("denoised in {}s", elapsed);
-            }
+                vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
 
-            if settings.fix_seams {
-                let start_time = std::time::Instant::now();
-
-                fix_seams(
-                    &mut pixels,
-                    width,
-                    height,
-                    &app.seams,
-                    app.config.seams_debug,
-                    group_index,
+                vk.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    shader.pipeline_layout,
+                    0,
+                    &[shader.descriptor_set],
+                    &[],
                 );
 
-                let now = std::time::Instant::now();
-                let elapsed = now.duration_since(start_time).as_secs_f32();
-                println!("fixed seams in {}s", elapsed);
-            }
+                let constants_bytes = as_bytes(&push);
 
-            let readback_data = ReadbackData {
-                group_index,
-                ty: 0,
-                pixels: pixels.as_ptr(),
-                pixels_count: pixels.len() as u32,
-                width,
-                height,
+                vk.cmd_push_constants(
+                    cmd,
+                    shader.pipeline_layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &constants_bytes,
+                );
+
+                vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+
+                let cmds = [cmd];
+                let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+
+                vk.end_command_buffer(cmd).unwrap();
+
+                vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
+                    .unwrap();
+
+                vk.queue_wait_idle(app.vk.compute_queue).unwrap()
             };
 
-            callback(readback_data);
+            if push.sample_index >= push.max_samples {
+                break;
+            }
+
+            push.sample_index += 1;
         }
+
+        bake_direct_shader.destroy(&app.vk);
+
+        unsafe {
+            app.vk.device.device_wait_idle().unwrap();
+        }
+
+        let callback = app.config.callback;
+
+        let pixels = diffuse.read_pixels(&app.vk);
+
+        let readback_data = ReadbackData {
+            group_index: 0,
+            ty: 0,
+            pixels: pixels.as_ptr(),
+            pixels_count: pixels.len() as u32,
+            width,
+            height,
+        };
+
+        callback(readback_data);
+
+        // for i in 0..app.groups.len() {
+        //     let group_index = i as u32;
+        //     let bake_start_time = std::time::Instant::now();
+
+        //     let group = &app.groups[i];
+        //     let width = group.settings.width;
+        //     let height = group.settings.height;
+        //     app.push.sample_index = 0;
+        //     let settings = group.settings.clone();
+        //     update_render_target(app, &settings, group_index);
+
+        //     let RenderTarget::NonDirectional {
+        //         visibility,
+        //         diffuse,
+        //     } = &mut app.render_target
+        //     else {
+        //         unreachable!()
+        //     };
+
+        //     update_bake_shader(
+        //         &app.vk,
+        //         &app.bake_shader,
+        //         app.tlas.acceleration_structure(),
+        //         visibility.view(),
+        //         &albedos,
+        //         &emissions,
+        //         diffuse.view(),
+        //         app.texture_sampler,
+        //         app.gpu_mesh.index_buffer.buffer,
+        //         app.gpu_mesh.vertex_buffer.buffer,
+        //         app.gpu_lights.buffer,
+        //         app.emissive_triangles_buffer.buffer,
+        //     );
+
+        //     loop {
+        //         render_sample_bake(app, &settings);
+        //         if app.push.sample_index >= settings.max_samples {
+        //             break;
+        //         }
+        //     }
+
+        //     let now = std::time::Instant::now();
+        //     let bake_time = now.duration_since(bake_start_time).as_secs_f32();
+        //     println!("bake complete in {}s", bake_time);
+
+        //     unsafe {
+        //         app.vk.device.device_wait_idle().unwrap();
+        //     }
+
+        //     let RenderTarget::NonDirectional {
+        //         visibility: _visibility,
+        //         diffuse,
+        //     } = &mut app.render_target
+        //     else {
+        //         unreachable!()
+        //     };
+
+        //     let callback = app.config.callback;
+
+        //     let mut pixels = diffuse.read_pixels(&app.vk);
+
+        //     if settings.dilate {
+        //         let start_time = std::time::Instant::now();
+        //         let backface_threshold = 0.9;
+
+        //         inpaint(&mut pixels, width, height, backface_threshold, 32);
+
+        //         let now = std::time::Instant::now();
+        //         let elapsed = now.duration_since(start_time).as_secs_f32();
+        //         println!("dilated in {}s", elapsed);
+        //     }
+
+        //     if settings.denoise {
+        //         let start_time = std::time::Instant::now();
+
+        //         match &oidn {
+        //             Some(oidn) => {
+        //                 oidn.denoise(&mut pixels, width as usize, height as usize);
+        //             }
+        //             None => {}
+        //         }
+
+        //         let now = std::time::Instant::now();
+        //         let elapsed = now.duration_since(start_time).as_secs_f32();
+        //         println!("denoised in {}s", elapsed);
+        //     }
+
+        //     if settings.fix_seams {
+        //         let start_time = std::time::Instant::now();
+
+        //         fix_seams(
+        //             &mut pixels,
+        //             width,
+        //             height,
+        //             &app.seams,
+        //             app.config.seams_debug,
+        //             group_index,
+        //         );
+
+        //         let now = std::time::Instant::now();
+        //         let elapsed = now.duration_since(start_time).as_secs_f32();
+        //         println!("fixed seams in {}s", elapsed);
+        //     }
+
+        //     let readback_data = ReadbackData {
+        //         group_index,
+        //         ty: 0,
+        //         pixels: pixels.as_ptr(),
+        //         pixels_count: pixels.len() as u32,
+        //         width,
+        //         height,
+        //     };
+
+        //     callback(readback_data);
+        // }
     }
 
     if app.probes.len() > 0 {

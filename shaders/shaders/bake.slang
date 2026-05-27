@@ -1,7 +1,7 @@
 #include "includes/core.slang"
 #include "includes/sobol_burley.slang"
 
-#define MIS
+// #define MIS
 
 [[vk::push_constant]]
 PushConstants Push;
@@ -305,6 +305,7 @@ void ShadeLight(inout Spectrum spectrum, Light light, Surface surface, float2 xi
             xiBounce = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
             float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+
             if (emissiveTriangleCount > 0)
             {
                 if (any(bounceEmission > 0.0))

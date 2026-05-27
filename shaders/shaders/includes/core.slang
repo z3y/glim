@@ -210,9 +210,9 @@ float3 RandomDirectionInHemisphere(float3 normal, float2 rand)
     return tangent * localDir.x + bitangent * localDir.y + normal * localDir.z;
 }
 
-void AccumulateColor(RWTexture2D<float4> tex, uint2 coords, uint sample, float4 color)
+void AccumulateColor(RWTexture2D<float4> tex, uint2 coords, uint sampleIndex, float4 color)
 {
-    if (sample == 0)
+    if (sampleIndex == 0)
     {
         tex[coords] = color;
     }
@@ -220,7 +220,7 @@ void AccumulateColor(RWTexture2D<float4> tex, uint2 coords, uint sample, float4 
     {
         float4 previousColor = LightmapDiffuse[coords];
 
-        float weight = 1.0 / (float(sample) + 1.0);
+        float weight = 1.0 / (float(sampleIndex) + 1.0);
         float4 accumulatedColor = lerp(previousColor, color, weight);
 
         tex[coords] = accumulatedColor;

@@ -49,6 +49,12 @@ fn main() {
 
     shaders.push(Shader {
         ty: ShaderType::Compute,
+        src: "bake_direct.slang".into(),
+        dst: "bake_direct.spv".into(),
+    });
+
+    shaders.push(Shader {
+        ty: ShaderType::Compute,
         src: "bake_sh.slang".into(),
         dst: "bake_sh.spv".into(),
     });
