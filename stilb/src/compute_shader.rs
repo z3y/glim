@@ -4,7 +4,8 @@ use ash::vk::{self, Handle};
 use shaders::{get_bake_sh_shader, get_bake_shader, get_init_from_camera_shader};
 
 use crate::{
-    LightFalloffType, as_bytes, math::Vector3, texture2d::Texture2D, vulkan_context::VulkanContext,
+    LightFalloffType, as_bytes, math::Vector3, shader_bindings::*, texture2d::Texture2D,
+    vulkan_context::VulkanContext,
 };
 
 pub struct ComputeShader {
@@ -124,6 +125,28 @@ pub struct InitFromCameraPushConstants {
     pub pad: u32,
 }
 
+#[repr(C)]
+pub struct BakePushConstants {
+    pub lights_count: u32,
+    pub max_samples: u32,
+
+    pub sample_index: u32,
+    pub width: u32,
+    pub height: u32,
+    pub bounce_count: u32,
+}
+
+#[repr(C)]
+pub struct BakeSHPushConstants {
+    pub lights_count: u32,
+    pub max_samples: u32,
+
+    pub sample_index: u32,
+    pub probes_count: u32,
+    pub pad0: u32,
+    pub bounce_count: u32,
+}
+
 pub fn load_init_from_camera_shader(
     vk: &VulkanContext,
     lightmap_groups: u32,
@@ -131,59 +154,12 @@ pub fn load_init_from_camera_shader(
 ) -> ComputeShader {
     let mut bindings = Vec::new();
 
-    // VisibilityBuffer
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 2,
-        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // TopLevelAS
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 0,
-        descriptor_type: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Indices
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Vertices
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Albedo
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 3,
-        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-        descriptor_count: lightmap_groups,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Sampler
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 6,
-        descriptor_type: vk::DescriptorType::SAMPLER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
+    bind_visibility(&mut bindings);
+    bind_tlas(&mut bindings);
+    bind_indices(&mut bindings);
+    bind_vertices(&mut bindings);
+    bind_albedos(&mut bindings, lightmap_groups);
+    bind_sampler(&mut bindings);
 
     let size = std::mem::size_of::<u32>();
     let map_entries = [vk::SpecializationMapEntry {
@@ -318,167 +294,26 @@ pub fn update_init_from_camera_shader(
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }
 
-// #[cfg(test)]
-// pub fn load_shader_test(vk: &VulkanContext) -> ComputeShader {
-//     use shaders::get_test_shader;
-
-//     let mut bindings = Vec::new();
-
-//     bindings.push(vk::DescriptorSetLayoutBinding {
-//         binding: 0,
-//         descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-//         descriptor_count: 1,
-//         stage_flags: vk::ShaderStageFlags::COMPUTE,
-//         ..Default::default()
-//     });
-
-//     let specialization_info = vk::SpecializationInfo::default();
-
-//     ComputeShader::new(vk, get_test_shader(), &bindings, &[], &specialization_info)
-// }
-
-// #[cfg(test)]
-// pub fn update_test_shader(vk: &VulkanContext, shader: &ComputeShader, binding0: vk::ImageView) {
-//     let image_info = [vk::DescriptorImageInfo {
-//         image_view: binding0,
-//         image_layout: vk::ImageLayout::GENERAL,
-//         ..Default::default()
-//     }];
-
-//     let mut image_write = vk::WriteDescriptorSet {
-//         dst_set: shader.descriptor_set,
-//         dst_binding: 0,
-//         descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-//         ..Default::default()
-//     };
-//     image_write = image_write.image_info(&image_info);
-
-//     let descriptor_writes = [image_write];
-
-//     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
-// }
-
-#[repr(C)]
-pub struct BakePushConstants {
-    pub lights_count: u32,
-    pub max_samples: u32,
-
-    pub sample_index: u32,
-    pub width: u32,
-    pub height: u32,
-    pub bounce_count: u32,
-}
-
-#[repr(C)]
-pub struct BakeSHPushConstants {
-    pub lights_count: u32,
-    pub max_samples: u32,
-
-    pub sample_index: u32,
-    pub probes_count: u32,
-    pub pad0: u32,
-    pub bounce_count: u32,
-}
-
 pub fn load_bake_shader(
     vk: &VulkanContext,
     use_camera: bool,
     light_falloff_type: LightFalloffType,
-    lightmap_groups: u32,
+    lightmap_group_count: u32,
     transparent_primitive_offset: u32,
     emissive_triangles_count: u32,
 ) -> ComputeShader {
     let mut bindings = Vec::new();
 
-    // TopLevelAS
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 0,
-        descriptor_type: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // VisibilityBuffer
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 2,
-        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Albedo
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 3,
-        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-        descriptor_count: lightmap_groups,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Emission
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 5,
-        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-        descriptor_count: lightmap_groups,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // LightmapDiffuse
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 4,
-        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Sampler
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 6,
-        descriptor_type: vk::DescriptorType::SAMPLER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Indices
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Vertices
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Lights
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 10,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // EmissiveTriangles
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 12,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
+    bind_tlas(&mut bindings);
+    bind_visibility(&mut bindings);
+    bind_albedos(&mut bindings, lightmap_group_count);
+    bind_emissions(&mut bindings, lightmap_group_count);
+    bind_lightmap_diffuse(&mut bindings);
+    bind_sampler(&mut bindings);
+    bind_indices(&mut bindings);
+    bind_vertices(&mut bindings);
+    bind_lights(&mut bindings);
+    bind_emissive_triangles(&mut bindings);
 
     let size = std::mem::size_of::<u32>();
     let map_entries = [
@@ -534,82 +369,19 @@ pub fn load_bake_shader(
 
 pub fn load_bake_sh_shader(
     vk: &VulkanContext,
-    lightmap_groups: u32,
+    lightmap_group_count: u32,
     light_falloff_type: LightFalloffType,
 ) -> ComputeShader {
     let mut bindings = Vec::new();
 
-    // TopLevelAS
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 0,
-        descriptor_type: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Albedo
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 3,
-        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-        descriptor_count: lightmap_groups,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Emission
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 5,
-        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-        descriptor_count: lightmap_groups,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Sampler
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 6,
-        descriptor_type: vk::DescriptorType::SAMPLER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // ProbeSH
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 7,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Indices
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Vertices
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-
-    // Lights
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 10,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
+    bind_tlas(&mut bindings);
+    bind_albedos(&mut bindings, lightmap_group_count);
+    bind_emissions(&mut bindings, lightmap_group_count);
+    bind_sampler(&mut bindings);
+    bind_probe_sh(&mut bindings);
+    bind_indices(&mut bindings);
+    bind_vertices(&mut bindings);
+    bind_lights(&mut bindings);
 
     let push_constant_ranges = [vk::PushConstantRange {
         stage_flags: vk::ShaderStageFlags::COMPUTE,

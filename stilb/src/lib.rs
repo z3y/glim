@@ -41,6 +41,7 @@ mod mesh;
 mod oidn;
 mod seams;
 mod sh;
+mod shader_bindings;
 mod test;
 mod texture2d;
 mod vulkan_cmd;

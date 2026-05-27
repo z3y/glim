@@ -4,9 +4,9 @@ mod tests {
 
     use crate::bindings::*;
     use crate::bmp::save_bmp;
-    use crate::lights::LightType;
+    use crate::math::*;
     use crate::mesh::FfiMesh;
-    use crate::{math::*, *};
+    use crate::*;
 
     fn make_config() -> StilbConfig {
         let preview_settings = LightmapSettings {
@@ -253,6 +253,7 @@ mod tests {
         app_destroy(app);
     }
 
+    #[allow(dead_code)]
     pub fn load_tga_f32(path: &str) -> std::io::Result<(u32, u32, Vec<f32>)> {
         let img = image::open(path)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
@@ -265,6 +266,7 @@ mod tests {
         Ok((width, height, pixels))
     }
 
+    #[allow(dead_code)]
     pub fn load_tga_u8(path: &str) -> std::io::Result<(u32, u32, Vec<u8>)> {
         let img = image::open(path)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?

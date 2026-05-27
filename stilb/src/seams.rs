@@ -227,7 +227,7 @@ pub fn find_seams(
 }
 
 // todo slow
-pub fn dilate(pixels: &mut [f32], width: u32, height: u32, valid_threshold: f32) {
+pub fn _dilate(pixels: &mut [f32], width: u32, height: u32, valid_threshold: f32) {
     let w = width as usize;
     let h = height as usize;
 
@@ -811,16 +811,16 @@ impl Row {
 pub struct SparseMat {
     pub rows: Vec<Row>,
     pub num_rows: usize,
-    pub num_cols: usize,
+    // pub num_cols: usize,
 }
 
 impl SparseMat {
-    pub fn new(num_rows: usize, num_cols: usize) -> Self {
+    pub fn new(num_rows: usize, _num_cols: usize) -> Self {
         let rows = vec![Row::new(); num_rows];
         SparseMat {
             rows,
             num_rows,
-            num_cols,
+            // num_cols,
         }
     }
 
