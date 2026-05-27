@@ -871,11 +871,11 @@ fn bake_lightmaps(app: &mut Stilb) {
                 vk.queue_wait_idle(app.vk.compute_queue).unwrap()
             };
 
+            push.sample_index += 1;
+
             if push.sample_index >= push.max_samples {
                 break;
             }
-
-            push.sample_index += 1;
         }
 
         bake_direct_shader.destroy(&app.vk);
@@ -993,11 +993,99 @@ fn bake_lightmaps(app: &mut Stilb) {
                 vk.queue_wait_idle(app.vk.compute_queue).unwrap()
             };
 
+            push.sample_index += 1;
+
             if push.sample_index >= push.max_samples {
                 break;
             }
+        }
+
+        unsafe {
+            app.vk.device.device_wait_idle().unwrap();
+        }
+
+        let mut bounce_pixels = diffuse.read_pixels(&app.vk);
+
+        for (i, p) in pixels.iter().enumerate() {
+            bounce_pixels[i] += p;
+        }
+
+        diffuse.set_pixels(&app.vk, &bounce_pixels);
+
+        let mut push = BakeBouncePushConstants {
+            width,
+            height,
+            sample_index: 0,
+            max_samples: settings.max_samples,
+            bounce_index: 1,
+            pad0: 0,
+            pad1: 0,
+            pad2: 0,
+        };
+
+        loop {
+            unsafe {
+                vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
+                    .unwrap();
+
+                vk.begin_command_buffer(cmd, &begin_info).unwrap();
+
+                if diffuse.layout() != vk::ImageLayout::GENERAL {
+                    let barrier = diffuse.barrier(
+                        vk::ImageLayout::GENERAL,
+                        vk::AccessFlags::default(),
+                        vk::AccessFlags::SHADER_WRITE,
+                    );
+                    vk.cmd_pipeline_barrier(
+                        cmd,
+                        vk::PipelineStageFlags::TOP_OF_PIPE,
+                        vk::PipelineStageFlags::COMPUTE_SHADER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[barrier],
+                    );
+                }
+
+                vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+                vk.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    shader.pipeline_layout,
+                    0,
+                    &[shader.descriptor_set],
+                    &[],
+                );
+
+                let constants_bytes = as_bytes(&push);
+
+                vk.cmd_push_constants(
+                    cmd,
+                    shader.pipeline_layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &constants_bytes,
+                );
+
+                vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+
+                let cmds = [cmd];
+                let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+
+                vk.end_command_buffer(cmd).unwrap();
+
+                vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
+                    .unwrap();
+
+                vk.queue_wait_idle(app.vk.compute_queue).unwrap()
+            };
 
             push.sample_index += 1;
+
+            if push.sample_index >= push.max_samples {
+                break;
+            }
         }
 
         unsafe {
@@ -1006,17 +1094,17 @@ fn bake_lightmaps(app: &mut Stilb) {
 
         let callback = app.config.callback;
 
-        let mut bounce_pixels = diffuse.read_pixels(&app.vk);
+        let mut bounce_pixels2 = diffuse.read_pixels(&app.vk);
 
-        for (i, p) in pixels.iter().enumerate() {
-            bounce_pixels[i] += p;
+        for (i, p) in bounce_pixels.iter().enumerate() {
+            bounce_pixels2[i] += p;
         }
 
         let readback_data = ReadbackData {
             group_index: 0,
             ty: 0,
-            pixels: bounce_pixels.as_ptr(),
-            pixels_count: bounce_pixels.len() as u32,
+            pixels: bounce_pixels2.as_ptr(),
+            pixels_count: bounce_pixels2.len() as u32,
             width,
             height,
         };
