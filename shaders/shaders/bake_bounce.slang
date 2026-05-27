@@ -85,6 +85,10 @@ struct PushConstants
 
         float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
         float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+        if (bounceIndex > 0)
+        {
+            bounceEmission = 0;
+        }
 
         uint2 coords = uint2(float2(surface.uv.x, 1.0 - surface.uv.y) * resolution);
         float3 previousBounce = PreviousBounce[coords].rgb;

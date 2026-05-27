@@ -101,6 +101,28 @@ void ShadeLightDirect(inout Spectrum spectrum, Light light, Surface surface, flo
     uint sobolIndexMask = ~0u;
     uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
 
+    // todo temp
+    if (sampleIndex == 0)
+    {
+        visibility = AdjustSamplePositions(surface, visibility);
+        VisibilityBuffer[coords] = visibility;
+        encoded = asuint(visibility.a);
+
+        if (encoded == 0)
+        {
+            return;
+        }
+
+        primitiveID = asuint(visibility.z);
+        bary = visibility.xy;
+        useSmoothP = (encoded & (1 << 1)) != 0;
+    }
+
+    if (useSmoothP)
+    {
+        surface.P = surface.smoothP;
+    }
+
     float2 xiLight = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
 
     Spectrum spectrum = SpectrumZero();
