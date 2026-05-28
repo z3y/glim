@@ -7,6 +7,7 @@ use glfw_sys::{
     glfwSetWindowShouldClose, glfwWindowShouldClose,
 };
 
+use crate::bindings::*;
 use crate::buffer::Buffer;
 use crate::compute_shader::*;
 use crate::graphics_shader::update_visibility_shader;
@@ -134,89 +135,12 @@ pub enum RenderTarget {
     None,
 }
 
-type ReadbackCallback = extern "C" fn(data: ReadbackData);
-type ReadbackProbesCallback = extern "C" fn(data: ReadbackProbesData);
-
-#[repr(C)]
-pub struct ReadbackData {
-    pub group_index: u32,
-    pub ty: u32,
-    pub width: u32,
-    pub height: u32,
-    pub pixels: *const f32,
-    pub pixels_count: u32,
-}
-
-#[repr(C)]
-pub struct ReadbackProbesData {
-    pub probes: *const SHProbe,
-    pub pixels_count: u32,
-}
-
-#[repr(C)]
-#[derive(Clone, Debug)]
-pub struct LightmapSettings {
-    pub width: u32,
-    pub height: u32,
-
-    pub max_samples: u32,
-    pub bounce_count: u32,
-
-    pub dilate: bool,
-    pub denoise: bool,
-    pub fix_seams: bool,
-}
-
 pub struct LightmapGroup {
     pub settings: LightmapSettings,
 
     pub albedo: Texture2D,
     pub emission: Texture2D,
     pub emission_pixels: Vec<f32>,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, PartialEq)]
-pub enum CoordinateSystem {
-    Default = 0,
-    Unity = 1,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, PartialEq)]
-pub enum TextureSamplerFilter {
-    Nearest = 0,
-    Linear = 1,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, PartialEq)]
-pub enum LightFalloffType {
-    InverseSquare = 0,
-    UnityBuiltIn = 1,
-}
-
-#[repr(C)]
-#[derive(Clone)]
-pub struct StilbConfig {
-    pub coordinate_system: CoordinateSystem,
-
-    pub is_preview: bool,
-    pub vulkan_validation_layers: bool,
-    pub seams_debug: bool,
-    pub throttle_preview_ms: u32,
-    pub preview_settings: LightmapSettings,
-
-    pub camera_position: Vector3,
-    pub camera_forward: Vector3,
-
-    pub callback: ReadbackCallback,
-    pub probes_callback: ReadbackProbesCallback,
-
-    pub texture_filter: TextureSamplerFilter,
-    pub probe_samples: u32,
-    pub probe_bounces: u32,
-    pub light_falloff: LightFalloffType,
 }
 
 #[inline]
@@ -236,7 +160,7 @@ fn clamp_bounces(bounces: u32) -> u32 {
     bounces.clamp(0, MAX_BOUNCES)
 }
 
-fn render_visibility_buffer_bake(
+fn render_visibility_from_lightmap(
     app: &mut Stilb,
     width: u32,
     height: u32,
@@ -380,7 +304,7 @@ fn render_visibility_buffer_bake(
     visibility
 }
 
-fn render_visibility_buffer_camera(app: &mut Stilb, width: u32, height: u32) -> Texture2D {
+fn render_visibility_from_camera(app: &mut Stilb, width: u32, height: u32) -> Texture2D {
     let vk = &mut app.vk;
     let shader = &app.init_from_camera_shader;
 
@@ -410,7 +334,7 @@ fn render_visibility_buffer_camera(app: &mut Stilb, width: u32, height: u32) -> 
     visibility
 }
 
-fn rasterize_visibility_from_camera(app: &mut Stilb, cmd: vk::CommandBuffer) {
+fn update_visibility_from_camera(app: &mut Stilb, cmd: vk::CommandBuffer) {
     let width = app.config.preview_settings.width;
     let height = app.config.preview_settings.height;
 
@@ -518,8 +442,8 @@ fn clear_texture(
     }
 }
 
-// main bake function
-fn start_bake(app: &mut Stilb) {
+// main render function
+fn initialize_render(app: &mut Stilb) {
     assert!(app.opaque_mesh.vertices.len() > 0 || app.transparent_mesh.vertices.len() > 0);
 
     let total_triangles = (app.opaque_mesh.indices.len() + app.transparent_mesh.indices.len()) / 3;
@@ -588,7 +512,14 @@ fn start_bake(app: &mut Stilb) {
 
     app.tlas = create_tlas(&app.vk, blas);
 
-    bake_lightmaps(app);
+    if app.config.is_preview {
+        render_preview(app);
+    } else {
+        render_lightmaps(app);
+    }
+    unsafe {
+        app.vk.device.device_wait_idle().unwrap();
+    }
 }
 
 fn initialize_bake_push_constants(
@@ -619,131 +550,160 @@ fn initialize_bake_sh_push_constants(app: &mut Stilb, max_samples: u32, bounce_c
     };
 }
 
-fn bake_lightmaps(app: &mut Stilb) {
+fn render_preview(app: &mut Stilb) {
+    let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
+    let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
+
+    let window = app.window;
+
+    let preview_settings = app.config.preview_settings.clone();
+
+    app.init_from_camera_shader = load_init_from_camera_shader(
+        &app.vk,
+        app.groups.len() as u32,
+        (app.opaque_mesh.indices.len() / 3) as u32,
+    );
+
+    update_render_target(app, &preview_settings, 0);
+
+    let RenderTarget::NonDirectional {
+        visibility,
+        diffuse,
+    } = &mut app.render_target
+    else {
+        unreachable!()
+    };
+
+    update_bake_shader(
+        &app.vk,
+        &app.bake_shader,
+        app.tlas.acceleration_structure(),
+        visibility.view(),
+        &albedos,
+        &emissions,
+        diffuse.view(),
+        app.texture_sampler,
+        app.gpu_mesh.index_buffer.buffer,
+        app.gpu_mesh.vertex_buffer.buffer,
+        app.gpu_lights.buffer,
+        app.emissive_triangles_buffer.buffer,
+    );
+
+    let mut previous_time = std::time::Instant::now();
+
+    let mut bake_start_time = std::time::Instant::now();
+    let mut bake_complete_printed = false;
+
+    unsafe {
+        while glfwWindowShouldClose(window) == 0 {
+            glfwPollEvents();
+
+            print!(
+                "\rSample: {} / {}",
+                app.push.sample_index, preview_settings.max_samples
+            );
+            io::stdout().flush().unwrap();
+
+            let now = std::time::Instant::now();
+
+            if glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS {
+                glfwSetWindowShouldClose(window, 1);
+            }
+
+            let delta_time = now.duration_since(previous_time).as_secs_f32();
+
+            update_camera(app, delta_time);
+
+            if !app.preview_initialized {
+                app.push.sample_index = 0;
+                bake_start_time = std::time::Instant::now();
+                bake_complete_printed = false;
+            }
+
+            // render finished
+            if app.push.sample_index >= preview_settings.max_samples {
+                std::thread::sleep(Duration::from_millis(16));
+                if !bake_complete_printed {
+                    io::stdout().flush().unwrap();
+                    let bake_time = now.duration_since(bake_start_time).as_secs_f32();
+                    println!("bake complete in {}s", bake_time);
+                    bake_complete_printed = true;
+                }
+            }
+
+            if !render_sample_camera(app, &preview_settings) {
+                // restart bake
+                app.config.preview_settings.width = app.vk.swapchain.extent.width;
+                app.config.preview_settings.height = app.vk.swapchain.extent.height;
+
+                update_render_target(app, &preview_settings, 0);
+                let RenderTarget::NonDirectional {
+                    visibility,
+                    diffuse,
+                } = &mut app.render_target
+                else {
+                    unreachable!()
+                };
+
+                update_bake_shader(
+                    &app.vk,
+                    &app.bake_shader,
+                    app.tlas.acceleration_structure(),
+                    visibility.view(),
+                    &albedos,
+                    &emissions,
+                    diffuse.view(),
+                    app.texture_sampler,
+                    app.gpu_mesh.index_buffer.buffer,
+                    app.gpu_mesh.vertex_buffer.buffer,
+                    app.gpu_lights.buffer,
+                    app.emissive_triangles_buffer.buffer,
+                );
+
+                continue;
+            }
+
+            if app.config.throttle_preview_ms > 0 {
+                let target_duration_secs = app.config.throttle_preview_ms as f32 / 1000.0;
+                let sleep_duration = target_duration_secs - delta_time;
+                if sleep_duration > 0.0 {
+                    std::thread::sleep(Duration::from_secs_f32(sleep_duration));
+                }
+            }
+
+            previous_time = now;
+        }
+    }
+}
+
+fn render_lightmaps(app: &mut Stilb) {
+    let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
+    let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
+
+    let any_denoise = app.groups.iter().any(|x| x.settings.denoise);
+
+    let oidn = if any_denoise {
+        Some(Oidn::load().expect("failed to load oidn"))
+    } else {
+        None
+    };
+
+    let mut bake_direct_shader = load_bake_direct_shader(
+        &app.vk,
+        app.config.light_falloff,
+        app.groups.len() as u32,
+        (app.opaque_mesh.indices.len() / 3) as u32,
+    );
+
+    bake_direct_shader.destroy(&app.vk);
+}
+
+fn _bake_lightmaps(app: &mut Stilb) {
     let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
     let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
 
     if app.config.is_preview {
-        let window = app.window;
-
-        let preview_settings = app.config.preview_settings.clone();
-
-        app.init_from_camera_shader = load_init_from_camera_shader(
-            &app.vk,
-            app.groups.len() as u32,
-            (app.opaque_mesh.indices.len() / 3) as u32,
-        );
-
-        update_render_target(app, &preview_settings, 0);
-
-        let RenderTarget::NonDirectional {
-            visibility,
-            diffuse,
-        } = &mut app.render_target
-        else {
-            unreachable!()
-        };
-
-        update_bake_shader(
-            &app.vk,
-            &app.bake_shader,
-            app.tlas.acceleration_structure(),
-            visibility.view(),
-            &albedos,
-            &emissions,
-            diffuse.view(),
-            app.texture_sampler,
-            app.gpu_mesh.index_buffer.buffer,
-            app.gpu_mesh.vertex_buffer.buffer,
-            app.gpu_lights.buffer,
-            app.emissive_triangles_buffer.buffer,
-        );
-
-        let mut previous_time = std::time::Instant::now();
-
-        let mut bake_start_time = std::time::Instant::now();
-        let mut bake_complete_printed = false;
-
-        unsafe {
-            while glfwWindowShouldClose(window) == 0 {
-                glfwPollEvents();
-
-                print!(
-                    "\rSample: {} / {}",
-                    app.push.sample_index, preview_settings.max_samples
-                );
-                io::stdout().flush().unwrap();
-
-                let now = std::time::Instant::now();
-
-                if glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS {
-                    glfwSetWindowShouldClose(window, 1);
-                }
-
-                let delta_time = now.duration_since(previous_time).as_secs_f32();
-
-                update_camera(app, delta_time);
-
-                if !app.preview_initialized {
-                    app.push.sample_index = 0;
-                    bake_start_time = std::time::Instant::now();
-                    bake_complete_printed = false;
-                }
-
-                // render finished
-                if app.push.sample_index >= preview_settings.max_samples {
-                    std::thread::sleep(Duration::from_millis(16));
-                    if !bake_complete_printed {
-                        io::stdout().flush().unwrap();
-                        let bake_time = now.duration_since(bake_start_time).as_secs_f32();
-                        println!("bake complete in {}s", bake_time);
-                        bake_complete_printed = true;
-                    }
-                }
-
-                if !render_sample_camera(app, &preview_settings) {
-                    // restart bake
-                    app.config.preview_settings.width = app.vk.swapchain.extent.width;
-                    app.config.preview_settings.height = app.vk.swapchain.extent.height;
-
-                    update_render_target(app, &preview_settings, 0);
-                    let RenderTarget::NonDirectional {
-                        visibility,
-                        diffuse,
-                    } = &mut app.render_target
-                    else {
-                        unreachable!()
-                    };
-
-                    update_bake_shader(
-                        &app.vk,
-                        &app.bake_shader,
-                        app.tlas.acceleration_structure(),
-                        visibility.view(),
-                        &albedos,
-                        &emissions,
-                        diffuse.view(),
-                        app.texture_sampler,
-                        app.gpu_mesh.index_buffer.buffer,
-                        app.gpu_mesh.vertex_buffer.buffer,
-                        app.gpu_lights.buffer,
-                        app.emissive_triangles_buffer.buffer,
-                    );
-
-                    continue;
-                }
-
-                if app.config.throttle_preview_ms > 0 {
-                    let target_duration_secs = app.config.throttle_preview_ms as f32 / 1000.0;
-                    let sleep_duration = target_duration_secs - delta_time;
-                    if sleep_duration > 0.0 {
-                        std::thread::sleep(Duration::from_secs_f32(sleep_duration));
-                    }
-                }
-
-                previous_time = now;
-            }
-        }
+        render_preview(app);
     } else {
         let any_denoise = app.groups.iter().any(|x| x.settings.denoise);
 
@@ -1463,7 +1423,7 @@ fn render_sample_camera(app: &mut Stilb, settings: &LightmapSettings) -> bool {
         vk.begin_command_buffer(cmd, &begin_info).unwrap();
 
         if app.push.sample_index == 0 {
-            rasterize_visibility_from_camera(app, cmd);
+            update_visibility_from_camera(app, cmd);
             app.preview_initialized = true;
             let clear = vk::ClearColorValue {
                 float32: [0.0, 0.0, 0.0, 0.0],
@@ -1710,7 +1670,7 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
         }
     };
 
-    let (target_width, target_height) = if app.config.is_preview {
+    let (width, height) = if app.config.is_preview {
         (
             app.config.preview_settings.width,
             app.config.preview_settings.height,
@@ -1721,8 +1681,8 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
 
     let diffuse = Texture2D::new(
         &app.vk,
-        target_width,
-        target_height,
+        width,
+        height,
         vk::Format::R32G32B32A32_SFLOAT,
         vk::ImageUsageFlags::STORAGE
             | vk::ImageUsageFlags::TRANSFER_SRC
@@ -1730,9 +1690,9 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
     );
 
     let visibility = if app.config.is_preview {
-        render_visibility_buffer_camera(app, target_width, target_height)
+        render_visibility_from_camera(app, width, height)
     } else {
-        render_visibility_buffer_bake(app, target_width, target_height, group_index)
+        render_visibility_from_lightmap(app, width, height, group_index)
     };
 
     println!("visibility: {:#x}", visibility.image().as_raw());
@@ -1745,8 +1705,8 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
 
     initialize_bake_push_constants(
         app,
-        target_width,
-        target_height,
+        width,
+        height,
         settings.max_samples,
         settings.bounce_count,
     );

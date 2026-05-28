@@ -5,18 +5,94 @@ use std::{
 };
 
 use crate::{
-    LightmapGroup, LightmapSettings, Stilb, StilbConfig,
+    LightmapGroup, Stilb, initialize_render,
     lights::Light,
     math::Vector3,
     mesh::{FfiMesh, Mesh},
     sh::SHProbe,
-    start_bake,
 };
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct StilbConfig {
+    pub coordinate_system: CoordinateSystem,
+
+    pub is_preview: bool,
+    pub vulkan_validation_layers: bool,
+    pub seams_debug: bool,
+    pub throttle_preview_ms: u32,
+    pub preview_settings: LightmapSettings,
+
+    pub camera_position: Vector3,
+    pub camera_forward: Vector3,
+
+    pub callback: ReadbackCallback,
+    pub probes_callback: ReadbackProbesCallback,
+
+    pub texture_filter: TextureSamplerFilter,
+    pub probe_samples: u32,
+    pub probe_bounces: u32,
+    pub light_falloff: LightFalloffType,
+}
 
 #[repr(u32)]
 pub enum ErrorCode {
     Success = 0,
     Error = 1,
+}
+
+type ReadbackCallback = extern "C" fn(data: ReadbackData);
+type ReadbackProbesCallback = extern "C" fn(data: ReadbackProbesData);
+
+#[repr(C)]
+pub struct ReadbackData {
+    pub group_index: u32,
+    pub ty: u32,
+    pub width: u32,
+    pub height: u32,
+    pub pixels: *const f32,
+    pub pixels_count: u32,
+}
+
+#[repr(C)]
+pub struct ReadbackProbesData {
+    pub probes: *const SHProbe,
+    pub pixels_count: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct LightmapSettings {
+    pub width: u32,
+    pub height: u32,
+
+    pub max_samples: u32,
+    pub bounce_count: u32,
+
+    pub dilate: bool,
+    pub denoise: bool,
+    pub fix_seams: bool,
+}
+
+#[repr(u32)]
+#[derive(Clone, Copy, PartialEq)]
+pub enum CoordinateSystem {
+    Default = 0,
+    Unity = 1,
+}
+
+#[repr(u32)]
+#[derive(Clone, Copy, PartialEq)]
+pub enum TextureSamplerFilter {
+    Nearest = 0,
+    Linear = 1,
+}
+
+#[repr(u32)]
+#[derive(Clone, Copy, PartialEq)]
+pub enum LightFalloffType {
+    InverseSquare = 0,
+    UnityBuiltIn = 1,
 }
 
 #[unsafe(no_mangle)]
@@ -128,7 +204,7 @@ pub extern "C" fn app_run(app: *mut Stilb) -> ErrorCode {
 
     let result = catch_unwind(AssertUnwindSafe(|| {
         let app = unsafe { &mut *app };
-        start_bake(app);
+        initialize_render(app);
     }));
 
     match result {
