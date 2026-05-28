@@ -698,669 +698,669 @@ fn render_lightmaps(app: &mut Stilb) {
     bake_direct_shader.destroy(&app.vk);
 }
 
-fn _bake_lightmaps(app: &mut Stilb) {
-    let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
-    let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
-
-    if app.config.is_preview {
-        render_preview(app);
-    } else {
-        let any_denoise = app.groups.iter().any(|x| x.settings.denoise);
-
-        let oidn = if any_denoise {
-            Some(Oidn::load().expect("failed to load oidn"))
-        } else {
-            None
-        };
-
-        let radiosity_iteration = true;
-        if radiosity_iteration {
-            let mut bake_direct_shader = load_bake_direct_shader(
-                &app.vk,
-                app.config.light_falloff,
-                app.groups.len() as u32,
-                (app.opaque_mesh.indices.len() / 3) as u32,
-            );
-
-            let group = &app.groups[0];
-            let width = group.settings.width;
-            let height = group.settings.height;
-            app.push.sample_index = 0;
-            let settings = group.settings.clone();
-            update_render_target(app, &settings, 0);
-
-            let RenderTarget::NonDirectional {
-                visibility,
-                diffuse,
-            } = &mut app.render_target
-            else {
-                unreachable!()
-            };
-
-            let shader = &bake_direct_shader;
-
-            update_bake_direct_shader(
-                &app.vk,
-                shader,
-                app.tlas.acceleration_structure(),
-                visibility.view(),
-                &albedos,
-                &emissions,
-                diffuse.view(),
-                app.texture_sampler,
-                app.gpu_mesh.index_buffer.buffer,
-                app.gpu_mesh.vertex_buffer.buffer,
-                app.gpu_lights.buffer,
-            );
-
-            let cmd = app.vk.command_buffer;
-            let vk = &app.vk.device;
-
-            let groups_x = (width + 7) / 8;
-            let groups_y = (height + 7) / 8;
-
-            let mut push = BakeDirectPushConstants {
-                width,
-                height,
-                sample_index: 0,
-                max_samples: settings.max_samples,
-                lights_count: app.cpu_lights.len() as u32,
-                pad0: 0,
-                pad1: 0,
-                pad2: 0,
-            };
-
-            let begin_info = vk::CommandBufferBeginInfo {
-                flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-                ..Default::default()
-            };
-
-            loop {
-                unsafe {
-                    vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
-                        .unwrap();
-
-                    vk.begin_command_buffer(cmd, &begin_info).unwrap();
-
-                    if diffuse.layout() != vk::ImageLayout::GENERAL {
-                        let barrier = diffuse.barrier(
-                            vk::ImageLayout::GENERAL,
-                            vk::AccessFlags::default(),
-                            vk::AccessFlags::SHADER_WRITE,
-                        );
-                        vk.cmd_pipeline_barrier(
-                            cmd,
-                            vk::PipelineStageFlags::TOP_OF_PIPE,
-                            vk::PipelineStageFlags::COMPUTE_SHADER,
-                            vk::DependencyFlags::empty(),
-                            &[],
-                            &[],
-                            &[barrier],
-                        );
-                    }
-
-                    vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-
-                    vk.cmd_bind_descriptor_sets(
-                        cmd,
-                        vk::PipelineBindPoint::COMPUTE,
-                        shader.pipeline_layout,
-                        0,
-                        &[shader.descriptor_set],
-                        &[],
-                    );
-
-                    let constants_bytes = as_bytes(&push);
-
-                    vk.cmd_push_constants(
-                        cmd,
-                        shader.pipeline_layout,
-                        vk::ShaderStageFlags::COMPUTE,
-                        0,
-                        &constants_bytes,
-                    );
-
-                    vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
-
-                    let cmds = [cmd];
-                    let submit = vk::SubmitInfo::default().command_buffers(&cmds);
-
-                    vk.end_command_buffer(cmd).unwrap();
-
-                    vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
-                        .unwrap();
-
-                    vk.queue_wait_idle(app.vk.compute_queue).unwrap()
-                };
-
-                push.sample_index += 1;
-
-                if push.sample_index >= push.max_samples {
-                    break;
-                }
-            }
-
-            bake_direct_shader.destroy(&app.vk);
-
-            unsafe {
-                app.vk.device.device_wait_idle().unwrap();
-            }
-
-            let pixels_direct = diffuse.read_pixels(&app.vk);
-
-            let mut previous_bounce = Texture2D::new(
-                &app.vk,
-                width,
-                height,
-                vk::Format::R32G32B32A32_SFLOAT,
-                vk::ImageUsageFlags::STORAGE
-                    | vk::ImageUsageFlags::TRANSFER_SRC
-                    | vk::ImageUsageFlags::TRANSFER_DST,
-            );
-            previous_bounce.set_pixels(&app.vk, &pixels_direct);
-
-            let mut bake_bounce_shader = load_bake_bounce_shader(
-                &app.vk,
-                app.config.light_falloff,
-                app.groups.len() as u32,
-                (app.opaque_mesh.indices.len() / 3) as u32,
-            );
-
-            let shader = &bake_bounce_shader;
-
-            update_bake_bounce_shader(
-                &app.vk,
-                shader,
-                app.tlas.acceleration_structure(),
-                visibility.view(),
-                &albedos,
-                &emissions,
-                diffuse.view(),
-                previous_bounce.view(),
-                app.texture_sampler,
-                app.gpu_mesh.index_buffer.buffer,
-                app.gpu_mesh.vertex_buffer.buffer,
-            );
-
-            let cmd = app.vk.command_buffer;
-            let vk = &app.vk.device;
-
-            let mut push = BakeBouncePushConstants {
-                width,
-                height,
-                sample_index: 0,
-                max_samples: settings.max_samples,
-                bounce_index: 0,
-                pad0: 0,
-                pad1: 0,
-                pad2: 0,
-            };
-
-            loop {
-                unsafe {
-                    vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
-                        .unwrap();
-
-                    vk.begin_command_buffer(cmd, &begin_info).unwrap();
-
-                    if diffuse.layout() != vk::ImageLayout::GENERAL {
-                        let barrier = diffuse.barrier(
-                            vk::ImageLayout::GENERAL,
-                            vk::AccessFlags::default(),
-                            vk::AccessFlags::SHADER_WRITE,
-                        );
-                        vk.cmd_pipeline_barrier(
-                            cmd,
-                            vk::PipelineStageFlags::TOP_OF_PIPE,
-                            vk::PipelineStageFlags::COMPUTE_SHADER,
-                            vk::DependencyFlags::empty(),
-                            &[],
-                            &[],
-                            &[barrier],
-                        );
-                    }
-
-                    vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-
-                    vk.cmd_bind_descriptor_sets(
-                        cmd,
-                        vk::PipelineBindPoint::COMPUTE,
-                        shader.pipeline_layout,
-                        0,
-                        &[shader.descriptor_set],
-                        &[],
-                    );
-
-                    let constants_bytes = as_bytes(&push);
-
-                    vk.cmd_push_constants(
-                        cmd,
-                        shader.pipeline_layout,
-                        vk::ShaderStageFlags::COMPUTE,
-                        0,
-                        &constants_bytes,
-                    );
-
-                    vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
-
-                    let cmds = [cmd];
-                    let submit = vk::SubmitInfo::default().command_buffers(&cmds);
-
-                    vk.end_command_buffer(cmd).unwrap();
-
-                    vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
-                        .unwrap();
-
-                    vk.queue_wait_idle(app.vk.compute_queue).unwrap()
-                };
-
-                push.sample_index += 1;
-
-                if push.sample_index >= push.max_samples {
-                    break;
-                }
-            }
-
-            unsafe {
-                app.vk.device.device_wait_idle().unwrap();
-            }
-
-            let mut bounce_pixels = diffuse.read_pixels(&app.vk);
-
-            previous_bounce.set_pixels(&app.vk, &bounce_pixels);
-
-            let mut push = BakeBouncePushConstants {
-                width,
-                height,
-                sample_index: 0,
-                max_samples: settings.max_samples,
-                bounce_index: 1,
-                pad0: 0,
-                pad1: 0,
-                pad2: 0,
-            };
-
-            loop {
-                unsafe {
-                    vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
-                        .unwrap();
-
-                    vk.begin_command_buffer(cmd, &begin_info).unwrap();
-
-                    if diffuse.layout() != vk::ImageLayout::GENERAL {
-                        let barrier = diffuse.barrier(
-                            vk::ImageLayout::GENERAL,
-                            vk::AccessFlags::default(),
-                            vk::AccessFlags::SHADER_WRITE,
-                        );
-                        vk.cmd_pipeline_barrier(
-                            cmd,
-                            vk::PipelineStageFlags::TOP_OF_PIPE,
-                            vk::PipelineStageFlags::COMPUTE_SHADER,
-                            vk::DependencyFlags::empty(),
-                            &[],
-                            &[],
-                            &[barrier],
-                        );
-                    }
-
-                    vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-
-                    vk.cmd_bind_descriptor_sets(
-                        cmd,
-                        vk::PipelineBindPoint::COMPUTE,
-                        shader.pipeline_layout,
-                        0,
-                        &[shader.descriptor_set],
-                        &[],
-                    );
-
-                    let constants_bytes = as_bytes(&push);
-
-                    vk.cmd_push_constants(
-                        cmd,
-                        shader.pipeline_layout,
-                        vk::ShaderStageFlags::COMPUTE,
-                        0,
-                        &constants_bytes,
-                    );
-
-                    vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
-
-                    let cmds = [cmd];
-                    let submit = vk::SubmitInfo::default().command_buffers(&cmds);
-
-                    vk.end_command_buffer(cmd).unwrap();
-
-                    vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
-                        .unwrap();
-
-                    vk.queue_wait_idle(app.vk.compute_queue).unwrap()
-                };
-
-                push.sample_index += 1;
-
-                if push.sample_index >= push.max_samples {
-                    break;
-                }
-            }
-
-            unsafe {
-                app.vk.device.device_wait_idle().unwrap();
-            }
-
-            let callback = app.config.callback;
-
-            let mut bounce_pixels2 = diffuse.read_pixels(&app.vk);
-
-            for (i, p) in bounce_pixels.iter().enumerate() {
-                bounce_pixels2[i] += p + pixels_direct[i];
-            }
-
-            let readback_data = ReadbackData {
-                group_index: 0,
-                ty: 0,
-                pixels: bounce_pixels2.as_ptr(),
-                pixels_count: bounce_pixels2.len() as u32,
-                width,
-                height,
-            };
-
-            callback(readback_data);
-
-            bake_bounce_shader.destroy(&app.vk);
-        } else {
-            for i in 0..app.groups.len() {
-                let group_index = i as u32;
-                let bake_start_time = std::time::Instant::now();
-
-                let group = &app.groups[i];
-                let width = group.settings.width;
-                let height = group.settings.height;
-                app.push.sample_index = 0;
-                let settings = group.settings.clone();
-                update_render_target(app, &settings, group_index);
-
-                let RenderTarget::NonDirectional {
-                    visibility,
-                    diffuse,
-                } = &mut app.render_target
-                else {
-                    unreachable!()
-                };
-
-                update_bake_shader(
-                    &app.vk,
-                    &app.bake_shader,
-                    app.tlas.acceleration_structure(),
-                    visibility.view(),
-                    &albedos,
-                    &emissions,
-                    diffuse.view(),
-                    app.texture_sampler,
-                    app.gpu_mesh.index_buffer.buffer,
-                    app.gpu_mesh.vertex_buffer.buffer,
-                    app.gpu_lights.buffer,
-                    app.emissive_triangles_buffer.buffer,
-                );
-
-                loop {
-                    render_sample_bake(app, &settings);
-                    if app.push.sample_index >= settings.max_samples {
-                        break;
-                    }
-                }
-
-                let now = std::time::Instant::now();
-                let bake_time = now.duration_since(bake_start_time).as_secs_f32();
-                println!("bake complete in {}s", bake_time);
-
-                unsafe {
-                    app.vk.device.device_wait_idle().unwrap();
-                }
-
-                let RenderTarget::NonDirectional {
-                    visibility: _visibility,
-                    diffuse,
-                } = &mut app.render_target
-                else {
-                    unreachable!()
-                };
-
-                let callback = app.config.callback;
-
-                let mut pixels = diffuse.read_pixels(&app.vk);
-
-                if settings.dilate {
-                    let start_time = std::time::Instant::now();
-                    let backface_threshold = 0.9;
-
-                    inpaint(&mut pixels, width, height, backface_threshold, 32);
-
-                    let now = std::time::Instant::now();
-                    let elapsed = now.duration_since(start_time).as_secs_f32();
-                    println!("dilated in {}s", elapsed);
-                }
-
-                if settings.denoise {
-                    let start_time = std::time::Instant::now();
-
-                    match &oidn {
-                        Some(oidn) => {
-                            oidn.denoise(&mut pixels, width as usize, height as usize);
-                        }
-                        None => {}
-                    }
-
-                    let now = std::time::Instant::now();
-                    let elapsed = now.duration_since(start_time).as_secs_f32();
-                    println!("denoised in {}s", elapsed);
-                }
-
-                if settings.fix_seams {
-                    let start_time = std::time::Instant::now();
-
-                    fix_seams(
-                        &mut pixels,
-                        width,
-                        height,
-                        &app.seams,
-                        app.config.seams_debug,
-                        group_index,
-                    );
-
-                    let now = std::time::Instant::now();
-                    let elapsed = now.duration_since(start_time).as_secs_f32();
-                    println!("fixed seams in {}s", elapsed);
-                }
-
-                let readback_data = ReadbackData {
-                    group_index,
-                    ty: 0,
-                    pixels: pixels.as_ptr(),
-                    pixels_count: pixels.len() as u32,
-                    width,
-                    height,
-                };
-
-                callback(readback_data);
-            }
-        }
-
-        if app.probes.len() > 0 {
-            update_bake_sh_shader(
-                &app.vk,
-                &app.bake_probes_shader,
-                app.tlas.acceleration_structure(),
-                app.probes_buffer.buffer,
-                &albedos,
-                &emissions,
-                app.texture_sampler,
-                app.gpu_mesh.index_buffer.buffer,
-                app.gpu_mesh.vertex_buffer.buffer,
-                app.gpu_lights.buffer,
-            );
-
-            let probes_samples = app.config.probe_samples;
-            let probe_bounces = app.config.probe_bounces;
-            initialize_bake_sh_push_constants(app, probes_samples, probe_bounces);
-
-            loop {
-                render_sample_bake_probes(app);
-                if app.push_probes.sample_index >= probes_samples {
-                    break;
-                }
-            }
-
-            println!("light probes baked");
-
-            unsafe {
-                app.vk.device.device_wait_idle().unwrap();
-            }
-
-            // println!("Probes:\n{:#?}", &app.probes);
-            app.vk
-                .download_buffer(app.probes_buffer.buffer, &mut app.probes);
-
-            for probe in &mut app.probes {
-                probe.normalize(probes_samples);
-            }
-            let readback_data = ReadbackProbesData {
-                probes: app.probes.as_ptr(),
-                pixels_count: app.probes.len() as u32,
-            };
-
-            (app.config.probes_callback)(readback_data);
-        }
-    }
-
-    unsafe {
-        app.vk.device.device_wait_idle().unwrap();
-    }
-}
-
-fn render_sample_bake(app: &mut Stilb, settings: &LightmapSettings) {
-    let width = settings.width;
-    let height = settings.height;
-
-    let vk = &app.vk.device;
-
-    let cmd = app.vk.command_buffer;
-
-    let begin_info = vk::CommandBufferBeginInfo {
-        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-        ..Default::default()
-    };
-
-    unsafe {
-        vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
-            .unwrap();
-
-        vk.begin_command_buffer(cmd, &begin_info).unwrap();
-
-        let RenderTarget::NonDirectional {
-            visibility: _,
-            diffuse,
-        } = &mut app.render_target
-        else {
-            unreachable!()
-        };
-
-        if diffuse.layout() != vk::ImageLayout::GENERAL {
-            let barrier = diffuse.barrier(
-                vk::ImageLayout::GENERAL,
-                vk::AccessFlags::default(),
-                vk::AccessFlags::SHADER_WRITE,
-            );
-            vk.cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            );
-        }
-
-        if app.push.sample_index < settings.max_samples {
-            render_sample(app, cmd, width, height);
-            app.push.sample_index += 1;
-        }
-        let vk = &app.vk.device;
-
-        let cmds = [cmd];
-        let submit = vk::SubmitInfo::default().command_buffers(&cmds);
-
-        vk.end_command_buffer(cmd).unwrap();
-
-        vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
-            .unwrap();
-
-        vk.queue_wait_idle(app.vk.compute_queue).unwrap()
-    };
-}
-
-fn render_sample_bake_probes(app: &mut Stilb) {
-    let vk = &app.vk.device;
-
-    let cmd = app.vk.command_buffer;
-
-    let begin_info = vk::CommandBufferBeginInfo {
-        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-        ..Default::default()
-    };
-
-    let shader = &app.bake_probes_shader;
-
-    let probes_count = app.probes.len() as u32;
-
-    let groups_x = (probes_count + 63) / 64;
-
-    let constants_bytes = as_bytes(&app.push_probes);
-
-    unsafe {
-        vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
-            .unwrap();
-
-        vk.begin_command_buffer(cmd, &begin_info).unwrap();
-
-        vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-
-        vk.cmd_bind_descriptor_sets(
-            cmd,
-            vk::PipelineBindPoint::COMPUTE,
-            shader.pipeline_layout,
-            0,
-            &[shader.descriptor_set],
-            &[],
-        );
-
-        vk.cmd_push_constants(
-            cmd,
-            shader.pipeline_layout,
-            vk::ShaderStageFlags::COMPUTE,
-            0,
-            &constants_bytes,
-        );
-
-        vk.cmd_dispatch(cmd, groups_x, 1, 1);
-
-        let vk = &app.vk.device;
-
-        let cmds = [cmd];
-        let submit = vk::SubmitInfo::default().command_buffers(&cmds);
-
-        vk.end_command_buffer(cmd).unwrap();
-
-        vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
-            .unwrap();
-
-        vk.queue_wait_idle(app.vk.compute_queue).unwrap()
-    };
-
-    app.push_probes.sample_index += 1;
-}
+// fn _bake_lightmaps(app: &mut Stilb) {
+//     let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
+//     let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
+
+//     if app.config.is_preview {
+//         render_preview(app);
+//     } else {
+//         let any_denoise = app.groups.iter().any(|x| x.settings.denoise);
+
+//         let oidn = if any_denoise {
+//             Some(Oidn::load().expect("failed to load oidn"))
+//         } else {
+//             None
+//         };
+
+//         let radiosity_iteration = true;
+//         if radiosity_iteration {
+//             let mut bake_direct_shader = load_bake_direct_shader(
+//                 &app.vk,
+//                 app.config.light_falloff,
+//                 app.groups.len() as u32,
+//                 (app.opaque_mesh.indices.len() / 3) as u32,
+//             );
+
+//             let group = &app.groups[0];
+//             let width = group.settings.width;
+//             let height = group.settings.height;
+//             app.push.sample_index = 0;
+//             let settings = group.settings.clone();
+//             update_render_target(app, &settings, 0);
+
+//             let RenderTarget::NonDirectional {
+//                 visibility,
+//                 diffuse,
+//             } = &mut app.render_target
+//             else {
+//                 unreachable!()
+//             };
+
+//             let shader = &bake_direct_shader;
+
+//             update_bake_direct_shader(
+//                 &app.vk,
+//                 shader,
+//                 app.tlas.acceleration_structure(),
+//                 visibility.view(),
+//                 &albedos,
+//                 &emissions,
+//                 diffuse.view(),
+//                 app.texture_sampler,
+//                 app.gpu_mesh.index_buffer.buffer,
+//                 app.gpu_mesh.vertex_buffer.buffer,
+//                 app.gpu_lights.buffer,
+//             );
+
+//             let cmd = app.vk.command_buffer;
+//             let vk = &app.vk.device;
+
+//             let groups_x = (width + 7) / 8;
+//             let groups_y = (height + 7) / 8;
+
+//             let mut push = BakeDirectPushConstants {
+//                 width,
+//                 height,
+//                 sample_index: 0,
+//                 max_samples: settings.max_samples,
+//                 lights_count: app.cpu_lights.len() as u32,
+//                 pad0: 0,
+//                 pad1: 0,
+//                 pad2: 0,
+//             };
+
+//             let begin_info = vk::CommandBufferBeginInfo {
+//                 flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+//                 ..Default::default()
+//             };
+
+//             loop {
+//                 unsafe {
+//                     vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
+//                         .unwrap();
+
+//                     vk.begin_command_buffer(cmd, &begin_info).unwrap();
+
+//                     if diffuse.layout() != vk::ImageLayout::GENERAL {
+//                         let barrier = diffuse.barrier(
+//                             vk::ImageLayout::GENERAL,
+//                             vk::AccessFlags::default(),
+//                             vk::AccessFlags::SHADER_WRITE,
+//                         );
+//                         vk.cmd_pipeline_barrier(
+//                             cmd,
+//                             vk::PipelineStageFlags::TOP_OF_PIPE,
+//                             vk::PipelineStageFlags::COMPUTE_SHADER,
+//                             vk::DependencyFlags::empty(),
+//                             &[],
+//                             &[],
+//                             &[barrier],
+//                         );
+//                     }
+
+//                     vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+//                     vk.cmd_bind_descriptor_sets(
+//                         cmd,
+//                         vk::PipelineBindPoint::COMPUTE,
+//                         shader.pipeline_layout,
+//                         0,
+//                         &[shader.descriptor_set],
+//                         &[],
+//                     );
+
+//                     let constants_bytes = as_bytes(&push);
+
+//                     vk.cmd_push_constants(
+//                         cmd,
+//                         shader.pipeline_layout,
+//                         vk::ShaderStageFlags::COMPUTE,
+//                         0,
+//                         &constants_bytes,
+//                     );
+
+//                     vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+
+//                     let cmds = [cmd];
+//                     let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+
+//                     vk.end_command_buffer(cmd).unwrap();
+
+//                     vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
+//                         .unwrap();
+
+//                     vk.queue_wait_idle(app.vk.compute_queue).unwrap()
+//                 };
+
+//                 push.sample_index += 1;
+
+//                 if push.sample_index >= push.max_samples {
+//                     break;
+//                 }
+//             }
+
+//             bake_direct_shader.destroy(&app.vk);
+
+//             unsafe {
+//                 app.vk.device.device_wait_idle().unwrap();
+//             }
+
+//             let pixels_direct = diffuse.read_pixels(&app.vk);
+
+//             let mut previous_bounce = Texture2D::new(
+//                 &app.vk,
+//                 width,
+//                 height,
+//                 vk::Format::R32G32B32A32_SFLOAT,
+//                 vk::ImageUsageFlags::STORAGE
+//                     | vk::ImageUsageFlags::TRANSFER_SRC
+//                     | vk::ImageUsageFlags::TRANSFER_DST,
+//             );
+//             previous_bounce.set_pixels(&app.vk, &pixels_direct);
+
+//             let mut bake_bounce_shader = load_bake_bounce_shader(
+//                 &app.vk,
+//                 app.config.light_falloff,
+//                 app.groups.len() as u32,
+//                 (app.opaque_mesh.indices.len() / 3) as u32,
+//             );
+
+//             let shader = &bake_bounce_shader;
+
+//             update_bake_bounce_shader(
+//                 &app.vk,
+//                 shader,
+//                 app.tlas.acceleration_structure(),
+//                 visibility.view(),
+//                 &albedos,
+//                 &emissions,
+//                 diffuse.view(),
+//                 previous_bounce.view(),
+//                 app.texture_sampler,
+//                 app.gpu_mesh.index_buffer.buffer,
+//                 app.gpu_mesh.vertex_buffer.buffer,
+//             );
+
+//             let cmd = app.vk.command_buffer;
+//             let vk = &app.vk.device;
+
+//             let mut push = BakeBouncePushConstants {
+//                 width,
+//                 height,
+//                 sample_index: 0,
+//                 max_samples: settings.max_samples,
+//                 bounce_index: 0,
+//                 pad0: 0,
+//                 pad1: 0,
+//                 pad2: 0,
+//             };
+
+//             loop {
+//                 unsafe {
+//                     vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
+//                         .unwrap();
+
+//                     vk.begin_command_buffer(cmd, &begin_info).unwrap();
+
+//                     if diffuse.layout() != vk::ImageLayout::GENERAL {
+//                         let barrier = diffuse.barrier(
+//                             vk::ImageLayout::GENERAL,
+//                             vk::AccessFlags::default(),
+//                             vk::AccessFlags::SHADER_WRITE,
+//                         );
+//                         vk.cmd_pipeline_barrier(
+//                             cmd,
+//                             vk::PipelineStageFlags::TOP_OF_PIPE,
+//                             vk::PipelineStageFlags::COMPUTE_SHADER,
+//                             vk::DependencyFlags::empty(),
+//                             &[],
+//                             &[],
+//                             &[barrier],
+//                         );
+//                     }
+
+//                     vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+//                     vk.cmd_bind_descriptor_sets(
+//                         cmd,
+//                         vk::PipelineBindPoint::COMPUTE,
+//                         shader.pipeline_layout,
+//                         0,
+//                         &[shader.descriptor_set],
+//                         &[],
+//                     );
+
+//                     let constants_bytes = as_bytes(&push);
+
+//                     vk.cmd_push_constants(
+//                         cmd,
+//                         shader.pipeline_layout,
+//                         vk::ShaderStageFlags::COMPUTE,
+//                         0,
+//                         &constants_bytes,
+//                     );
+
+//                     vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+
+//                     let cmds = [cmd];
+//                     let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+
+//                     vk.end_command_buffer(cmd).unwrap();
+
+//                     vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
+//                         .unwrap();
+
+//                     vk.queue_wait_idle(app.vk.compute_queue).unwrap()
+//                 };
+
+//                 push.sample_index += 1;
+
+//                 if push.sample_index >= push.max_samples {
+//                     break;
+//                 }
+//             }
+
+//             unsafe {
+//                 app.vk.device.device_wait_idle().unwrap();
+//             }
+
+//             let mut bounce_pixels = diffuse.read_pixels(&app.vk);
+
+//             previous_bounce.set_pixels(&app.vk, &bounce_pixels);
+
+//             let mut push = BakeBouncePushConstants {
+//                 width,
+//                 height,
+//                 sample_index: 0,
+//                 max_samples: settings.max_samples,
+//                 bounce_index: 1,
+//                 pad0: 0,
+//                 pad1: 0,
+//                 pad2: 0,
+//             };
+
+//             loop {
+//                 unsafe {
+//                     vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
+//                         .unwrap();
+
+//                     vk.begin_command_buffer(cmd, &begin_info).unwrap();
+
+//                     if diffuse.layout() != vk::ImageLayout::GENERAL {
+//                         let barrier = diffuse.barrier(
+//                             vk::ImageLayout::GENERAL,
+//                             vk::AccessFlags::default(),
+//                             vk::AccessFlags::SHADER_WRITE,
+//                         );
+//                         vk.cmd_pipeline_barrier(
+//                             cmd,
+//                             vk::PipelineStageFlags::TOP_OF_PIPE,
+//                             vk::PipelineStageFlags::COMPUTE_SHADER,
+//                             vk::DependencyFlags::empty(),
+//                             &[],
+//                             &[],
+//                             &[barrier],
+//                         );
+//                     }
+
+//                     vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+//                     vk.cmd_bind_descriptor_sets(
+//                         cmd,
+//                         vk::PipelineBindPoint::COMPUTE,
+//                         shader.pipeline_layout,
+//                         0,
+//                         &[shader.descriptor_set],
+//                         &[],
+//                     );
+
+//                     let constants_bytes = as_bytes(&push);
+
+//                     vk.cmd_push_constants(
+//                         cmd,
+//                         shader.pipeline_layout,
+//                         vk::ShaderStageFlags::COMPUTE,
+//                         0,
+//                         &constants_bytes,
+//                     );
+
+//                     vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+
+//                     let cmds = [cmd];
+//                     let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+
+//                     vk.end_command_buffer(cmd).unwrap();
+
+//                     vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
+//                         .unwrap();
+
+//                     vk.queue_wait_idle(app.vk.compute_queue).unwrap()
+//                 };
+
+//                 push.sample_index += 1;
+
+//                 if push.sample_index >= push.max_samples {
+//                     break;
+//                 }
+//             }
+
+//             unsafe {
+//                 app.vk.device.device_wait_idle().unwrap();
+//             }
+
+//             let callback = app.config.callback;
+
+//             let mut bounce_pixels2 = diffuse.read_pixels(&app.vk);
+
+//             for (i, p) in bounce_pixels.iter().enumerate() {
+//                 bounce_pixels2[i] += p + pixels_direct[i];
+//             }
+
+//             let readback_data = ReadbackData {
+//                 group_index: 0,
+//                 ty: 0,
+//                 pixels: bounce_pixels2.as_ptr(),
+//                 pixels_count: bounce_pixels2.len() as u32,
+//                 width,
+//                 height,
+//             };
+
+//             callback(readback_data);
+
+//             bake_bounce_shader.destroy(&app.vk);
+//         } else {
+//             for i in 0..app.groups.len() {
+//                 let group_index = i as u32;
+//                 let bake_start_time = std::time::Instant::now();
+
+//                 let group = &app.groups[i];
+//                 let width = group.settings.width;
+//                 let height = group.settings.height;
+//                 app.push.sample_index = 0;
+//                 let settings = group.settings.clone();
+//                 update_render_target(app, &settings, group_index);
+
+//                 let RenderTarget::NonDirectional {
+//                     visibility,
+//                     diffuse,
+//                 } = &mut app.render_target
+//                 else {
+//                     unreachable!()
+//                 };
+
+//                 update_bake_shader(
+//                     &app.vk,
+//                     &app.bake_shader,
+//                     app.tlas.acceleration_structure(),
+//                     visibility.view(),
+//                     &albedos,
+//                     &emissions,
+//                     diffuse.view(),
+//                     app.texture_sampler,
+//                     app.gpu_mesh.index_buffer.buffer,
+//                     app.gpu_mesh.vertex_buffer.buffer,
+//                     app.gpu_lights.buffer,
+//                     app.emissive_triangles_buffer.buffer,
+//                 );
+
+//                 loop {
+//                     render_sample_bake(app, &settings);
+//                     if app.push.sample_index >= settings.max_samples {
+//                         break;
+//                     }
+//                 }
+
+//                 let now = std::time::Instant::now();
+//                 let bake_time = now.duration_since(bake_start_time).as_secs_f32();
+//                 println!("bake complete in {}s", bake_time);
+
+//                 unsafe {
+//                     app.vk.device.device_wait_idle().unwrap();
+//                 }
+
+//                 let RenderTarget::NonDirectional {
+//                     visibility: _visibility,
+//                     diffuse,
+//                 } = &mut app.render_target
+//                 else {
+//                     unreachable!()
+//                 };
+
+//                 let callback = app.config.callback;
+
+//                 let mut pixels = diffuse.read_pixels(&app.vk);
+
+//                 if settings.dilate {
+//                     let start_time = std::time::Instant::now();
+//                     let backface_threshold = 0.9;
+
+//                     inpaint(&mut pixels, width, height, backface_threshold, 32);
+
+//                     let now = std::time::Instant::now();
+//                     let elapsed = now.duration_since(start_time).as_secs_f32();
+//                     println!("dilated in {}s", elapsed);
+//                 }
+
+//                 if settings.denoise {
+//                     let start_time = std::time::Instant::now();
+
+//                     match &oidn {
+//                         Some(oidn) => {
+//                             oidn.denoise(&mut pixels, width as usize, height as usize);
+//                         }
+//                         None => {}
+//                     }
+
+//                     let now = std::time::Instant::now();
+//                     let elapsed = now.duration_since(start_time).as_secs_f32();
+//                     println!("denoised in {}s", elapsed);
+//                 }
+
+//                 if settings.fix_seams {
+//                     let start_time = std::time::Instant::now();
+
+//                     fix_seams(
+//                         &mut pixels,
+//                         width,
+//                         height,
+//                         &app.seams,
+//                         app.config.seams_debug,
+//                         group_index,
+//                     );
+
+//                     let now = std::time::Instant::now();
+//                     let elapsed = now.duration_since(start_time).as_secs_f32();
+//                     println!("fixed seams in {}s", elapsed);
+//                 }
+
+//                 let readback_data = ReadbackData {
+//                     group_index,
+//                     ty: 0,
+//                     pixels: pixels.as_ptr(),
+//                     pixels_count: pixels.len() as u32,
+//                     width,
+//                     height,
+//                 };
+
+//                 callback(readback_data);
+//             }
+//         }
+
+//         if app.probes.len() > 0 {
+//             update_bake_sh_shader(
+//                 &app.vk,
+//                 &app.bake_probes_shader,
+//                 app.tlas.acceleration_structure(),
+//                 app.probes_buffer.buffer,
+//                 &albedos,
+//                 &emissions,
+//                 app.texture_sampler,
+//                 app.gpu_mesh.index_buffer.buffer,
+//                 app.gpu_mesh.vertex_buffer.buffer,
+//                 app.gpu_lights.buffer,
+//             );
+
+//             let probes_samples = app.config.probe_samples;
+//             let probe_bounces = app.config.probe_bounces;
+//             initialize_bake_sh_push_constants(app, probes_samples, probe_bounces);
+
+//             loop {
+//                 render_sample_bake_probes(app);
+//                 if app.push_probes.sample_index >= probes_samples {
+//                     break;
+//                 }
+//             }
+
+//             println!("light probes baked");
+
+//             unsafe {
+//                 app.vk.device.device_wait_idle().unwrap();
+//             }
+
+//             // println!("Probes:\n{:#?}", &app.probes);
+//             app.vk
+//                 .download_buffer(app.probes_buffer.buffer, &mut app.probes);
+
+//             for probe in &mut app.probes {
+//                 probe.normalize(probes_samples);
+//             }
+//             let readback_data = ReadbackProbesData {
+//                 probes: app.probes.as_ptr(),
+//                 pixels_count: app.probes.len() as u32,
+//             };
+
+//             (app.config.probes_callback)(readback_data);
+//         }
+//     }
+
+//     unsafe {
+//         app.vk.device.device_wait_idle().unwrap();
+//     }
+// }
+
+// fn render_sample_bake(app: &mut Stilb, settings: &LightmapSettings) {
+//     let width = settings.width;
+//     let height = settings.height;
+
+//     let vk = &app.vk.device;
+
+//     let cmd = app.vk.command_buffer;
+
+//     let begin_info = vk::CommandBufferBeginInfo {
+//         flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+//         ..Default::default()
+//     };
+
+//     unsafe {
+//         vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
+//             .unwrap();
+
+//         vk.begin_command_buffer(cmd, &begin_info).unwrap();
+
+//         let RenderTarget::NonDirectional {
+//             visibility: _,
+//             diffuse,
+//         } = &mut app.render_target
+//         else {
+//             unreachable!()
+//         };
+
+//         if diffuse.layout() != vk::ImageLayout::GENERAL {
+//             let barrier = diffuse.barrier(
+//                 vk::ImageLayout::GENERAL,
+//                 vk::AccessFlags::default(),
+//                 vk::AccessFlags::SHADER_WRITE,
+//             );
+//             vk.cmd_pipeline_barrier(
+//                 cmd,
+//                 vk::PipelineStageFlags::TOP_OF_PIPE,
+//                 vk::PipelineStageFlags::COMPUTE_SHADER,
+//                 vk::DependencyFlags::empty(),
+//                 &[],
+//                 &[],
+//                 &[barrier],
+//             );
+//         }
+
+//         if app.push.sample_index < settings.max_samples {
+//             render_sample(app, cmd, width, height);
+//             app.push.sample_index += 1;
+//         }
+//         let vk = &app.vk.device;
+
+//         let cmds = [cmd];
+//         let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+
+//         vk.end_command_buffer(cmd).unwrap();
+
+//         vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
+//             .unwrap();
+
+//         vk.queue_wait_idle(app.vk.compute_queue).unwrap()
+//     };
+// }
+
+// fn render_sample_bake_probes(app: &mut Stilb) {
+//     let vk = &app.vk.device;
+
+//     let cmd = app.vk.command_buffer;
+
+//     let begin_info = vk::CommandBufferBeginInfo {
+//         flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+//         ..Default::default()
+//     };
+
+//     let shader = &app.bake_probes_shader;
+
+//     let probes_count = app.probes.len() as u32;
+
+//     let groups_x = (probes_count + 63) / 64;
+
+//     let constants_bytes = as_bytes(&app.push_probes);
+
+//     unsafe {
+//         vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
+//             .unwrap();
+
+//         vk.begin_command_buffer(cmd, &begin_info).unwrap();
+
+//         vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+//         vk.cmd_bind_descriptor_sets(
+//             cmd,
+//             vk::PipelineBindPoint::COMPUTE,
+//             shader.pipeline_layout,
+//             0,
+//             &[shader.descriptor_set],
+//             &[],
+//         );
+
+//         vk.cmd_push_constants(
+//             cmd,
+//             shader.pipeline_layout,
+//             vk::ShaderStageFlags::COMPUTE,
+//             0,
+//             &constants_bytes,
+//         );
+
+//         vk.cmd_dispatch(cmd, groups_x, 1, 1);
+
+//         let vk = &app.vk.device;
+
+//         let cmds = [cmd];
+//         let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+
+//         vk.end_command_buffer(cmd).unwrap();
+
+//         vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
+//             .unwrap();
+
+//         vk.queue_wait_idle(app.vk.compute_queue).unwrap()
+//     };
+
+//     app.push_probes.sample_index += 1;
+// }
 
 fn render_sample_camera(app: &mut Stilb, settings: &LightmapSettings) -> bool {
     let frame_index = app.vk.swapchain.frame_index;
@@ -1443,7 +1443,7 @@ fn render_sample_camera(app: &mut Stilb, settings: &LightmapSettings) -> bool {
         let vk = &app.vk.device;
 
         let RenderTarget::NonDirectional {
-            visibility: _,
+            visibility,
             diffuse,
         } = &mut app.render_target
         else {
@@ -1466,22 +1466,36 @@ fn render_sample_camera(app: &mut Stilb, settings: &LightmapSettings) -> bool {
         );
 
         if app.push.sample_index < settings.max_samples {
-            render_sample(
-                app,
+            let shader = &app.bake_shader;
+
+            let constants_bytes = as_bytes(&app.push);
+
+            let groups_x = (width + 7) / 8;
+            let groups_y = (height + 7) / 8;
+
+            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+            vk.cmd_bind_descriptor_sets(
                 cmd,
-                app.config.preview_settings.width,
-                app.config.preview_settings.height,
+                vk::PipelineBindPoint::COMPUTE,
+                shader.pipeline_layout,
+                0,
+                &[shader.descriptor_set],
+                &[],
             );
+
+            vk.cmd_push_constants(
+                cmd,
+                shader.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &constants_bytes,
+            );
+
+            vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+
             app.push.sample_index += 1;
         }
-
-        let RenderTarget::NonDirectional {
-            visibility: _,
-            diffuse,
-        } = &mut app.render_target
-        else {
-            unreachable!()
-        };
 
         let swapchain_image = &app.vk.swapchain.frames[image_index as usize];
 
@@ -1618,42 +1632,6 @@ fn render_sample_camera(app: &mut Stilb, settings: &LightmapSettings) -> bool {
         (app.vk.swapchain.frame_index + 1) % app.vk.swapchain.frames.len();
 
     true
-}
-
-fn render_sample(app: &mut Stilb, cmd: vk::CommandBuffer, width: u32, height: u32) {
-    let vk = &app.vk;
-    let shader = &app.bake_shader;
-
-    let constants_bytes = as_bytes(&app.push);
-
-    // println!("rendering sample: {}", group.push.sample_index);
-
-    let groups_x = (width + 7) / 8;
-    let groups_y = (height + 7) / 8;
-
-    unsafe {
-        vk.device
-            .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-
-        vk.device.cmd_bind_descriptor_sets(
-            cmd,
-            vk::PipelineBindPoint::COMPUTE,
-            shader.pipeline_layout,
-            0,
-            &[shader.descriptor_set],
-            &[],
-        );
-
-        vk.device.cmd_push_constants(
-            cmd,
-            shader.pipeline_layout,
-            vk::ShaderStageFlags::COMPUTE,
-            0,
-            &constants_bytes,
-        );
-
-        vk.device.cmd_dispatch(cmd, groups_x, groups_y, 1);
-    }
 }
 
 fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_index: u32) {
