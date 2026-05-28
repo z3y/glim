@@ -15,11 +15,11 @@ pub fn get_test_shader() -> &'static [u32] {
     &SHADER
 }
 
-pub fn get_bake_shader() -> &'static [u32] {
-    const LEN: usize = include_bytes!(concat!(env!("OUT_DIR"), "/bake.spv")).len() / 4;
+pub fn get_preview_shader() -> &'static [u32] {
+    const LEN: usize = include_bytes!(concat!(env!("OUT_DIR"), "/preview.spv")).len() / 4;
 
     static SHADER: [u32; LEN] =
-        include_transmute!(concat!(env!("OUT_DIR"), "/bake.spv"), [u32; LEN]);
+        include_transmute!(concat!(env!("OUT_DIR"), "/preview.spv"), [u32; LEN]);
 
     &SHADER
 }

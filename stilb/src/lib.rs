@@ -17,8 +17,8 @@ use crate::sh::SHProbe;
 use crate::{
     camera::Camera,
     compute_shader::{
-        BakePushConstants, ComputeShader, load_bake_shader, load_init_from_camera_shader,
-        update_bake_shader, update_init_from_camera_shader,
+        BakePushConstants, ComputeShader, load_init_from_camera_shader, load_preview_shader,
+        update_init_from_camera_shader, update_preview_shader,
     },
     graphics_shader::{VisibilityPushConstants, create_visibility_shader},
     lights::Light,
@@ -69,7 +69,7 @@ pub struct Stilb {
 
     pub camera: Camera,
 
-    pub bake_shader: ComputeShader,
+    pub preview_shader: ComputeShader,
     pub init_from_camera_shader: ComputeShader,
     pub preview_initialized: bool,
 
@@ -100,8 +100,8 @@ impl Drop for Stilb {
             diffuse.destroy(&self.vk);
         };
 
-        if !self.bake_shader.pipeline.is_null() {
-            self.bake_shader.destroy(&self.vk);
+        if !self.preview_shader.pipeline.is_null() {
+            self.preview_shader.destroy(&self.vk);
         }
         self.gpu_mesh.destroy(&self.vk);
         self.tlas.destroy(&self.vk);
@@ -450,7 +450,7 @@ fn initialize_render(app: &mut Stilb) {
 
     extract_emissive_triangles(app);
 
-    app.bake_shader = load_bake_shader(
+    app.preview_shader = load_preview_shader(
         &app.vk,
         app.config.is_preview,
         app.config.light_falloff,
@@ -574,9 +574,9 @@ fn render_preview(app: &mut Stilb) {
         unreachable!()
     };
 
-    update_bake_shader(
+    update_preview_shader(
         &app.vk,
-        &app.bake_shader,
+        &app.preview_shader,
         app.tlas.acceleration_structure(),
         visibility.view(),
         &albedos,
@@ -645,9 +645,9 @@ fn render_preview(app: &mut Stilb) {
                     unreachable!()
                 };
 
-                update_bake_shader(
+                update_preview_shader(
                     &app.vk,
-                    &app.bake_shader,
+                    &app.preview_shader,
                     app.tlas.acceleration_structure(),
                     visibility.view(),
                     &albedos,
@@ -1466,7 +1466,7 @@ fn render_sample_camera(app: &mut Stilb, settings: &LightmapSettings) -> bool {
         );
 
         if app.push.sample_index < settings.max_samples {
-            let shader = &app.bake_shader;
+            let shader = &app.preview_shader;
 
             let constants_bytes = as_bytes(&app.push);
 
@@ -1977,7 +1977,7 @@ impl Stilb {
             window: window,
             config: config,
             cpu_lights: Vec::new(),
-            bake_shader: ComputeShader::null(),
+            preview_shader: ComputeShader::null(),
             gpu_mesh: GpuMesh::null(),
             tlas: VulkanAs::null(),
             groups: Vec::new(),

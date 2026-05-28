@@ -348,7 +348,7 @@ pub fn update_init_from_camera_shader(
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }
 
-pub fn load_bake_shader(
+pub fn load_preview_shader(
     vk: &VulkanContext,
     use_camera: bool,
     light_falloff_type: LightFalloffType,
@@ -394,7 +394,7 @@ pub fn load_bake_shader(
 
     ComputeShader::new(
         vk,
-        get_bake_shader(),
+        get_preview_shader(),
         &bindings,
         &push_constant_ranges,
         &specialization_info,
@@ -686,7 +686,7 @@ pub fn update_bake_sh_shader(
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }
 
-pub fn update_bake_shader(
+pub fn update_preview_shader(
     vk: &VulkanContext,
     shader: &ComputeShader,
     tlas: vk::AccelerationStructureKHR,

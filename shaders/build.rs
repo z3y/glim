@@ -43,8 +43,8 @@ fn main() {
 
     shaders.push(Shader {
         ty: ShaderType::Compute,
-        src: "bake.slang".into(),
-        dst: "bake.spv".into(),
+        src: "preview.slang".into(),
+        dst: "preview.spv".into(),
     });
 
     shaders.push(Shader {
