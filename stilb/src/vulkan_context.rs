@@ -260,15 +260,15 @@ impl VulkanContext {
 
         let mut pool_sizes = Vec::new();
         let storage_image_pool = vk::DescriptorPoolSize {
-            descriptor_count: 5,
+            descriptor_count: 16,
             ty: vk::DescriptorType::STORAGE_IMAGE,
         };
         let sampled_image_pool = vk::DescriptorPoolSize {
-            descriptor_count: 5,
+            descriptor_count: 128,
             ty: vk::DescriptorType::SAMPLED_IMAGE,
         };
         let storage_buffer_pool = vk::DescriptorPoolSize {
-            descriptor_count: 10,
+            descriptor_count: 16,
             ty: vk::DescriptorType::STORAGE_BUFFER,
         };
         let as_structure_pool = vk::DescriptorPoolSize {
@@ -290,7 +290,7 @@ impl VulkanContext {
 
         let descriptor_pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&mut pool_sizes)
-            .max_sets(5);
+            .max_sets(64);
 
         let descriptor_pool = unsafe { device.create_descriptor_pool(&descriptor_pool_info, None) }
             .expect("failed to create descriptor pool");

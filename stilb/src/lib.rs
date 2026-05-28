@@ -143,7 +143,7 @@ pub struct LightmapGroup {
     pub emission: Texture2D,
     pub emission_pixels: Vec<f32>,
 
-    pub direct_pixels: Vec<f32>,
+    pub lightmap_diffuse_pixels: Vec<f32>,
 }
 
 #[inline]
@@ -542,6 +542,97 @@ fn initialize_bake_push_constants(
     };
 }
 
+fn copy_image(vk: &VulkanContext, src: &mut Texture2D, dst: &mut Texture2D) {
+    unsafe { vk.device.queue_wait_idle(vk.compute_queue).unwrap() }
+
+    let cmd = vk.begin_single_use_cmd();
+
+    let region = vk::ImageCopy {
+        src_subresource: vk::ImageSubresourceLayers {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            mip_level: 0,
+            base_array_layer: 0,
+            layer_count: 1,
+        },
+        src_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+        dst_subresource: vk::ImageSubresourceLayers {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            mip_level: 0,
+            base_array_layer: 0,
+            layer_count: 1,
+        },
+        dst_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+        extent: vk::Extent3D {
+            width: src.width(),
+            height: src.height(),
+            depth: 1,
+        },
+        ..Default::default()
+    };
+
+    unsafe {
+        if src.layout() != vk::ImageLayout::TRANSFER_SRC_OPTIMAL {
+            let barrier = src.barrier(
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                vk::AccessFlags::default(),
+                vk::AccessFlags::TRANSFER_READ,
+            );
+            vk.device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            );
+        }
+
+        if dst.layout() != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
+            let barrier = dst.barrier(
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::AccessFlags::default(),
+                vk::AccessFlags::TRANSFER_WRITE,
+            );
+            vk.device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            );
+        }
+
+        vk.device.cmd_copy_image(
+            cmd,
+            src.image(),
+            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            dst.image(),
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &[region],
+        );
+
+        let barrier = dst.barrier(
+            vk::ImageLayout::GENERAL,
+            vk::AccessFlags::TRANSFER_WRITE,
+            vk::AccessFlags::SHADER_READ,
+        );
+        vk.device.cmd_pipeline_barrier(
+            cmd,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier],
+        );
+    };
+
+    vk.end_single_use_cmd(cmd);
+}
+
 fn render_preview(app: &mut Stilb) {
     let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
     let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
@@ -689,6 +780,25 @@ fn render_lightmaps(app: &mut Stilb) {
 
     let lights_count = app.cpu_lights.len() as u32;
 
+    let mut previous_diffuses = Vec::new();
+
+    for i in 0..app.groups.len() {
+        let group = &app.groups[i];
+        let settings = group.settings.clone();
+
+        let diffuse = Texture2D::new(
+            &app.vk,
+            settings.width,
+            settings.height,
+            vk::Format::R32G32B32A32_SFLOAT,
+            vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST,
+        );
+
+        previous_diffuses.push(diffuse);
+    }
+
     for i in 0..app.groups.len() {
         let group = &app.groups[i];
 
@@ -810,17 +920,162 @@ fn render_lightmaps(app: &mut Stilb) {
             }
         }
 
-        unsafe { vk.queue_wait_idle(app.vk.compute_queue).unwrap() }
+        copy_image(&app.vk, diffuse, &mut previous_diffuses[i]);
 
-        app.groups[i].direct_pixels = diffuse.read_pixels(&app.vk);
+        // app.groups[i].lightmap_diffuse_pixels = diffuse.read_pixels(&app.vk);
     }
 
     bake_direct_shader.destroy(&app.vk);
 
+    let mut bake_bounce_shader = load_bake_bounce_shader(
+        &app.vk,
+        app.config.light_falloff,
+        app.groups.len() as u32,
+        (app.opaque_mesh.indices.len() / 3) as u32,
+    );
+
+    let bounce_count = 1;
+
+    for bounce_index in 0..bounce_count {
+        let previous: Vec<vk::ImageView> = previous_diffuses.iter().map(|x| x.view()).collect();
+
+        for i in 0..app.groups.len() {
+            let group = &app.groups[i];
+
+            let settings = group.settings.clone();
+
+            let width = group.settings.width;
+            let height = group.settings.height;
+
+            let mut push = BakeBouncePushConstants {
+                width,
+                height,
+                sample_index: 0,
+                max_samples: settings.max_samples,
+                bounce_index: bounce_index as u32,
+                pad0: 0,
+                pad1: 0,
+                pad2: 0,
+            };
+
+            update_render_target(app, &settings, 0);
+
+            let RenderTarget::NonDirectional {
+                visibility,
+                diffuse,
+            } = &mut app.render_target
+            else {
+                unreachable!()
+            };
+
+            let shader = &bake_bounce_shader;
+
+            update_bake_bounce_shader(
+                &app.vk,
+                shader,
+                app.tlas.acceleration_structure(),
+                visibility.view(),
+                &albedos,
+                &emissions,
+                &previous,
+                diffuse.view(),
+                app.texture_sampler,
+                app.gpu_mesh.index_buffer.buffer,
+                app.gpu_mesh.vertex_buffer.buffer,
+            );
+
+            let cmd = app.vk.command_buffer;
+            let vk = &app.vk.device;
+
+            let groups_x = (width + 7) / 8;
+            let groups_y = (height + 7) / 8;
+
+            let begin_info = vk::CommandBufferBeginInfo {
+                flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+                ..Default::default()
+            };
+
+            loop {
+                unsafe {
+                    vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
+                        .unwrap();
+
+                    vk.begin_command_buffer(cmd, &begin_info).unwrap();
+
+                    if diffuse.layout() != vk::ImageLayout::GENERAL {
+                        let barrier = diffuse.barrier(
+                            vk::ImageLayout::GENERAL,
+                            vk::AccessFlags::default(),
+                            vk::AccessFlags::SHADER_WRITE,
+                        );
+                        vk.cmd_pipeline_barrier(
+                            cmd,
+                            vk::PipelineStageFlags::TOP_OF_PIPE,
+                            vk::PipelineStageFlags::COMPUTE_SHADER,
+                            vk::DependencyFlags::empty(),
+                            &[],
+                            &[],
+                            &[barrier],
+                        );
+                    }
+
+                    vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+                    vk.cmd_bind_descriptor_sets(
+                        cmd,
+                        vk::PipelineBindPoint::COMPUTE,
+                        shader.pipeline_layout,
+                        0,
+                        &[shader.descriptor_set],
+                        &[],
+                    );
+
+                    let constants_bytes = as_bytes(&push);
+
+                    vk.cmd_push_constants(
+                        cmd,
+                        shader.pipeline_layout,
+                        vk::ShaderStageFlags::COMPUTE,
+                        0,
+                        &constants_bytes,
+                    );
+
+                    vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+
+                    let cmds = [cmd];
+                    let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+
+                    vk.end_command_buffer(cmd).unwrap();
+
+                    vk.queue_submit(app.vk.compute_queue, &[submit], vk::Fence::null())
+                        .unwrap();
+
+                    vk.queue_wait_idle(app.vk.compute_queue).unwrap()
+                };
+
+                push.sample_index += 1;
+
+                if push.sample_index >= push.max_samples {
+                    break;
+                }
+            }
+
+            unsafe { app.vk.device.queue_wait_idle(app.vk.compute_queue).unwrap() }
+
+            app.groups[i].lightmap_diffuse_pixels = diffuse.read_pixels(&app.vk);
+        }
+    }
+
+    bake_bounce_shader.destroy(&app.vk);
+
+    for tex in &mut previous_diffuses {
+        tex.destroy(&app.vk);
+    }
+
     for i in 0..app.groups.len() {
         let group = &mut app.groups[i];
         let group_index = group.index;
-        let mut pixels = &mut group.direct_pixels;
+        let mut pixels = &mut group.lightmap_diffuse_pixels;
         let settings = group.settings.clone();
 
         let width = group.settings.width;
@@ -2051,7 +2306,7 @@ impl LightmapGroup {
             albedo,
             emission,
             emission_pixels: emission_pixels.to_vec(),
-            direct_pixels: Vec::new(),
+            lightmap_diffuse_pixels: Vec::new(),
             index,
         }
     }

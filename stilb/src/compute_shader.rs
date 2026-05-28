@@ -467,7 +467,7 @@ pub fn load_bake_bounce_shader(
     bind_sampler(&mut bindings);
     bind_indices(&mut bindings);
     bind_vertices(&mut bindings);
-    bind_previous_bounce(&mut bindings);
+    bind_previous_diffuse(&mut bindings, lightmap_group_count);
 
     let map_entries = create_specialization_map_entries();
 
@@ -1023,8 +1023,8 @@ pub fn update_bake_bounce_shader(
     target_visibility: vk::ImageView,
     albedos: &[vk::ImageView],
     emissions: &[vk::ImageView],
+    previous_diffuse: &[vk::ImageView],
     target_diffuse: vk::ImageView,
-    previous_bounce: vk::ImageView,
     sampler: vk::Sampler,
     indices: vk::Buffer,
     vertices: vk::Buffer,
@@ -1155,19 +1155,23 @@ pub fn update_bake_bounce_shader(
     write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
-    // PreviousBounce
-    let info = [vk::DescriptorImageInfo {
-        image_view: previous_bounce,
-        image_layout: vk::ImageLayout::GENERAL,
-        ..Default::default()
-    }];
+    // PreviousDiffuse
+    let infos: Vec<vk::DescriptorImageInfo> = previous_diffuse
+        .iter()
+        .map(|tex| vk::DescriptorImageInfo {
+            image_view: *tex,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ..Default::default()
+        })
+        .collect();
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
         dst_binding: 13,
-        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        dst_array_element: 0,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
         ..Default::default()
     };
-    write = write.image_info(&info);
+    write = write.image_info(&infos);
     descriptor_writes.push(write);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };

@@ -89,8 +89,9 @@ struct PushConstants
             SpectrumAdd(spectrum, bounceEmission, 0);
         }
 
-        uint2 coords = uint2(float2(surface.uv.x, 1.0 - surface.uv.y) * resolution);
-        float3 previousBounce = PreviousBounce[coords].rgb;
+        uint2 coords = uint2(surface.uv * resolution);
+        uint index = NonUniformResourceIndex(surface.lightmapGroup);
+        float3 previousBounce = PreviousDiffuse[index][coords].rgb;
 
         SpectrumAdd(spectrum, previousBounce * bounceAlbedo, 0);
     }

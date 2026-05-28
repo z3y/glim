@@ -48,7 +48,7 @@ RWTexture2D<float4> NormalsBuffer;
 StructuredBuffer<uint> EmissiveTriangles;
 
 [[vk::binding(13, 0)]] [[vk::image_format("rgba32f")]]
-RWTexture2D<float4> PreviousBounce;
+Texture2D<float4> PreviousDiffuse[];
 
 [vk::constant_id(0)] const uint USE_CAMERA;
 [vk::constant_id(1)] const uint LIGHT_FALLOFF_TYPE;
