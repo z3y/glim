@@ -4,6 +4,8 @@
 [[vk::push_constant]]
 PushConstants Push;
 
+#define MIS
+
 struct PushConstants
 {
     uint width;
@@ -131,6 +133,65 @@ void ShadeLightDirect(inout Spectrum spectrum, Light light, Surface surface, flo
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         ShadeLightDirect(spectrum, Lights[lightIndex], surface, xiLight, throughput);
+    }
+
+    uint emissiveTriangleCount = EMISSIVE_TRIANGLES_COUNT;
+
+    float randomEmissiveTrianglePdf = 1.0 / emissiveTriangleCount;
+    float bsdfPdf = 1.0 / float.getPi();
+
+    float triangleLightPdf = 0.0;
+    float3 triangleLight = 0.0;
+    if (emissiveTriangleCount > 0)
+    {
+        float2 xiTriangle = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
+        uint emissivePrimitiveID = EmissiveTriangles[uint(xiTriangle.x * (float)emissiveTriangleCount)];
+        triangleLight = ShadeTriangleLight(emissivePrimitiveID, surface, xiLight, throughput, randomEmissiveTrianglePdf, triangleLightPdf);
+#ifdef MIS
+        SpectrumAdd(spectrum, triangleLight * MISWeight(triangleLightPdf, bsdfPdf), 0);
+#endif
+
+        float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
+
+        Ray bounceRay;
+        bounceRay.P = RayOffset(surface.P, surface.Ng);
+        bounceRay.D = RandomDirectionInHemisphere(surface.N, xiBounce);
+        bounceRay.tMin = 0;
+        bounceRay.tMax = RAY_MAX;
+
+        Hit bounceHit;
+        if (TraceRay(bounceRay, bounceHit))
+        {
+            Surface previousSurface = surface;
+            surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary);
+
+            if (!bounceHit.frontFace)
+            {
+                if (!surface.backfaceGI)
+                {
+                    return;
+                }
+
+                surface.N = -surface.N;
+                surface.Ng = -surface.Ng;
+            }
+
+            float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+
+            if (any(bounceEmission > 0.0))
+            {
+#ifdef MIS
+                float triangleArea = CalculateTriangleArea(bounceHit.primitiveID);
+                float3 positionToLight = surface.P - previousSurface.P;
+                float distSq = dot(positionToLight, positionToLight);
+                float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
+                float hypotheticalLightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
+                SpectrumAdd(spectrum, bounceEmission * MISWeight(bsdfPdf, hypotheticalLightPdf), 0);
+#else
+                SpectrumAdd(spectrum, bounceEmission, 0);
+#endif
+            }
+        }
     }
 
     AccumulateColor(LightmapDiffuse, coords, sampleIndex, float4(spectrum.color, 1.0));

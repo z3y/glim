@@ -764,6 +764,7 @@ fn render_lightmaps(app: &mut Stilb) {
         app.config.light_falloff,
         app.groups.len() as u32,
         (app.opaque_mesh.indices.len() / 3) as u32,
+        app.emissive_triangles.len() as u32,
     );
 
     let lights_count = app.cpu_lights.len() as u32;
@@ -831,6 +832,7 @@ fn render_lightmaps(app: &mut Stilb) {
             app.gpu_mesh.index_buffer.buffer,
             app.gpu_mesh.vertex_buffer.buffer,
             app.gpu_lights.buffer,
+            app.emissive_triangles_buffer.buffer,
         );
 
         let cmd = app.vk.command_buffer;

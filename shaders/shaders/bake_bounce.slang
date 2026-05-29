@@ -56,7 +56,7 @@ struct PushConstants
     uint pixelSeed = RNGPixelInit(coords, pattern);
     uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
 
-    uint dimension = bounceIndex + 1;
+    uint dimension = bounceIndex + 3;
     float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
 
     Ray bounceRay;
@@ -70,11 +70,10 @@ struct PushConstants
     {
         Surface previousSurface = surface;
         surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary);
-        bool backfaceGI = surface.backfaceGI;
 
         if (!bounceHit.frontFace)
         {
-            if (!backfaceGI)
+            if (!surface.backfaceGI)
             {
                 return;
             }
@@ -84,11 +83,11 @@ struct PushConstants
         }
 
         float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
-        if (bounceIndex == 0)
-        {
-            float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
-            SpectrumAdd(spectrum, bounceEmission, 0);
-        }
+        // if (bounceIndex == 0)
+        // {
+        //     float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+        //     SpectrumAdd(spectrum, bounceEmission, 0);
+        // }
 
         // todo why flipped
         float3 previousDiffuse = SamplePreviousDiffuse(float2(surface.uv.x, 1.0 - surface.uv.y), surface.lightmapGroup).rgb;

@@ -406,6 +406,7 @@ pub fn load_bake_direct_shader(
     light_falloff_type: LightFalloffType,
     lightmap_group_count: u32,
     transparent_primitive_offset: u32,
+    emissive_triangles_count: u32,
 ) -> ComputeShader {
     let mut bindings = Vec::new();
 
@@ -426,7 +427,7 @@ pub fn load_bake_direct_shader(
         0,
         light_falloff_type as u32,
         transparent_primitive_offset,
-        0,
+        emissive_triangles_count,
     ];
     let data_bytes = as_bytes(&data);
 
@@ -871,6 +872,7 @@ pub fn update_bake_direct_shader(
     indices: vk::Buffer,
     vertices: vk::Buffer,
     lights: vk::Buffer,
+    emissive_triangles: vk::Buffer,
 ) {
     let mut descriptor_writes = Vec::new();
 
@@ -1007,6 +1009,21 @@ pub fn update_bake_direct_shader(
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
         dst_binding: 10,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // EmissiveTriangles
+    let info = [vk::DescriptorBufferInfo {
+        buffer: emissive_triangles,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 12,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
