@@ -161,29 +161,41 @@ fn clamp_bounces(bounces: u32) -> u32 {
     bounces.clamp(0, MAX_BOUNCES)
 }
 
-fn render_visibility_from_lightmap(
-    app: &mut Stilb,
-    width: u32,
-    height: u32,
-    group_index: u32,
-) -> Texture2D {
+fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, group_index: u32) {
     let vk = &mut app.vk;
+    let cmd = vk.begin_single_use_cmd();
     let mesh = &app.gpu_mesh;
 
-    let visibility = Texture2D::new(
-        vk,
-        width,
-        height,
-        vk::Format::R32G32B32A32_SFLOAT,
-        vk::ImageUsageFlags::STORAGE
-            | vk::ImageUsageFlags::TRANSFER_SRC
-            | vk::ImageUsageFlags::TRANSFER_DST
-            | vk::ImageUsageFlags::SAMPLED
-            | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-    );
+    let visibility = &mut app.render_target.visibility;
 
-    let mut shader = create_visibility_shader(vk, &visibility, false);
-    let mut shader_convervative = create_visibility_shader(vk, &visibility, true);
+    if visibility.width() != width || visibility.height() != height {
+        if !visibility.image().is_null() {
+            visibility.destroy(vk);
+        }
+
+        app.render_target.visibility = Texture2D::new(
+            vk,
+            width,
+            height,
+            vk::Format::R32G32B32A32_SFLOAT,
+            vk::ImageUsageFlags::STORAGE
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+        );
+
+        println!(
+            "visibility: {:#x}",
+            app.render_target.visibility.image().as_raw()
+        );
+    }
+
+    let visibility = &app.render_target.visibility;
+
+    // todo create shader once
+    let mut shader = create_visibility_shader(vk, visibility, false);
+    let mut shader_convervative = create_visibility_shader(vk, visibility, true);
 
     update_visibility_shader(
         vk,
@@ -197,8 +209,6 @@ fn render_visibility_from_lightmap(
         app.gpu_mesh.index_buffer.buffer,
         app.gpu_mesh.vertex_buffer.buffer,
     );
-
-    let cmd = vk.begin_single_use_cmd();
 
     let clear_values = [vk::ClearValue {
         color: vk::ClearColorValue {
@@ -301,8 +311,6 @@ fn render_visibility_from_lightmap(
 
     shader.destroy(vk);
     shader_convervative.destroy(vk);
-
-    visibility
 }
 
 fn render_visibility_from_camera(app: &mut Stilb, width: u32, height: u32) -> Texture2D {
@@ -411,21 +419,22 @@ fn clear_texture(
     let vk = &vk.device;
 
     unsafe {
-        let barrier = texture.barrier(
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            vk::AccessFlags::empty(),
-            vk::AccessFlags::TRANSFER_WRITE,
-        );
-
-        vk.cmd_pipeline_barrier(
-            cmd,
-            vk::PipelineStageFlags::TOP_OF_PIPE,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            &[barrier],
-        );
+        if texture.layout() != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
+            let barrier = texture.barrier(
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::AccessFlags::empty(),
+                vk::AccessFlags::TRANSFER_WRITE,
+            );
+            vk.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            );
+        }
 
         vk.cmd_clear_color_image(
             cmd,
@@ -2075,10 +2084,6 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
         diffuse.destroy(&app.vk);
     }
 
-    if !visibility.image().is_null() {
-        visibility.destroy(&app.vk);
-    }
-
     let diffuse = Texture2D::new(
         &app.vk,
         width,
@@ -2089,16 +2094,20 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
             | vk::ImageUsageFlags::TRANSFER_DST,
     );
 
-    let visibility = if app.config.is_preview {
-        render_visibility_from_camera(app, width, height)
-    } else {
-        render_visibility_from_lightmap(app, width, height, group_index)
-    };
+    if app.config.is_preview {
+        if !visibility.image().is_null() {
+            visibility.destroy(&app.vk);
+        }
 
-    println!("visibility: {:#x}", visibility.image().as_raw());
+        let visibility = render_visibility_from_camera(app, width, height);
+        println!("visibility: {:#x}", visibility.image().as_raw());
+        app.render_target.visibility = visibility;
+    } else {
+        render_visibility_from_lightmap(app, width, height, group_index);
+    }
+
     println!("diffuse: {:#x}", diffuse.image().as_raw());
 
-    app.render_target.visibility = visibility;
     app.render_target.diffuse = diffuse;
 
     initialize_bake_push_constants(
