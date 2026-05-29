@@ -479,8 +479,8 @@ fn initialize_render(app: &mut Stilb) {
     app.config.probe_samples = clamp_samples(app.config.probe_samples);
     app.config.probe_bounces = clamp_bounces(app.config.probe_bounces);
 
-    app.config.direct_samples = clamp_bounces(app.config.direct_samples);
-    app.config.indirect_samples = clamp_bounces(app.config.indirect_samples);
+    app.config.direct_samples = clamp_samples(app.config.direct_samples);
+    app.config.indirect_samples = clamp_samples(app.config.indirect_samples);
     app.config.bounce_count = clamp_bounces(app.config.bounce_count);
 
     // upload lights
@@ -812,7 +812,7 @@ fn render_lightmaps(app: &mut Stilb) {
             pad2: 0,
         };
 
-        update_render_target(app, &settings, 0);
+        update_render_target(app, &settings, group.index);
 
         let visibility = &mut app.render_target.visibility;
         let diffuse = &mut app.render_target.diffuse;
@@ -947,7 +947,7 @@ fn render_lightmaps(app: &mut Stilb) {
                 pad2: 0,
             };
 
-            update_render_target(app, &settings, 0);
+            update_render_target(app, &settings, group.index);
 
             let visibility = &mut app.render_target.visibility;
             let diffuse = &mut app.render_target.diffuse;
