@@ -43,7 +43,14 @@ namespace stilb
             public readonly uint probe_bounces;
             public readonly uint light_falloff;
 
+            public readonly uint direct_samples;
+            public readonly uint indirect_samples;
+            public readonly uint bounce_count;
+
             public StilbConfig(CoordinateSystem coordinate_system,
+                               uint direct_samples,
+                               uint indirect_samples,
+                               uint bounce_count,
                                bool is_preview,
                                uint throttle_preview_ms,
                                LightmapSettings preview_settings,
@@ -51,7 +58,6 @@ namespace stilb
                                Vector3 camera_forward,
                                TextureSamplerFilter texture_filter,
                                uint probe_samples,
-                               uint probe_bounces,
                                LightFalloffType falloff)
             {
                 this.coordinate_system = coordinate_system;
@@ -64,7 +70,10 @@ namespace stilb
                 this.probes_callback = Bake.OnReadbackProbes;
                 this.texture_filter = texture_filter;
                 this.probe_samples = probe_samples;
-                this.probe_bounces = probe_bounces;
+                this.probe_bounces = bounce_count;
+                this.direct_samples = direct_samples;
+                this.indirect_samples = indirect_samples;
+                this.bounce_count = bounce_count;
                 this.vulkan_validation_layers = false;
                 this.seams_debug = false;
 
@@ -91,26 +100,21 @@ namespace stilb
             public readonly uint width;
             public readonly uint height;
 
-            public readonly uint max_samples;
-            public readonly uint bounce_count;
-
             [MarshalAs(UnmanagedType.I1)] public readonly bool dilate;
             [MarshalAs(UnmanagedType.I1)] public readonly bool denoise;
             [MarshalAs(UnmanagedType.I1)] public readonly bool fix_seams;
 
-            public LightmapSettings(uint width, uint height, uint max_samples, uint bounce_count, bool dilate, bool denoise, bool fix_seams)
+            public LightmapSettings(uint width, uint height, bool dilate, bool denoise, bool fix_seams)
             {
                 this.width = width;
                 this.height = height;
-                this.max_samples = max_samples;
-                this.bounce_count = bounce_count;
                 this.dilate = dilate;
                 this.denoise = denoise;
                 this.fix_seams = fix_seams;
             }
 
             public LightmapSettings(LightmapGroup group) :
-                this(group.resolution, group.resolution, group.maxSamples, group.bounceCount, group.dilate, group.denoise, group.fixSeams)
+                this(group.resolution, group.resolution, group.dilate, group.denoise, group.fixSeams)
             {
                 return;
             }

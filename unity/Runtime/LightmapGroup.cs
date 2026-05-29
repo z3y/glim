@@ -14,8 +14,6 @@ namespace stilb
     public class LightmapGroup : ScriptableObject
     {
         public uint resolution = 512;
-        public uint bounceCount = 5;
-        public uint maxSamples = 512;
         public bool dilate = true;
         public bool denoise = true;
         public bool fixSeams = true;

@@ -476,16 +476,12 @@ fn initialize_render(app: &mut Stilb) {
     }
 
     // clamp samples and bounces to supported limits
-    for group in &mut app.groups {
-        group.settings.max_samples = clamp_samples(group.settings.max_samples);
-        group.settings.bounce_count = clamp_bounces(group.settings.bounce_count);
-    }
     app.config.probe_samples = clamp_samples(app.config.probe_samples);
     app.config.probe_bounces = clamp_bounces(app.config.probe_bounces);
-    app.config.preview_settings.max_samples =
-        clamp_samples(app.config.preview_settings.max_samples);
-    app.config.preview_settings.bounce_count =
-        clamp_bounces(app.config.preview_settings.bounce_count);
+
+    app.config.direct_samples = clamp_bounces(app.config.direct_samples);
+    app.config.indirect_samples = clamp_bounces(app.config.indirect_samples);
+    app.config.bounce_count = clamp_bounces(app.config.bounce_count);
 
     // upload lights
     if app.cpu_lights.len() > 0 {
@@ -526,7 +522,7 @@ fn initialize_render(app: &mut Stilb) {
     }
 }
 
-fn initialize_bake_push_constants(
+fn initialize_preview_push_constants(
     app: &mut Stilb,
     width: u32,
     height: u32,
@@ -679,7 +675,7 @@ fn render_preview(app: &mut Stilb) {
 
             print!(
                 "\rSample: {} / {}",
-                app.preview_push_constants.sample_index, preview_settings.max_samples
+                app.preview_push_constants.sample_index, app.config.direct_samples
             );
             io::stdout().flush().unwrap();
 
@@ -700,7 +696,7 @@ fn render_preview(app: &mut Stilb) {
             }
 
             // render finished
-            if app.preview_push_constants.sample_index >= preview_settings.max_samples {
+            if app.preview_push_constants.sample_index >= app.preview_push_constants.max_samples {
                 std::thread::sleep(Duration::from_millis(16));
                 if !bake_complete_printed {
                     io::stdout().flush().unwrap();
@@ -774,7 +770,7 @@ fn render_lightmaps(app: &mut Stilb) {
 
     let mut previous_diffuses = Vec::new();
 
-    let bounce_count = 2;
+    let bounce_count = app.config.bounce_count;
 
     let has_bounces = bounce_count > 0;
 
@@ -809,7 +805,7 @@ fn render_lightmaps(app: &mut Stilb) {
             width,
             height,
             sample_index: 0,
-            max_samples: settings.max_samples,
+            max_samples: app.config.direct_samples,
             lights_count,
             pad0: 0,
             pad1: 0,
@@ -944,7 +940,7 @@ fn render_lightmaps(app: &mut Stilb) {
                 width,
                 height,
                 sample_index: 0,
-                max_samples: settings.max_samples,
+                max_samples: app.config.indirect_samples,
                 bounce_index: bounce_index as u32,
                 pad0: 0,
                 pad1: 0,
@@ -1898,7 +1894,7 @@ fn render_sample_camera(app: &mut Stilb, settings: &LightmapSettings) -> bool {
             &[barrier],
         );
 
-        if app.preview_push_constants.sample_index < settings.max_samples {
+        if app.preview_push_constants.sample_index < app.preview_push_constants.max_samples {
             let shader = &app.preview_shader;
 
             let constants_bytes = as_bytes(&app.preview_push_constants);
@@ -2128,12 +2124,12 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
         }
     }
 
-    initialize_bake_push_constants(
+    initialize_preview_push_constants(
         app,
         width,
         height,
-        settings.max_samples,
-        settings.bounce_count,
+        app.config.direct_samples,
+        app.config.bounce_count,
     );
 
     app.preview_initialized = false;

@@ -13,8 +13,6 @@ mod tests {
         let preview_settings = LightmapSettings {
             width: 1024,
             height: 1024,
-            max_samples: 512,
-            bounce_count: 3,
             denoise: false,
             dilate: false,
             fix_seams: false,
@@ -35,6 +33,9 @@ mod tests {
             light_falloff: LightFalloffType::InverseSquare,
             vulkan_validation_layers: true,
             seams_debug: false,
+            direct_samples: 32,
+            indirect_samples: 32,
+            bounce_count: 2,
         };
         config
     }
@@ -244,8 +245,6 @@ mod tests {
         let settings = LightmapSettings {
             width: w,
             height: h,
-            bounce_count: 2,
-            max_samples: 32,
             denoise: false,
             dilate: false,
             fix_seams: false,

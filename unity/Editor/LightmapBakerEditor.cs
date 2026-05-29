@@ -45,14 +45,16 @@ namespace stilb
 
                 var config = new Bindings.StilbConfig(
                     Bindings.CoordinateSystem.Unity,
+                    baker.directSamples,
+                    baker.indirectSamples,
+                    baker.bounces,
                     false,
                     0,
                     previewSettings,
                     Vector3.zero,
                     Vector3.zero,
                     (Bindings.TextureSamplerFilter)baker.filter,
-                    baker.probeSamples,
-                    baker.probeBounces,
+                    baker.lightProbeSamples,
                     baker.lightFalloff
                 );
                 Bake.Start(baker, config);
@@ -90,18 +92,20 @@ namespace stilb
                 var camera = SceneView.lastActiveSceneView.camera;
 
                 var previewSettings = new Bindings.LightmapSettings(
-                    baker.previewWidth, baker.previewHeight, baker.previewSamples, baker.previewBounces, false, false, false);
+                    baker.previewWidth, baker.previewHeight, false, false, false);
 
                 var config = new Bindings.StilbConfig(
                     Bindings.CoordinateSystem.Unity,
+                    baker.directSamples,
+                    0,
+                    baker.bounces,
                     true,
                     baker.previewThrottle,
                     previewSettings,
                     camera.transform.position,
                     camera.transform.forward,
                     (Bindings.TextureSamplerFilter)baker.filter,
-                    baker.probeSamples,
-                    baker.probeBounces,
+                    baker.lightProbeSamples,
                     baker.lightFalloff
                 );
 

@@ -33,6 +33,10 @@ pub struct StilbConfig {
     pub probe_samples: u32,
     pub probe_bounces: u32,
     pub light_falloff: LightFalloffType,
+
+    pub direct_samples: u32,
+    pub indirect_samples: u32,
+    pub bounce_count: u32,
 }
 
 #[repr(u32)]
@@ -65,9 +69,6 @@ pub struct ReadbackProbesData {
 pub struct LightmapSettings {
     pub width: u32,
     pub height: u32,
-
-    pub max_samples: u32,
-    pub bounce_count: u32,
 
     pub dilate: bool,
     pub denoise: bool,

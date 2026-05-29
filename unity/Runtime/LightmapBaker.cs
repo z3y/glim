@@ -22,16 +22,15 @@ namespace stilb
 
         public TextureSamplerFilter filter = TextureSamplerFilter.Nearest;
 
-        [Header("Light Probes")]
-        public uint probeSamples = 4096;
-        public uint probeBounces = 5;
-
+        [Header("Bake Settings")]
+        public uint directSamples = 512;
+        public uint indirectSamples = 1024;
+        public uint lightProbeSamples = 4096;
+        public uint bounces = 5;
 
         [Header("Preview Settings")]
         public uint previewWidth = 1024;
         public uint previewHeight = 1024;
-        public uint previewSamples = 512;
-        public uint previewBounces = 3;
         public uint previewThrottle = 2;
 
         [Header("Bake Settings")]
