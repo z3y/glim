@@ -253,6 +253,12 @@ impl Texture2D {
     }
 
     pub fn read_pixels(&mut self, vk: &VulkanContext) -> Vec<f32> {
+        let mut dst: Vec<f32> = Vec::new();
+        self.read_pixels_to(vk, &mut dst);
+        dst
+    }
+
+    pub fn read_pixels_to(&mut self, vk: &VulkanContext, dst: &mut Vec<f32>) {
         let size = self.get_device_size();
 
         let (staging_buffer, staging_memory) = vk.create_buffer(
@@ -320,14 +326,17 @@ impl Texture2D {
 
         let pixel_count = (self.width * self.height * 4) as usize;
 
-        let pixels = unsafe { std::slice::from_raw_parts(ptr, pixel_count).to_vec() };
+        unsafe {
+            dst.set_len(0);
+            dst.reserve_exact(pixel_count);
+            std::ptr::copy_nonoverlapping(ptr, dst.as_mut_ptr(), pixel_count);
+            dst.set_len(pixel_count);
+        }
 
         unsafe {
             vk.device.destroy_buffer(staging_buffer, None);
             vk.device.free_memory(staging_memory, None);
         };
-
-        pixels
     }
 
     pub fn barrier<'a>(
