@@ -137,13 +137,14 @@ void ShadeLightDirect(inout Spectrum spectrum, Light light, Surface surface, flo
 
     uint emissiveTriangleCount = EMISSIVE_TRIANGLES_COUNT;
 
-    float randomEmissiveTrianglePdf = 1.0 / emissiveTriangleCount;
-    float bsdfPdf = 1.0 / float.getPi();
-
-    float triangleLightPdf = 0.0;
-    float3 triangleLight = 0.0;
     if (emissiveTriangleCount > 0)
     {
+        float randomEmissiveTrianglePdf = 1.0 / emissiveTriangleCount;
+        float bsdfPdf = 1.0 / float.getPi();
+
+        float triangleLightPdf = 0.0;
+        float3 triangleLight = 0.0;
+
         float2 xiTriangle = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
         uint emissivePrimitiveID = EmissiveTriangles[uint(xiTriangle.x * (float)emissiveTriangleCount)];
         triangleLight = ShadeTriangleLight(emissivePrimitiveID, surface, xiLight, throughput, randomEmissiveTrianglePdf, triangleLightPdf);

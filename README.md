@@ -1,33 +1,56 @@
 # Todo
 
-## Priority
-- [ ] Spot lights
-- [ ] Spot light cookie with default unity cookie
-- [ ] High resolution alpha
-- [ ] UV Packing with scale offset
-- [ ] Adjust sample positions
+## Features
+- [ ] UV Packing
+  - [ ] Scale offset
+  - [ ] Per chart
+- [ ] Log and progress callback
 - [ ] Directional lightmaps
-
-## Other
-- [ ] Include OIDN dlls
+- [ ] Terrain Support
+- [ ] Higher resolution alpha
+- [ ] Sky light
+- [ ] Spot lights
+- [ ] Light Cookies
 - [ ] Area lights
-- [ ] Add support for CWBVH
-- [ ] UV Packing per chart
-- [ ] Tiles
-- [ ] Deringing
-- [ ] Make seam detection faster
+- [ ] Light Probes Deringing
+- [ ] Bake reflection probes button with super sampling
+- [ ] Shadowmask
+- [ ] Subtractive
+- [ ] Ambient Occlusion
 - [ ] SH Lightmaps
-- [ ] Light tree
-- [ ] Proper sync for bake loop
+- [ ] Adaptive Probe Volumes
+- [ ] Light Volumes
 - [ ] Probe occlusion
-- [ ] Try to stop unity from slowing down the bake start for no reason
-- [ ] Bake reflection probes with super sampling
+- [ ] Emissive multiplier
+- [ ] Indirect multiplier
+- [ ] Add support for CWBVH
 - [ ] Global fix seams
 
-## Easy
+## Optimization
+- [ ] Light tree?
+- [ ] Tiles
+- [ ] Proper sync for bake loop
+- [ ] Try to stop unity from slowing down the bake start for no reason
+- [ ] Adjust sample positions before baking
+- [ ] Make seam detection faster
+- [ ] Make emissive triangle detection check only emissive meshes
+- [ ] Create visibility shader only once and reuse
+- [ ] Memory optimizations (compress previous diffuse between bounces, destroy emission etc)
+- [ ] Deduplicate light probe positions
+- [ ] Sample alpha in bake init shader as well to skip some rays
+
+## Bugs
+- [ ] Include OIDN dlls
+- [ ] Match point/spot light shadow radius
 - [ ] Sync scene view fov
-- [ ] Log callback
-- [ ] Match shadow radius
+- [ ] No licence yet
+- [ ] Previous diffuse is flipped on Y
+- [ ] handle not optimal swapchain
+- [ ] Emissive triangles only detect opaque meshes
+- [ ] Backface GI and Transparent flags are set for entire renderer instead of per submesh
+- [ ] Some negatively scaled exported objects have flipped normals
+- [ ] Can only bake one currently loaded scene
+
 
 # Complete
 - [x] Alpha test
