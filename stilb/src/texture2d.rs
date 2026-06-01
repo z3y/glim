@@ -166,132 +166,247 @@ impl Texture2D {
     }
 
     // only 4 channel f32 or u8 textures
-    pub fn set_pixels<T: Copy>(&mut self, vk: &VulkanContext, pixels: &[T]) {
+    // pub fn set_pixels<T: Copy>(&mut self, vk: &VulkanContext, pixels: &[T]) {
+    //     assert!(pixels.len() as u32 == self.width * self.height * 4);
+    //     assert!(
+    //         std::mem::size_of::<T>() as u64 * pixels.len() as u64 == self.get_device_size(),
+    //         "pixel type size doesn't match image format"
+    //     );
+
+    //     let size = self.get_device_size();
+
+    //     let (staging_buffer, staging_memory, _) = vk.create_buffer(
+    //         size,
+    //         vk::BufferUsageFlags::TRANSFER_SRC,
+    //         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    //     );
+
+    //     let ptr = unsafe {
+    //         vk.device
+    //             .map_memory(staging_memory, 0, size, vk::MemoryMapFlags::empty())
+    //             .unwrap()
+    //     } as *mut T;
+
+    //     unsafe {
+    //         ptr::copy_nonoverlapping(pixels.as_ptr(), ptr, pixels.len());
+    //         vk.device.unmap_memory(staging_memory);
+    //     };
+
+    //     let cmd = vk.begin_single_use_cmd();
+
+    //     let barrier = self.barrier(
+    //         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+    //         vk::AccessFlags::default(),
+    //         vk::AccessFlags::TRANSFER_WRITE,
+    //     );
+
+    //     unsafe {
+    //         vk.device.cmd_pipeline_barrier(
+    //             cmd,
+    //             vk::PipelineStageFlags::TOP_OF_PIPE,
+    //             vk::PipelineStageFlags::TRANSFER,
+    //             vk::DependencyFlags::empty(),
+    //             &[],
+    //             &[],
+    //             &[barrier],
+    //         )
+    //     };
+
+    //     let image_subresource = vk::ImageSubresourceLayers {
+    //         aspect_mask: vk::ImageAspectFlags::COLOR,
+    //         mip_level: 0,
+    //         base_array_layer: 0,
+    //         layer_count: 1,
+    //     };
+
+    //     let image_extent = vk::Extent3D {
+    //         width: self.width,
+    //         height: self.height,
+    //         depth: 1,
+    //     };
+
+    //     let region = vk::BufferImageCopy {
+    //         image_subresource,
+    //         image_extent,
+    //         ..Default::default()
+    //     };
+
+    //     unsafe {
+    //         vk.device.cmd_copy_buffer_to_image(
+    //             cmd,
+    //             staging_buffer,
+    //             self.image,
+    //             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+    //             &[region],
+    //         )
+    //     };
+
+    //     let barrier = self.barrier(
+    //         vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    //         vk::AccessFlags::TRANSFER_WRITE,
+    //         vk::AccessFlags::SHADER_READ,
+    //     );
+
+    //     unsafe {
+    //         vk.device.cmd_pipeline_barrier(
+    //             cmd,
+    //             vk::PipelineStageFlags::TRANSFER,
+    //             vk::PipelineStageFlags::FRAGMENT_SHADER,
+    //             vk::DependencyFlags::empty(),
+    //             &[],
+    //             &[],
+    //             &[barrier],
+    //         )
+    //     };
+
+    //     vk.end_single_use_cmd(cmd);
+
+    //     unsafe {
+    //         vk.device.destroy_buffer(staging_buffer, None);
+    //         vk.device.free_memory(staging_memory, None);
+    //     };
+    // }
+
+    // only 4 channel f32 or u8 textures
+    pub fn set_pixels<T: Copy>(&mut self, vk: &VulkanContext, pixels: &[T], staging: &Buffer) {
         assert!(pixels.len() as u32 == self.width * self.height * 4);
         assert!(
-            std::mem::size_of::<T>() as u64 * pixels.len() as u64 == self.get_device_size(),
+            (std::mem::size_of::<T>() as u64) * (pixels.len() as u64) == self.get_device_size(),
             "pixel type size doesn't match image format"
         );
 
-        let size = self.get_device_size();
+        let start_time = std::time::Instant::now();
 
-        // todo see if staging buffer and memory can be skipped
-        let (staging_buffer, staging_memory, _) = vk.create_buffer(
-            size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        );
-
-        // let buffer = Buffer::new(
-        //     vk,
-        //     String::from("Set Pixels Buffer"),
-        //     size,
-        //     vk::BufferUsageFlags::TRANSFER_SRC,
-        //     vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        // );
+        let staging_buffer = staging.buffer;
+        let staging_memory = staging.memory;
 
         let ptr = unsafe {
             vk.device
-                .map_memory(staging_memory, 0, size, vk::MemoryMapFlags::empty())
+                .map_memory(
+                    staging_memory,
+                    0,
+                    vk::WHOLE_SIZE,
+                    vk::MemoryMapFlags::empty(),
+                )
                 .unwrap()
         } as *mut T;
 
-        unsafe {
-            ptr::copy_nonoverlapping(pixels.as_ptr(), ptr, pixels.len());
-            vk.device.unmap_memory(staging_memory);
-        };
+        let bytes_per_row = (self.width * self.pixel_size() as u32) as vk::DeviceSize;
+        let rows_per_chunk = (staging.bytes / bytes_per_row) as u32;
+
+        assert!(
+            rows_per_chunk > 0,
+            "Image width is too large for staging buffer"
+        );
+
+        let mut current_y = 0;
+
+        while current_y < self.height {
+            let chunk_height = std::cmp::min(rows_per_chunk, self.height - current_y);
+            let chunk_pixel_count = (self.width * chunk_height * 4) as usize;
+
+            unsafe {
+                let src_offset = (current_y * self.width * 4) as usize;
+                let dst_ptr = ptr.add((current_y * self.width * 4) as usize);
+
+                ptr::copy_nonoverlapping(
+                    pixels.as_ptr().add(src_offset),
+                    dst_ptr,
+                    chunk_pixel_count,
+                );
+            }
+
+            let cmd = vk.begin_single_use_cmd();
+
+            if self.layout() != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
+                let barrier = self.barrier(
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    vk::AccessFlags::empty(),
+                    vk::AccessFlags::TRANSFER_WRITE,
+                );
+
+                unsafe {
+                    vk.device.cmd_pipeline_barrier(
+                        cmd,
+                        vk::PipelineStageFlags::TOP_OF_PIPE,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[barrier],
+                    );
+                }
+            }
+
+            let image_subresource = vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            };
+
+            let region = vk::BufferImageCopy {
+                buffer_offset: 0,
+                buffer_row_length: 0,
+                buffer_image_height: 0,
+                image_subresource,
+                image_offset: vk::Offset3D {
+                    x: 0,
+                    y: current_y as i32,
+                    z: 0,
+                },
+                image_extent: vk::Extent3D {
+                    width: self.width,
+                    height: chunk_height,
+                    depth: 1,
+                },
+            };
+
+            unsafe {
+                vk.device.cmd_copy_buffer_to_image(
+                    cmd,
+                    staging_buffer,
+                    self.image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &[region],
+                );
+            }
+
+            vk.end_single_use_cmd(cmd);
+
+            current_y += chunk_height;
+        }
 
         let cmd = vk.begin_single_use_cmd();
 
-        let barrier = self.barrier(
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            vk::AccessFlags::default(),
-            vk::AccessFlags::TRANSFER_WRITE,
-        );
-
         unsafe {
-            vk.device.cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            )
-        };
+            vk.device.unmap_memory(staging_memory);
+        }
 
-        let image_subresource = vk::ImageSubresourceLayers {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            mip_level: 0,
-            base_array_layer: 0,
-            layer_count: 1,
-        };
+        if self.layout() != vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL {
+            let barrier = self.barrier(
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::AccessFlags::SHADER_READ,
+            );
 
-        let image_extent = vk::Extent3D {
-            width: self.width,
-            height: self.height,
-            depth: 1,
-        };
-
-        let region = vk::BufferImageCopy {
-            image_subresource,
-            image_extent,
-            ..Default::default()
-        };
-
-        unsafe {
-            vk.device.cmd_copy_buffer_to_image(
-                cmd,
-                staging_buffer,
-                self.image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[region],
-            )
-        };
-
-        let barrier = self.barrier(
-            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            vk::AccessFlags::TRANSFER_WRITE,
-            vk::AccessFlags::SHADER_READ,
-        );
-
-        unsafe {
-            vk.device.cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            )
-        };
+            unsafe {
+                vk.device.cmd_pipeline_barrier(
+                    cmd,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::FRAGMENT_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[barrier],
+                );
+            }
+        }
 
         vk.end_single_use_cmd(cmd);
 
-        unsafe {
-            vk.device.destroy_buffer(staging_buffer, None);
-            vk.device.free_memory(staging_memory, None);
-        };
+        println!("set pixels in {}s", start_time.elapsed().as_secs_f32());
     }
-
-    // pub fn read_pixels(&mut self, vk: &VulkanContext) -> Vec<f32> {
-    //     let mut dst: Vec<f32> = Vec::new();
-    //     self.read_pixels_to(vk, &mut dst);
-    //     dst
-    // }
-
-    // pub fn add_pixels_to(&mut self, vk: &VulkanContext, dst: &mut [f32]) {
-    //     let mut logic = |src: &[f32]| {
-    //         assert!(dst.len() == src.len());
-
-    //         for (d, s) in dst.iter_mut().zip(src) {
-    //             *d += s;
-    //         }
-    //     };
-    //     self.read_pixels_with(vk, &mut logic);
-    // }
 
     pub fn read_pixels(&mut self, vk: &VulkanContext, dst: &mut Vec<f32>, staging: &Buffer) {
         let start_time = std::time::Instant::now();

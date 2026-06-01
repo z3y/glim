@@ -81,6 +81,8 @@ pub struct Stilb {
     pub probes_buffer: Buffer,
     pub bake_probes_shader: ComputeShader,
 
+    pub staging_buffer: Buffer,
+
     pub render_target: RenderTarget,
 }
 
@@ -88,6 +90,10 @@ impl Drop for Stilb {
     fn drop(&mut self) {
         for group in &mut self.groups {
             group.destroy(&self.vk);
+        }
+
+        if !self.staging_buffer.buffer.is_null() {
+            self.staging_buffer.destroy(&self.vk);
         }
 
         let rt = &mut self.render_target;
@@ -770,20 +776,6 @@ fn render_lightmaps(app: &mut Stilb) {
 
     let any_denoise = app.groups.iter().any(|x| x.settings.denoise);
 
-    let max_width = app.groups.iter().map(|x| x.settings.width).max().unwrap();
-    let max_height = app.groups.iter().map(|x| x.settings.height).max().unwrap();
-
-    let staging_width = max_width.min(1024) as u64;
-    let staging_height = max_height.min(1024) as u64;
-
-    let mut staging = Buffer::empty(
-        &app.vk,
-        String::from("Staging Buffer"),
-        staging_width * staging_height * 4 * std::mem::size_of::<f32>() as u64 as vk::DeviceSize, // 16 MB // todo maybe clamp to max group size
-        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
-        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-    );
-
     let oidn = if any_denoise {
         Some(Oidn::load().expect("failed to load oidn"))
     } else {
@@ -962,7 +954,11 @@ fn render_lightmaps(app: &mut Stilb) {
             copy_image(&app.vk, diffuse, &mut previous_diffuses[i]);
         }
 
-        diffuse.read_pixels(&app.vk, &mut app.groups[i].lightmap_diffuse_final, &staging);
+        diffuse.read_pixels(
+            &app.vk,
+            &mut app.groups[i].lightmap_diffuse_final,
+            &app.staging_buffer,
+        );
     }
 
     bake_direct_shader.destroy(&app.vk);
@@ -1113,7 +1109,7 @@ fn render_lightmaps(app: &mut Stilb) {
             diffuse.read_pixels(
                 &app.vk,
                 &mut app.groups[i].lightmap_diffuse_previous_bounce,
-                &staging,
+                &app.staging_buffer,
             );
 
             let group = &mut app.groups[i];
@@ -1131,13 +1127,12 @@ fn render_lightmaps(app: &mut Stilb) {
             for i in 0..app.groups.len() {
                 let group = &mut app.groups[i];
                 let pixels = &group.lightmap_diffuse_previous_bounce;
-                previous_diffuses[i].set_pixels(&app.vk, pixels);
+                previous_diffuses[i].set_pixels(&app.vk, pixels, &app.staging_buffer);
             }
         }
     }
 
     bake_bounce_shader.destroy(&app.vk);
-    staging.destroy(&app.vk);
 
     for tex in &mut previous_diffuses {
         tex.destroy(&app.vk);
@@ -2350,11 +2345,11 @@ impl LightmapGroup {
         );
 
         // if emission_pixels.len() > 0 {
-        emission.set_pixels(&app.vk, emission_pixels);
+        emission.set_pixels(&app.vk, emission_pixels, &app.staging_buffer);
         // }
 
         // if albedo_pixels.len() > 0 {
-        albedo.set_pixels(&app.vk, albedo_pixels);
+        albedo.set_pixels(&app.vk, albedo_pixels, &app.staging_buffer);
         // }
 
         LightmapGroup {
@@ -2469,6 +2464,20 @@ impl Stilb {
             diffuse: Texture2D::null(),
         };
 
+        let staging_width = 1024;
+        let staging_height = 1024;
+
+        let staging_buffer = Buffer::empty(
+            &vk,
+            String::from("Staging Buffer"),
+            staging_width
+                * staging_height
+                * 4
+                * std::mem::size_of::<f32>() as u64 as vk::DeviceSize, // 16 MB
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+
         Self {
             vk,
             opaque_mesh,
@@ -2493,6 +2502,7 @@ impl Stilb {
             seams: Vec::new(),
             emissive_triangles: Vec::new(),
             emissive_triangles_buffer: Buffer::null(),
+            staging_buffer,
         }
     }
 }
