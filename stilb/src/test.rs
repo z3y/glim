@@ -39,7 +39,7 @@ mod tests {
             seams_debug: false,
             direct_samples: 64,
             indirect_samples: 64,
-            bounce_count: 1,
+            bounce_count: 5,
             log_callback: log_callback,
             mis: false,
         };
@@ -245,8 +245,8 @@ mod tests {
         for pixel in &mut emission_pixels {
             *pixel *= f32::consts::PI;
         }
-        // let w = 256;
-        // let h = 256;
+        // let w = 1024 * 2;
+        // let h = 1024 * 2;
         // let emission_pixels = vec![0.0; (w * h * 4) as usize];
 
         let albedo_pixels = vec![255; (w * h * 4) as usize];

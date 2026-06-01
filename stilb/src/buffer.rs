@@ -1,4 +1,8 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{
+    ffi::c_void,
+    ptr,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use crate::vulkan_context::VulkanContext;
 use ash::vk::{self, Handle};
@@ -21,6 +25,8 @@ pub struct Buffer {
     pub memory: vk::DeviceMemory,
     pub address: vk::DeviceAddress,
 
+    pub ptr: *mut c_void,
+
     pub bytes: u64,
     pub name: String,
 }
@@ -33,6 +39,7 @@ impl Buffer {
             address: 0,
             bytes: 0,
             name: String::new(),
+            ptr: ptr::null_mut(),
         }
     }
 
@@ -111,12 +118,23 @@ impl Buffer {
             &name,
         );
 
+        let ptr = if properties.contains(vk::MemoryPropertyFlags::HOST_VISIBLE) {
+            unsafe {
+                vk.device
+                    .map_memory(memory, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
+                    .unwrap()
+            }
+        } else {
+            ptr::null_mut()
+        };
+
         Self {
             buffer,
             memory,
             address,
             bytes: size,
             name,
+            ptr,
         }
     }
 

@@ -278,21 +278,14 @@ impl Texture2D {
         let start_time = std::time::Instant::now();
 
         let staging_buffer = staging.buffer;
-        let staging_memory = staging.memory;
 
-        let ptr = unsafe {
-            vk.device
-                .map_memory(
-                    staging_memory,
-                    0,
-                    vk::WHOLE_SIZE,
-                    vk::MemoryMapFlags::empty(),
-                )
-                .unwrap()
-        } as *mut T;
+        let ptr = staging.ptr as *mut T;
+        let pixels = pixels.as_ptr() as *const T;
 
-        let bytes_per_row = (self.width * self.pixel_size() as u32) as vk::DeviceSize;
-        let rows_per_chunk = (staging.bytes / bytes_per_row) as u32;
+        let channels = 4;
+        let elements_per_row = (self.width as usize) * channels;
+        let rows_per_chunk =
+            ((staging.bytes as usize) / (elements_per_row * std::mem::size_of::<T>())) as u32;
 
         assert!(
             rows_per_chunk > 0,
@@ -307,13 +300,9 @@ impl Texture2D {
 
             unsafe {
                 let src_offset = (current_y * self.width * 4) as usize;
-                let dst_ptr = ptr.add((current_y * self.width * 4) as usize);
+                // let dst_ptr = ptr.add((current_y * self.width * 4) as usize);
 
-                ptr::copy_nonoverlapping(
-                    pixels.as_ptr().add(src_offset),
-                    dst_ptr,
-                    chunk_pixel_count,
-                );
+                ptr::copy_nonoverlapping(pixels.add(src_offset), ptr, chunk_pixel_count);
             }
 
             let cmd = vk.begin_single_use_cmd();
@@ -379,10 +368,6 @@ impl Texture2D {
 
         let cmd = vk.begin_single_use_cmd();
 
-        unsafe {
-            vk.device.unmap_memory(staging_memory);
-        }
-
         if self.layout() != vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL {
             let barrier = self.barrier(
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -412,21 +397,11 @@ impl Texture2D {
         let start_time = std::time::Instant::now();
 
         let staging_buffer = staging.buffer;
-        let staging_memory = staging.memory;
 
         dst.clear();
         dst.reserve((self.width * self.height * 4) as usize);
 
-        let ptr = unsafe {
-            vk.device
-                .map_memory(
-                    staging_memory,
-                    0,
-                    vk::WHOLE_SIZE,
-                    vk::MemoryMapFlags::empty(),
-                )
-                .unwrap()
-        } as *mut f32;
+        let ptr = staging.ptr as *mut f32;
 
         let bytes_per_row = (self.width * self.pixel_size() as u32) as vk::DeviceSize;
         let rows_per_chunk = (staging.bytes / bytes_per_row) as u32;
@@ -578,8 +553,6 @@ impl Texture2D {
 
             current_y += current_chunk_height;
         }
-
-        unsafe { vk.device.unmap_memory(staging_memory) };
 
         let now = std::time::Instant::now();
         let elapsed = now.duration_since(start_time).as_secs_f32();
