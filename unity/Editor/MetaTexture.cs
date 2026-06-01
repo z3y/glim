@@ -15,6 +15,8 @@ namespace stilb
         public MetaTexture(int resolution, AtlasType type)
         {
             _resolution = resolution;
+
+            // todo limit resolution
             var desc = new RenderTextureDescriptor
             {
                 autoGenerateMips = false,

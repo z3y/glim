@@ -26,6 +26,7 @@ impl ComputeShader {
             set_layout: vk::DescriptorSetLayout::null(),
         }
     }
+
     pub fn new(
         vk: &VulkanContext,
         code: &[u32],

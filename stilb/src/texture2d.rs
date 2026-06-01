@@ -18,14 +18,15 @@ pub struct Texture2D {
     view: vk::ImageView,
 
     bytes: u64,
+    name: String,
 }
 static ALLOCATED_MEMORY: AtomicU64 = AtomicU64::new(0);
 
-fn register_alloc(bytes: u64) {
+fn register_alloc(bytes: u64) -> f64 {
     let val = ALLOCATED_MEMORY.fetch_add(bytes, Ordering::Relaxed) + bytes;
 
     let mb = val as f64 / (1024.0 * 1024.0);
-    println!("TextureMemory: {:.2} MiB", mb);
+    mb
 }
 
 fn unregister_alloc(bytes: u64) {
@@ -40,6 +41,7 @@ impl Texture2D {
         height: u32,
         format: vk::Format,
         usage: vk::ImageUsageFlags,
+        name: String,
     ) -> Self {
         let extent = vk::Extent3D {
             width,
@@ -99,7 +101,14 @@ impl Texture2D {
 
         let view = unsafe { vk.device.create_image_view(&create_info, None) }.unwrap();
 
-        register_alloc(mem_reqs.size);
+        let allocated = register_alloc(mem_reqs.size);
+
+        println!(
+            "Created Texture '{:#x}' VRAM: {:.2} MiB ({})",
+            image.as_raw(),
+            allocated,
+            &name,
+        );
 
         Self {
             format,
@@ -110,6 +119,7 @@ impl Texture2D {
             height,
             layout,
             bytes: mem_reqs.size,
+            name,
         }
     }
 
@@ -413,6 +423,7 @@ impl Texture2D {
             memory: vk::DeviceMemory::null(),
             view: vk::ImageView::null(),
             bytes: 0,
+            name: String::new(),
         }
     }
 

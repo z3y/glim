@@ -5,6 +5,7 @@
   - [ ] Scale offset
   - [ ] Per chart
 - [ ] Log and progress callback
+- [ ] Bake lightprobes with new shader
 - [ ] Directional lightmaps
 - [ ] Terrain Support
 - [ ] Higher resolution alpha
@@ -49,6 +50,7 @@
 - [ ] Emissive triangles only detect opaque meshes
 - [ ] Backface GI and Transparent flags are set for entire renderer instead of per submesh
 - [ ] Some negatively scaled exported objects have flipped normals
+- [ ] Preview emission doesnt have 1 bounce
 - [ ] Can only bake one currently loaded scene
 
 

@@ -183,11 +183,7 @@ fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, gro
                 | vk::ImageUsageFlags::TRANSFER_DST
                 | vk::ImageUsageFlags::SAMPLED
                 | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-        );
-
-        println!(
-            "visibility: {:#x}",
-            app.render_target.visibility.image().as_raw()
+            String::from("RT Visibility"),
         );
     }
 
@@ -326,6 +322,7 @@ fn render_visibility_from_camera(app: &mut Stilb, width: u32, height: u32) -> Te
             | vk::ImageUsageFlags::TRANSFER_SRC
             | vk::ImageUsageFlags::TRANSFER_DST
             | vk::ImageUsageFlags::SAMPLED,
+        String::from("RT Visibility"),
     );
 
     let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
@@ -499,11 +496,13 @@ fn initialize_render(app: &mut Stilb) {
     }
 
     app.gpu_mesh = GpuMesh::new(&app.vk, &app.opaque_mesh, &app.transparent_mesh);
-    println!(
+    let message = format!(
         "Uploaded mesh Vertices: {} Triangles: {}",
         app.opaque_mesh.vertices.len() + app.transparent_mesh.vertices.len(),
         total_triangles,
     );
+
+    (app.config.log_callback)(LogMessage::message(&message));
 
     let mesh::AccelerationStructureType::RayQuery(blas) = &app.gpu_mesh.acceleration_structure
     else {
@@ -788,13 +787,25 @@ fn render_lightmaps(app: &mut Stilb) {
                 vk::ImageUsageFlags::SAMPLED
                     | vk::ImageUsageFlags::TRANSFER_SRC
                     | vk::ImageUsageFlags::TRANSFER_DST,
+                String::from("Diffuse Copy"),
             );
 
             previous_diffuses.push(diffuse);
         }
     }
 
+    let log = app.config.log_callback;
+
+    let mut progress = 0.0;
+    let progress_max = app.groups.len() as u32 * app.config.direct_samples
+        + app.groups.len() as u32 * app.config.indirect_samples;
+
+    let progress_scale = 1.0 / progress_max as f32;
+
     for i in 0..app.groups.len() {
+        let message = format!("Rendering direct light for group {}", i);
+        (log)(LogMessage::message(&message));
+
         let group = &app.groups[i];
 
         let settings = group.settings.clone();
@@ -847,6 +858,8 @@ fn render_lightmaps(app: &mut Stilb) {
         };
 
         loop {
+            (log)(LogMessage::progress(progress * progress_scale));
+
             unsafe {
                 vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
                     .unwrap();
@@ -908,6 +921,8 @@ fn render_lightmaps(app: &mut Stilb) {
 
             if push.sample_index >= push.max_samples {
                 break;
+            } else {
+                progress += 1.0;
             }
         }
 
@@ -931,6 +946,9 @@ fn render_lightmaps(app: &mut Stilb) {
         let previous: Vec<vk::ImageView> = previous_diffuses.iter().map(|x| x.view()).collect();
 
         for i in 0..app.groups.len() {
+            let message = format!("Rendering bounce {} for group {}", bounce_index, i);
+            (log)(LogMessage::message(&message));
+
             let group = &app.groups[i];
 
             let settings = group.settings.clone();
@@ -982,6 +1000,8 @@ fn render_lightmaps(app: &mut Stilb) {
             };
 
             loop {
+                (log)(LogMessage::progress(progress * progress_scale));
+
                 unsafe {
                     vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
                         .unwrap();
@@ -1043,6 +1063,8 @@ fn render_lightmaps(app: &mut Stilb) {
 
                 if push.sample_index >= push.max_samples {
                     break;
+                } else {
+                    progress += 1.0;
                 }
             }
 
@@ -1093,7 +1115,9 @@ fn render_lightmaps(app: &mut Stilb) {
 
             let now = std::time::Instant::now();
             let elapsed = now.duration_since(start_time).as_secs_f32();
-            println!("dilated in {}s", elapsed);
+
+            let message = format!("Dilation complete - {}s", elapsed);
+            (log)(LogMessage::message(&message));
         }
 
         if settings.denoise {
@@ -1108,7 +1132,9 @@ fn render_lightmaps(app: &mut Stilb) {
 
             let now = std::time::Instant::now();
             let elapsed = now.duration_since(start_time).as_secs_f32();
-            println!("denoised in {}s", elapsed);
+
+            let message = format!("Denoise Complete - {}s", elapsed);
+            (log)(LogMessage::message(&message));
         }
 
         if settings.fix_seams {
@@ -1125,10 +1151,12 @@ fn render_lightmaps(app: &mut Stilb) {
 
             let now = std::time::Instant::now();
             let elapsed = now.duration_since(start_time).as_secs_f32();
-            println!("fixed seams in {}s", elapsed);
+
+            let message = format!("Seam Fix Complete - {}s", elapsed);
+            (log)(LogMessage::message(&message));
         }
 
-        let readback_data = ReadbackData {
+        let readback_data = LightmapReadbackData {
             group_index,
             ty: 0,
             pixels: pixels.as_ptr(),
@@ -1137,7 +1165,7 @@ fn render_lightmaps(app: &mut Stilb) {
             height,
         };
 
-        (app.config.callback)(readback_data);
+        (app.config.lightmap_read_callback)(readback_data);
     }
 }
 
@@ -2094,12 +2122,10 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
             vk::ImageUsageFlags::STORAGE
                 | vk::ImageUsageFlags::TRANSFER_SRC
                 | vk::ImageUsageFlags::TRANSFER_DST,
+            String::from("RT Diffuse"),
         );
 
         let visibility = render_visibility_from_camera(app, width, height);
-
-        println!("visibility: {:#x}", visibility.image().as_raw());
-        println!("diffuse: {:#x}", diffuse.image().as_raw());
 
         app.render_target.diffuse = diffuse;
         app.render_target.visibility = visibility;
@@ -2121,8 +2147,8 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
                 vk::ImageUsageFlags::STORAGE
                     | vk::ImageUsageFlags::TRANSFER_SRC
                     | vk::ImageUsageFlags::TRANSFER_DST,
+                String::from("Lightmap Diffuse"),
             );
-            println!("diffuse: {:#x}", app.render_target.diffuse.image().as_raw());
         }
     }
 
@@ -2212,7 +2238,11 @@ fn extract_emissive_triangles(app: &mut Stilb) {
         }
     }
 
-    println!("found {} emissive triangles", emissive_triangles.len());
+    let message = format!(
+        "Found {} emissive triangles for MIS",
+        emissive_triangles.len()
+    );
+    (app.config.log_callback)(LogMessage::message(&message));
 
     if emissive_triangles.len() > 0 {
         app.emissive_triangles_buffer = Buffer::new(
@@ -2254,6 +2284,7 @@ impl LightmapGroup {
             vk::ImageUsageFlags::SAMPLED
                 | vk::ImageUsageFlags::TRANSFER_SRC
                 | vk::ImageUsageFlags::TRANSFER_DST,
+            format!("Albedo {}", index),
         );
 
         let mut emission = Texture2D::new(
@@ -2264,6 +2295,7 @@ impl LightmapGroup {
             vk::ImageUsageFlags::SAMPLED
                 | vk::ImageUsageFlags::TRANSFER_SRC
                 | vk::ImageUsageFlags::TRANSFER_DST,
+            format!("Emission {}", index),
         );
 
         // if emission_pixels.len() > 0 {
@@ -2273,39 +2305,6 @@ impl LightmapGroup {
         // if albedo_pixels.len() > 0 {
         albedo.set_pixels(&app.vk, albedo_pixels);
         // }
-
-        println!("albedo: {:#x}", albedo.image().as_raw());
-        println!("emission: {:#x}", emission.image().as_raw());
-
-        // let cmd = app.vk.begin_single_use_cmd();
-        // unsafe {
-        //     // let clear = vk::ClearColorValue {
-        //     //     float32: [1.0, 1.0, 1.0, 1.0],
-        //     // };
-        //     // clear_texture(&app.vk, &mut albedo, cmd, clear);
-
-        //     let barrier = albedo.barrier(
-        //         vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        //         vk::AccessFlags::default(),
-        //         vk::AccessFlags::SHADER_READ,
-        //     );
-        //     let barrier1 = emission.barrier(
-        //         vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        //         vk::AccessFlags::default(),
-        //         vk::AccessFlags::SHADER_READ,
-        //     );
-
-        //     app.vk.device.cmd_pipeline_barrier(
-        //         cmd,
-        //         vk::PipelineStageFlags::TOP_OF_PIPE,
-        //         vk::PipelineStageFlags::COMPUTE_SHADER,
-        //         vk::DependencyFlags::empty(),
-        //         &[],
-        //         &[],
-        //         &[barrier, barrier1],
-        //     );
-        // }
-        // app.vk.end_single_use_cmd(cmd);
 
         LightmapGroup {
             settings,

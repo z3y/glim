@@ -1,6 +1,7 @@
 use std::{
+    any::Any,
     panic::{AssertUnwindSafe, catch_unwind},
-    ptr::null_mut,
+    ptr::{null, null_mut},
     slice,
 };
 
@@ -26,8 +27,9 @@ pub struct StilbConfig {
     pub camera_position: Vector3,
     pub camera_forward: Vector3,
 
-    pub callback: ReadbackCallback,
-    pub probes_callback: ReadbackProbesCallback,
+    pub log_callback: LogCallback,
+    pub lightmap_read_callback: LightmapReadCallback,
+    pub lightprobes_read_callback: LightprobesReadCallback,
 
     pub texture_filter: TextureSamplerFilter,
     pub probe_samples: u32,
@@ -40,16 +42,83 @@ pub struct StilbConfig {
 }
 
 #[repr(u32)]
-pub enum ErrorCode {
+pub enum LogMessageType {
     Success = 0,
     Error = 1,
+    Progress = 2,
 }
 
-type ReadbackCallback = extern "C" fn(data: ReadbackData);
-type ReadbackProbesCallback = extern "C" fn(data: ReadbackProbesData);
+#[repr(C)]
+pub struct FfiString {
+    pub raw: *const u8,
+    pub length: u32,
+}
+
+impl FfiString {
+    pub fn new(value: &str) -> Self {
+        Self {
+            raw: value.as_ptr(),
+            length: value.len() as u32,
+        }
+    }
+
+    pub fn null() -> Self {
+        Self {
+            raw: null(),
+            length: 0,
+        }
+    }
+
+    pub fn from(self) -> &'static str {
+        if self.raw.is_null() {
+            return "";
+        }
+        unsafe {
+            let slice = std::slice::from_raw_parts(self.raw, self.length as usize);
+            std::str::from_utf8_unchecked(slice)
+        }
+    }
+}
 
 #[repr(C)]
-pub struct ReadbackData {
+pub struct LogMessage {
+    pub ty: LogMessageType,
+    pub progress: f32,
+    pub message: FfiString,
+}
+
+impl LogMessage {
+    pub fn message(message: &str) -> Self {
+        Self {
+            ty: LogMessageType::Success,
+            progress: -1.0,
+            message: FfiString::new(message),
+        }
+    }
+
+    pub fn progress(progress: f32) -> Self {
+        Self {
+            ty: LogMessageType::Progress,
+            progress,
+            message: FfiString::null(),
+        }
+    }
+
+    pub fn error(message: &str) -> Self {
+        Self {
+            ty: LogMessageType::Error,
+            progress: -1.0,
+            message: FfiString::new(message),
+        }
+    }
+}
+
+type LogCallback = extern "C" fn(data: LogMessage);
+type LightmapReadCallback = extern "C" fn(data: LightmapReadbackData);
+type LightprobesReadCallback = extern "C" fn(data: LightprobesReadbackData);
+
+#[repr(C)]
+pub struct LightmapReadbackData {
     pub group_index: u32,
     pub ty: u32,
     pub width: u32,
@@ -59,7 +128,7 @@ pub struct ReadbackData {
 }
 
 #[repr(C)]
-pub struct ReadbackProbesData {
+pub struct LightprobesReadbackData {
     pub probes: *const SHProbe,
     pub pixels_count: u32,
 }
@@ -96,6 +165,25 @@ pub enum LightFalloffType {
     UnityBuiltIn = 1,
 }
 
+fn handle_unwind_error(log_callback: LogCallback, err: Box<dyn Any + Send>) {
+    let error_msg: &str = if let Some(s) = err.downcast_ref::<&str>() {
+        *s
+    } else if let Some(s) = err.downcast_ref::<String>() {
+        s.as_str()
+    } else {
+        "Unknown panic payload type"
+    };
+
+    let message = FfiString::new(error_msg);
+    let data = LogMessage {
+        ty: LogMessageType::Error,
+        progress: -1.0,
+        message,
+    };
+
+    (log_callback)(data);
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn app_new(config: StilbConfig) -> *mut Stilb {
     let result = catch_unwind(AssertUnwindSafe(|| {
@@ -105,18 +193,21 @@ pub extern "C" fn app_new(config: StilbConfig) -> *mut Stilb {
 
     match result {
         Ok(val) => val,
-        Err(_) => null_mut() as *mut Stilb,
+        Err(err) => {
+            handle_unwind_error(config.log_callback, err);
+            null_mut() as *mut Stilb
+        }
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_add_mesh(app: *mut Stilb, mesh: FfiMesh) -> ErrorCode {
+pub extern "C" fn app_add_mesh(app: *mut Stilb, mesh: FfiMesh) {
     if app.is_null() {
-        return ErrorCode::Error;
+        return;
     }
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        let app = unsafe { &mut *app };
 
+    let app = unsafe { &mut *app };
+    let result = catch_unwind(AssertUnwindSafe(|| {
         let target_mesh = if mesh.transparent {
             &mut app.transparent_mesh
         } else {
@@ -128,25 +219,25 @@ pub extern "C" fn app_add_mesh(app: *mut Stilb, mesh: FfiMesh) -> ErrorCode {
             mesh,
             app.config.coordinate_system,
             &mut app.seams,
+            // todo add seams per renderer
             !app.config.is_preview,
         );
     }));
 
-    match result {
-        Ok(_) => ErrorCode::Success,
-        Err(_) => ErrorCode::Error,
+    if let Err(err) = result {
+        handle_unwind_error(app.config.log_callback, err);
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_add_light(app: *mut Stilb, mut light: Light) -> ErrorCode {
+pub extern "C" fn app_add_light(app: *mut Stilb, mut light: Light) {
     if app.is_null() {
-        return ErrorCode::Error;
+        return;
     }
 
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        let app = unsafe { &mut *app };
+    let app = unsafe { &mut *app };
 
+    let result = catch_unwind(AssertUnwindSafe(|| {
         let system = app.config.coordinate_system;
         light.position.transform_space(system);
         light.direction.transform_space(system);
@@ -159,9 +250,8 @@ pub extern "C" fn app_add_light(app: *mut Stilb, mut light: Light) -> ErrorCode 
         app.cpu_lights.push(light);
     }));
 
-    match result {
-        Ok(_) => ErrorCode::Success,
-        Err(_) => ErrorCode::Error,
+    if let Err(err) = result {
+        handle_unwind_error(app.config.log_callback, err);
     }
 }
 
@@ -173,14 +263,14 @@ pub extern "C" fn app_add_lightmap_group(
     albedo_pixels_length: u32,
     emission_pixels: *const f32,
     emission_pixels_length: u32,
-) -> ErrorCode {
+) {
     if app.is_null() {
-        return ErrorCode::Error;
+        return;
     }
 
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        let app = unsafe { &mut *app };
+    let app = unsafe { &mut *app };
 
+    let result = catch_unwind(AssertUnwindSafe(|| {
         let emission_pixels =
             unsafe { slice::from_raw_parts(emission_pixels, emission_pixels_length as usize) };
 
@@ -192,38 +282,37 @@ pub extern "C" fn app_add_lightmap_group(
         app.groups.push(group);
     }));
 
-    match result {
-        Ok(_) => ErrorCode::Success,
-        Err(_) => ErrorCode::Error,
+    if let Err(err) = result {
+        handle_unwind_error(app.config.log_callback, err);
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_run(app: *mut Stilb) -> ErrorCode {
+pub extern "C" fn app_run(app: *mut Stilb) {
     if app.is_null() {
-        return ErrorCode::Error;
+        return;
     }
 
+    let app = unsafe { &mut *app };
+
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let app = unsafe { &mut *app };
         initialize_render(app);
     }));
 
-    match result {
-        Ok(_) => ErrorCode::Success,
-        Err(_) => ErrorCode::Error,
+    if let Err(err) = result {
+        handle_unwind_error(app.config.log_callback, err);
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_add_probe(app: *mut Stilb, mut position: Vector3) -> ErrorCode {
+pub extern "C" fn app_add_probe(app: *mut Stilb, mut position: Vector3) {
     if app.is_null() {
-        return ErrorCode::Error;
+        return;
     }
 
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        let app = unsafe { &mut *app };
+    let app = unsafe { &mut *app };
 
+    let result = catch_unwind(AssertUnwindSafe(|| {
         let system = app.config.coordinate_system;
         position.transform_space(system);
 
@@ -253,29 +342,27 @@ pub extern "C" fn app_add_probe(app: *mut Stilb, mut position: Vector3) -> Error
         app.probes.push(probe);
     }));
 
-    match result {
-        Ok(_) => ErrorCode::Success,
-        Err(_) => ErrorCode::Error,
+    if let Err(err) = result {
+        handle_unwind_error(app.config.log_callback, err);
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_destroy(app: *mut Stilb) -> ErrorCode {
+pub extern "C" fn app_destroy(app: *mut Stilb) {
     if app.is_null() {
-        return ErrorCode::Error;
+        return;
     }
 
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        if !app.is_null() {
-            // Take ownership back from the pointer and let Box drop it
-            let mut _app = unsafe { Box::from_raw(app) };
+    let app = unsafe { &mut *app };
 
-            println!("App destroyed ");
-        }
+    let callback = app.config.log_callback;
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // Take ownership back from the pointer and let Box drop it
+        let mut _app = unsafe { Box::from_raw(app) };
     }));
 
-    match result {
-        Ok(_) => ErrorCode::Success,
-        Err(_) => ErrorCode::Error,
+    if let Err(err) = result {
+        handle_unwind_error(callback, err);
     }
 }

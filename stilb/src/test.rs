@@ -25,8 +25,8 @@ mod tests {
             camera_forward: Vector3::FORWARD,
             preview_settings,
             throttle_preview_ms: 2,
-            callback: test_save_callback,
-            probes_callback: test_probes_callback,
+            lightmap_read_callback: test_save_callback,
+            lightprobes_read_callback: test_probes_callback,
             texture_filter: TextureSamplerFilter::Nearest,
             probe_samples: 4096,
             probe_bounces: 3,
@@ -35,7 +35,8 @@ mod tests {
             seams_debug: false,
             direct_samples: 32,
             indirect_samples: 32,
-            bounce_count: 2,
+            bounce_count: 1,
+            log_callback: log_callback,
         };
         config
     }
@@ -151,21 +152,21 @@ mod tests {
         //     },
         // );
 
-        app_add_light(
-            app,
-            Light {
-                ty: LightType::Point,
-                position: Vector3 {
-                    x: 0.5,
-                    y: 0.3,
-                    z: -0.5,
-                },
-                direction: Vector3::ZERO,
-                range: 5.0,
-                color: Vector3::new(1.0, 1.0, 1.0),
-                shadow_radius_or_angle: 0.0,
-            },
-        );
+        // app_add_light(
+        //     app,
+        //     Light {
+        //         ty: LightType::Point,
+        //         position: Vector3 {
+        //             x: 0.5,
+        //             y: 0.3,
+        //             z: -0.5,
+        //         },
+        //         direction: Vector3::ZERO,
+        //         range: 5.0,
+        //         color: Vector3::new(1.0, 1.0, 1.0),
+        //         shadow_radius_or_angle: 0.0,
+        //     },
+        // );
 
         // app_add_light(
         //     app,
@@ -239,15 +240,15 @@ mod tests {
         for pixel in &mut emission_pixels {
             *pixel *= f32::consts::PI;
         }
-        let emission_pixels = vec![0.0; (w * h * 4) as usize];
+        // let emission_pixels = vec![0.0; (w * h * 4) as usize];
 
         let albedo_pixels = vec![255; (w * h * 4) as usize];
         let settings = LightmapSettings {
             width: w,
             height: h,
-            denoise: false,
-            dilate: false,
-            fix_seams: false,
+            denoise: true,
+            dilate: true,
+            fix_seams: true,
         };
         app_add_lightmap_group(
             app,
@@ -375,7 +376,7 @@ mod tests {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "C" fn test_save_callback(data: ReadbackData) {
+    pub extern "C" fn test_save_callback(data: LightmapReadbackData) {
         let pixels = unsafe { std::slice::from_raw_parts(data.pixels, data.pixels_count as usize) };
 
         let file_name = format!("../temp/diffuse_lightmap{}.bmp", data.group_index);
@@ -383,7 +384,20 @@ mod tests {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "C" fn test_probes_callback(data: ReadbackProbesData) {
+    pub extern "C" fn log_callback(data: LogMessage) {
+        match data.ty {
+            LogMessageType::Success => println!("Message: {}", data.message.from()),
+            LogMessageType::Error => panic!("Error: {}", data.message.from()),
+            LogMessageType::Progress => {
+                use std::io::{self, Write};
+                print!("\rProgress: {:.1}%\x1B[K", data.progress * 100.0);
+                let _ = io::stdout().flush();
+            }
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn test_probes_callback(data: LightprobesReadbackData) {
         let probes = unsafe { std::slice::from_raw_parts(data.probes, data.pixels_count as usize) };
 
         println!("Baked Probes:\n {:?}", &probes);
