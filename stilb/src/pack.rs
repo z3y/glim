@@ -55,6 +55,9 @@ impl Chart {
             uv_area += d.abs() as f64;
         }
 
+        uv_area *= 0.5;
+        world_area *= 0.5;
+
         (world_area.sqrt() / uv_area.sqrt()) as f32
     }
 
