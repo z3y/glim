@@ -15,6 +15,7 @@ struct UVPacker {
     charts: Vec<Chart>,
     width: u32,
     height: u32,
+    area: f64,
 }
 
 struct Chart {
@@ -85,11 +86,12 @@ fn determinant(c: Vector2, c2: Vector2, c3: Vector2) -> f32 {
 }
 
 impl UVPacker {
-    fn new() -> Self {
+    fn new(width: u32, height: u32) -> Self {
         Self {
             charts: Vec::new(),
-            width: 256,
-            height: 256,
+            width: width,
+            height: height,
+            area: width as f64 * height as f64,
         }
     }
 
@@ -113,6 +115,8 @@ impl UVPacker {
             uv_area: 0.0,
         };
 
+        // todo maybe offset uvs so theyre always positive
+
         let mut scale = chart.calculate_area_multiplier();
         scale *= scale_multiplier;
 
@@ -121,5 +125,54 @@ impl UVPacker {
         chart.uv_area = chart.calculate_uv_area();
 
         self.charts.push(chart);
+    }
+
+    pub fn pack(&mut self) {
+        // sort from largest to smallest chart
+        self.charts
+            .sort_by(|a, b| b.uv_area.partial_cmp(&a.uv_area).unwrap());
+
+        let total_area: f64 = self.charts.iter().map(|x| x.uv_area).sum();
+
+        let maximum_scale = self.area / total_area;
+
+        // scale up to texel units
+        let scale_guess = (maximum_scale * 0.75) as f32;
+
+        for chart in &mut self.charts {
+            chart.uvs.iter_mut().for_each(|uv| *uv *= scale_guess);
+        }
+    }
+}
+
+struct Bitmap {
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+}
+
+impl Bitmap {
+    fn rasterize(chart: &Chart) -> Self {
+        let (mut min_x, mut max_x) = (u32::MAX, u32::MIN);
+        let (mut min_y, mut max_y) = (u32::MAX, u32::MIN);
+
+        for uv in &chart.uvs {
+            min_x = min_x.min(uv.x.floor() as u32);
+            max_x = max_x.max(uv.x.ceil() as u32);
+
+            min_y = min_y.min(uv.y.floor() as u32);
+            max_y = max_y.max(uv.y.ceil() as u32);
+        }
+
+        let width = max_x - min_x;
+        let height = max_y - min_y;
+
+        let pixels = vec![0; (width * height) as usize];
+
+        Self {
+            width,
+            height,
+            pixels,
+        }
     }
 }
