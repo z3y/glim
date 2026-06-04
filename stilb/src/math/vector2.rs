@@ -111,3 +111,10 @@ impl Div<f32> for Vector2 {
         Vector2::new(self.x / rhs, self.y / rhs)
     }
 }
+
+impl std::ops::SubAssign for Vector2 {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+    }
+}

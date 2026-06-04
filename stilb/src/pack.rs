@@ -81,6 +81,20 @@ impl Chart {
     pub fn bitmap(&self) -> &Bitmap {
         &self.bitmap
     }
+
+    fn offset_uvs(&mut self) {
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+
+        for uv in &self.uvs {
+            min_x = min_x.min(uv.x);
+            min_y = min_y.min(uv.y);
+        }
+
+        let offset = Vector2::new(min_x, min_y);
+
+        self.uvs.iter_mut().for_each(|uv| *uv -= offset);
+    }
 }
 
 fn determinant(c: Vector2, c2: Vector2, c3: Vector2) -> f32 {
@@ -121,7 +135,7 @@ impl UVPacker {
             bitmap: Bitmap::empty(),
         };
 
-        // todo maybe offset uvs so theyre always positive
+        chart.offset_uvs();
 
         let mut scale = chart.calculate_area_multiplier();
         scale *= scale_multiplier;
