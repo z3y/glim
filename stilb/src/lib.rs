@@ -776,9 +776,24 @@ fn render_lightmaps(app: &mut Stilb) {
     let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
 
     let any_denoise = app.groups.iter().any(|x| x.settings.denoise);
+    let log = app.config.log_callback;
 
     let oidn = if any_denoise {
-        Some(Oidn::load().expect("failed to load oidn"))
+        let oidn = Oidn::load();
+        if oidn.is_err() {
+            let err = oidn.err();
+            match err {
+                Some(err) => {
+                    let message = "Failed to load Open Image Denoise";
+                    (log)(LogMessage::message(&message));
+                    (log)(LogMessage::message(&err.to_string()))
+                }
+                None => {}
+            };
+            None
+        } else {
+            Some(oidn.unwrap())
+        }
     } else {
         None
     };
