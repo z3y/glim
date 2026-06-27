@@ -32,7 +32,9 @@ pub struct Chart {
 
     /// Texel-space top-left corner where this chart was placed.
     /// Set after a successful `pack()`.
-    pub placed_offset: Option<(u32, u32)>,
+    pub placed_offset: (u32, u32),
+    pub scale: f32,
+    pub world_scale: f32,
 }
 
 impl Chart {
@@ -93,6 +95,7 @@ impl Chart {
     /// Overwrite `self.uvs` with `self.base_uvs * scale`.  Used to cheaply
     /// re-scale for each pack attempt without re-running the area multiplier.
     fn scale_uvs_from_base(&mut self, scale: f32) {
+        self.scale = scale;
         for (uv, &base) in self.uvs.iter_mut().zip(self.base_uvs.iter()) {
             *uv = base * scale;
         }
@@ -115,10 +118,11 @@ pub struct UVPacker {
     area: f64,
     brute_force: bool,
     pub target: Option<Bitmap>,
+    iterations: u32,
 }
 
 impl UVPacker {
-    pub fn new(width: u32, height: u32, brute_force: bool) -> Self {
+    pub fn new(width: u32, height: u32, iterations: u32, brute_force: bool) -> Self {
         Self {
             charts: Vec::new(),
             width,
@@ -126,6 +130,7 @@ impl UVPacker {
             area: width as f64 * height as f64,
             brute_force,
             target: None,
+            iterations,
         }
     }
 
@@ -149,7 +154,9 @@ impl UVPacker {
             mesh_id,
             uv_area: 0.0,
             bitmap: Bitmap::empty(),
-            placed_offset: None,
+            placed_offset: (0, 0),
+            scale: 1.0,
+            world_scale: 1.0,
         };
 
         chart.offset_uvs();
@@ -162,6 +169,7 @@ impl UVPacker {
         // multiplies from here rather than compounding scales.
         chart.base_uvs = chart.uvs.clone();
         chart.uv_area = chart.calculate_uv_area();
+        chart.world_scale = scale;
 
         self.charts.push(chart);
     }
@@ -207,7 +215,7 @@ impl UVPacker {
         let mut best_scale = 0.0_f32;
         let mut best_placements: Option<Vec<(u32, u32)>> = None;
 
-        for _ in 0..5 {
+        for _ in 0..self.iterations {
             if let Some(placements) = self.try_pack_at_scale(scale_guess) {
                 if scale_guess > best_scale {
                     best_scale = scale_guess;
@@ -235,7 +243,7 @@ impl UVPacker {
         let inv_h = 1.0 / self.height as f32;
 
         for (chart, &(ox, oy)) in self.charts.iter_mut().zip(placements.iter()) {
-            chart.placed_offset = Some((ox, oy));
+            chart.placed_offset = (ox, oy);
 
             // Rebuild the bitmap at the winning scale (useful for debugging /
             // downstream consumers of chart.bitmap()).
@@ -251,6 +259,22 @@ impl UVPacker {
         }
 
         true
+    }
+
+    pub fn get_scale_offset(&self, chart: usize) -> (Vector2, Vector2) {
+        let chart = &self.charts[chart];
+
+        let scale = Vector2::new(
+            chart.scale * chart.world_scale / self.width as f32,
+            chart.scale * chart.world_scale / self.height as f32,
+        );
+
+        let offset = Vector2::new(
+            chart.placed_offset.0 as f32 / self.width as f32,
+            chart.placed_offset.1 as f32 / self.height as f32,
+        );
+
+        (scale, offset)
     }
 
     /// Attempt to place every chart at `scale` into a fresh atlas bitmap.

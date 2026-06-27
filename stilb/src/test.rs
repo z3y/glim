@@ -447,7 +447,7 @@ mod tests {
         let path = "../meshes/packuv.glb";
         // let path = "../meshes/plane.glb";
 
-        let mut packer = UVPacker::new(1024, 1024, true);
+        let mut packer = UVPacker::new(512, 512, 5, true);
 
         let (document, buffers, _) =
             gltf::import(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -505,6 +505,7 @@ mod tests {
 
         for (i, chart) in packer.charts().iter().enumerate() {
             let file_name = format!("../temp/char{}.bmp", i);
+            println!("scale_offset {:#?}", packer.get_scale_offset(i));
             chart.bitmap().save_bmp(&file_name);
         }
 
