@@ -271,7 +271,12 @@ namespace stilb
                         }
                     }
 
-                    UVPacking.uvpacker_pack(packer);
+                    bool success = UVPacking.uvpacker_pack(packer);
+
+                    if (!success)
+                    {
+                        throw new Exception("UV Packing failed, try increasing resolution or packing iteration count");
+                    }
 
                     for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                     {

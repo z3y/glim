@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System;
 using UnityEditor;
 using UnityEngine;
 
@@ -27,7 +28,7 @@ namespace stilb
         public uint indirectSamples = 1024;
         public uint lightProbeSamples = 4096;
         public uint bounces = 5;
-        [HideInInspector] public bool multipleImportanceSampling = false;
+        [NonSerialized] public bool multipleImportanceSampling = false;
 
         [Header("Preview Settings")]
         public uint previewWidth = 1024;
