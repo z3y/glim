@@ -243,12 +243,15 @@ namespace stilb
                     {
                         Renderer r = renderers[rendererIndex];
                         var mf = r.GetComponent<MeshFilter>();
+                        var t = r.GetComponent<Transform>();
+
                         var mesh = mf.sharedMesh;
 
                         bool hasUv0 = mesh.HasVertexAttribute(VertexAttribute.TexCoord0);
                         bool hasUv1 = mesh.HasVertexAttribute(VertexAttribute.TexCoord1);
 
                         var positions = mesh.vertices;
+                        t.TransformPoints(positions); // todo slow, verts are transformed again later
                         var uvs = hasUv1 ? mesh.uv2 : mesh.uv;
                         var indices = mesh.triangles;
                         float scale = 1.0f;

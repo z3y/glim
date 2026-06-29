@@ -10,7 +10,6 @@
 // if everything fits repeat with larger approximation or stop and scale charts back into [0, 1] uv range
 
 use core::slice;
-use std::ffi::c_void;
 
 use crate::math::{Vector2, Vector3};
 
@@ -28,7 +27,6 @@ pub struct Chart {
 
     pub positions: Vec<Vector3>,
     pub indices: Vec<u32>,
-    pub original_indices: Vec<u32>,
     pub mesh_id: usize,
     pub uv_area: f64,
     pub bitmap: Bitmap,
@@ -156,7 +154,6 @@ impl UVPacker {
             base_uvs: Vec::new(),
             positions: positions.to_vec(),
             indices: indices.to_vec(),
-            original_indices: indices.to_vec(),
             mesh_id,
             uv_area: 0.0,
             bitmap: Bitmap::empty(),
@@ -582,7 +579,6 @@ fn rasterize_triangle_bilinear(a: Vector2, b: Vector2, c: Vector2, bm: &mut Bitm
     let min_y = a.y.min(b.y).min(c.y);
     let max_y = a.y.max(b.y).max(c.y);
 
-    // Exact texel range whose open (center‑shifted) rectangles can touch the triangle
     let tri_min_x = ((min_x - 0.5).floor() as i32).max(0) as u32;
     let tri_max_x = ((max_x + 0.5).ceil() as i32).min(bm.width as i32).max(0) as u32;
     let tri_min_y = ((min_y - 0.5).floor() as i32).max(0) as u32;
