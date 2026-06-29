@@ -4,25 +4,16 @@
 // calculate area sum of all charts and use as a maximum
 // sort charts by area from largest to smallest
 // calculate bounds for each chart
-// find an approximate float (something like 75% to 100% coverage) to scale all charts to fit inside area of lightmap texture in texel units (256 x 256 = 65536.0)
+// find an approximate float (something like 75% to 100% coverage) to scale all charts to fit inside area of lightmap texture in texel units
 // rasterize each uv chart into a bitmap
 // pack
 // if everything fits repeat with larger approximation or stop and scale charts back into [0, 1] uv range
 
+use crate::math::{Vector2, Vector3};
 use core::slice;
 
-use crate::math::{Vector2, Vector3};
-
-// ─── Chart ───────────────────────────────────────────────────────────────────
-
 pub struct Chart {
-    /// Working UV array.  After a successful `pack()` call these are the final
-    /// [0, 1] lightmap UVs.  Before that they are in scaled world-space units.
     pub uvs: Vec<Vector2>,
-
-    /// UVs after the world-space area multiplier has been applied but *before*
-    /// the atlas `scale_guess` is applied.  Never mutated after `add_mesh`.
-    /// Every pack attempt re-derives `uvs` from this.
     base_uvs: Vec<Vector2>,
 
     pub positions: Vec<Vector3>,
@@ -33,8 +24,6 @@ pub struct Chart {
 
     pub chart_uv_min: Vector2,
 
-    /// Texel-space top-left corner where this chart was placed.
-    /// Set after a successful `pack()`.
     pub placed_offset: (u32, u32),
     pub scale: f32,
     pub world_scale: f32,
@@ -96,8 +85,6 @@ impl Chart {
         self.uvs.iter_mut().for_each(|uv| *uv -= offset);
     }
 
-    /// Overwrite `self.uvs` with `self.base_uvs * scale`.  Used to cheaply
-    /// re-scale for each pack attempt without re-running the area multiplier.
     fn scale_uvs_from_base(&mut self, scale: f32) {
         self.scale = scale;
         for (uv, &base) in self.uvs.iter_mut().zip(self.base_uvs.iter()) {
@@ -112,8 +99,6 @@ fn determinant(c: Vector2, c2: Vector2, c3: Vector2) -> f32 {
     let num3 = c.y - c2.y;
     c.x * num - c2.x * num2 + c3.x * num3
 }
-
-// ─── UVPacker ─────────────────────────────────────────────────────────────────
 
 pub struct UVPacker {
     charts: Vec<Chart>,
@@ -138,7 +123,6 @@ impl UVPacker {
         }
     }
 
-    // mesh with applied transform
     pub fn add_mesh(
         &mut self,
         positions: &[Vector3],
@@ -147,6 +131,14 @@ impl UVPacker {
         scale_multiplier: f32,
         mesh_id: usize,
     ) {
+        if indices.len() % 3 != 0 {
+            return;
+        }
+
+        if positions.len() != uvs.len() {
+            return;
+        }
+
         // todo split into charts for non scale offset mode
 
         let mut chart = Chart {
@@ -169,8 +161,6 @@ impl UVPacker {
         scale *= scale_multiplier;
         chart.uvs.iter_mut().for_each(|x| *x *= scale);
 
-        // Snapshot the area-scaled UVs.  Every later `try_pack_at_scale` call
-        // multiplies from here rather than compounding scales.
         chart.base_uvs = chart.uvs.clone();
         chart.uv_area = chart.calculate_uv_area();
         chart.world_scale = scale;
@@ -178,43 +168,27 @@ impl UVPacker {
         self.charts.push(chart);
     }
 
-    /// Pack all charts into the lightmap.
-    ///
-    /// **Modes**
-    /// - `brute_force = true`:  For every chart the search cursor resets to
-    ///   (0, 0).  Finds the optimal placement but is slower.
-    /// - `brute_force = false`: The cursor advances to the right edge of the
-    ///   last placed chart on the same row.  When the cursor-based scan fails
-    ///   for a chart the algorithm falls back to a full scan from (0, 0) to
-    ///   fill holes.  Only gives up after that second pass also fails.
-    ///
-    /// Up to 5 binary-search attempts are made between 0 and `maximum_scale`
-    /// (the theoretical scale where charts fill the atlas with zero waste,
-    /// which is never achievable in practice).  The best successful scale is
-    /// committed and `chart.uvs` is written with final [0, 1] lightmap UVs.
-    ///
-    /// Returns `true` on success.
     pub fn pack(&mut self) -> bool {
         if self.charts.is_empty() {
             return true;
         }
 
-        // Sort largest charts first so they anchor the layout.
-        self.charts
-            .sort_by(|a, b| b.uv_area.partial_cmp(&a.uv_area).unwrap());
+        self.charts.sort_by(|a, b| {
+            b.uv_area
+                .partial_cmp(&a.uv_area)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let total_area: f64 = self.charts.iter().map(|x| x.uv_area).sum();
         if total_area == 0.0 {
             return false;
         }
 
-        // At `maximum_scale` chart area == atlas area → impossible to pack
-        // without gaps, so the valid search space is (0, maximum_scale).
         let maximum_scale = (self.area / total_area).sqrt() as f32;
 
         let mut low = 0.0_f32;
         let mut high = maximum_scale;
-        let mut scale_guess = maximum_scale * 0.75; // start at 75 %
+        let mut scale_guess = maximum_scale * 0.75;
 
         let mut best_scale = 0.0_f32;
         let mut best_placements: Option<Vec<(u32, u32)>> = None;
@@ -225,11 +199,9 @@ impl UVPacker {
                     best_scale = scale_guess;
                     best_placements = Some(placements);
                 }
-                // Success → search the upper half.
                 low = scale_guess;
                 scale_guess = (scale_guess + high) * 0.5;
             } else {
-                // Failure → search the lower half.
                 high = scale_guess;
                 scale_guess = (low + scale_guess) * 0.5;
             }
@@ -249,13 +221,10 @@ impl UVPacker {
         for (chart, &(ox, oy)) in self.charts.iter_mut().zip(placements.iter()) {
             chart.placed_offset = (ox, oy);
 
-            // Rebuild the bitmap at the winning scale (useful for debugging /
-            // downstream consumers of chart.bitmap()).
             chart.scale_uvs_from_base(best_scale);
             let bm = Bitmap::rasterize(chart);
             chart.bitmap = bm;
 
-            // Write final [0, 1] atlas UVs derived from the frozen base_uvs.
             for (uv, &base) in chart.uvs.iter_mut().zip(chart.base_uvs.iter()) {
                 uv.x = (base.x * best_scale + ox as f32) * inv_w;
                 uv.y = (base.y * best_scale + oy as f32) * inv_h;
@@ -266,30 +235,31 @@ impl UVPacker {
     }
 
     pub fn get_scale_offset(&self, chart: usize) -> (Vector2, Vector2) {
-        let chart = self.charts.iter().find(|c| c.mesh_id == chart).unwrap();
+        let chart = self.charts.iter().find(|c| c.mesh_id == chart);
 
-        let scale = Vector2::new(
-            chart.scale * chart.world_scale / self.width as f32,
-            chart.scale * chart.world_scale / self.height as f32,
-        );
+        match chart {
+            Some(chart) => {
+                let scale = Vector2::new(
+                    chart.scale * chart.world_scale / self.width as f32,
+                    chart.scale * chart.world_scale / self.height as f32,
+                );
 
-        let atlas_offset = Vector2::new(
-            (chart.placed_offset.0 as f32) / self.width as f32,
-            (chart.placed_offset.1 as f32) / self.height as f32,
-        );
+                let atlas_offset = Vector2::new(
+                    (chart.placed_offset.0 as f32) / self.width as f32,
+                    (chart.placed_offset.1 as f32) / self.height as f32,
+                );
 
-        let offset = atlas_offset - chart.chart_uv_min * scale;
+                let offset = atlas_offset - chart.chart_uv_min * scale;
 
-        (scale, offset)
+                (scale, offset)
+            }
+            None => (Vector2::ONE, Vector2::ZERO),
+        }
     }
 
-    /// Attempt to place every chart at `scale` into a fresh atlas bitmap.
-    /// Returns `Some(placements)` on full success or `None` if any chart could
-    /// not be placed.
     fn try_pack_at_scale(&mut self, scale: f32) -> Option<Vec<(u32, u32)>> {
         let brute_force = self.brute_force;
 
-        // Rasterise all charts at this scale (mutable pass).
         for chart in &mut self.charts {
             chart.scale_uvs_from_base(scale);
             chart.bitmap = Bitmap::rasterize(chart);
@@ -298,27 +268,21 @@ impl UVPacker {
         let mut target = Bitmap::new(self.width, self.height);
         let mut placements: Vec<(u32, u32)> = Vec::with_capacity(self.charts.len());
 
-        // Cursor remembers the right edge of the last placed chart so the next
-        // chart starts scanning from there rather than (0, 0) every time.
         let mut cursor = (0_u32, 0_u32);
 
         for chart in &self.charts {
             let (cw, ch) = (chart.bitmap.width, chart.bitmap.height);
 
             if cw == 0 || ch == 0 {
-                // Degenerate chart (no rasterisable triangles) – assign origin.
                 placements.push((0, 0));
                 continue;
             }
             if cw > self.width || ch > self.height {
-                return None; // can never fit at any position
+                return None;
             }
 
-            // Pick starting position.
             let start = if brute_force { (0, 0) } else { cursor };
 
-            // Primary scan from `start`.  For non-brute-force, fall back to a
-            // full (0, 0) scan to fill holes when the cursor scan fails.
             let placed = find_placement(&target, &chart.bitmap, start.0, start.1).or_else(|| {
                 if !brute_force {
                     find_placement(&target, &chart.bitmap, 0, 0)
@@ -327,17 +291,14 @@ impl UVPacker {
                 }
             });
 
-            // Propagate failure upward.
             let (ox, oy) = placed?;
 
             target.paint(&chart.bitmap, ox, oy);
             placements.push((ox, oy));
 
             if !brute_force {
-                // Advance cursor to just past the right edge on the same row.
                 cursor = (ox + cw, oy);
                 if cursor.0 >= self.width {
-                    // Wrap to the beginning of the next row.
                     cursor = (0, oy + 1);
                 }
             }
@@ -353,15 +314,6 @@ impl UVPacker {
     }
 }
 
-// ─── Placement search ────────────────────────────────────────────────────────
-
-/// Scan `target` left-to-right, top-to-bottom starting from (`start_x`,
-/// `start_y`) and return the first position where `chart` fits without
-/// overlapping any occupied pixel.  Returns `None` if no such position exists.
-///
-/// TODO: a skyline / jump-ahead optimisation can skip past occupied regions
-/// without testing every pixel column, making this O(occupied regions) rather
-/// than O(W × H) in the worst case.
 fn find_placement(
     target: &Bitmap,
     chart: &Bitmap,
@@ -372,7 +324,6 @@ fn find_placement(
         return None;
     }
 
-    // Maximum top-left corner that keeps the chart inside the atlas.
     let max_x = target.width - chart.width;
     let max_y = target.height - chart.height;
 
@@ -382,7 +333,6 @@ fn find_placement(
     if y > max_y {
         return None;
     }
-    // If x is past the valid range for this row, wrap to the next row.
     if x > max_x {
         x = 0;
         y += 1;
@@ -406,17 +356,9 @@ fn find_placement(
     }
 }
 
-// ─── Bitmap ──────────────────────────────────────────────────────────────────
-
-/// Bit-packed 2-D occupancy bitmap.
-///
-/// Each pixel is stored as a single bit inside a `u64` word so overlap
-/// detection between two bitmaps costs only O(rows × ⌈width/64⌉) bitwise AND
-/// operations instead of a per-pixel byte comparison.
 pub struct Bitmap {
     pub width: u32,
     pub height: u32,
-    /// Number of `u64` words per row: `⌈width / 64⌉`.
     row_stride: usize,
     pixels: Vec<u64>,
 }
@@ -444,17 +386,15 @@ impl Bitmap {
     #[inline]
     fn set_pixel(&mut self, x: u32, y: u32) {
         debug_assert!(x < self.width && y < self.height);
+
+        if x >= self.width || y >= self.height {
+            return;
+        }
+
         let wi = y as usize * self.row_stride + x as usize / 64;
         self.pixels[wi] |= 1u64 << (x % 64);
     }
 
-    /// Return `true` if placing `other` at (ox, oy) would overlap any set bit
-    /// in `self`.
-    ///
-    /// Implementation: for each row of `other` we shift its words by `ox % 64`
-    /// bits and AND against the corresponding target words.  A non-zero result
-    /// means overlap.  The shift splits each source word into a low part
-    /// (written to word `w`) and a high part (written to word `w + 1`).
     fn overlaps(&self, other: &Bitmap, ox: u32, oy: u32) -> bool {
         let word_off = ox as usize / 64;
         let shift = ox % 64;
@@ -469,18 +409,17 @@ impl Bitmap {
 
             for cw in 0..other.row_stride {
                 let word = other.pixels[crow + cw];
+
                 if word == 0 {
                     continue;
                 }
 
                 let tw = trow + word_off + cw;
 
-                // Low part: shift word left into the target column position.
                 if tw < self.pixels.len() && self.pixels[tw] & (word << shift) != 0 {
                     return true;
                 }
-                // High part: bits that spill into the next target word.
-                // The `shift > 0` guard avoids an undefined `>> 64` when shift == 0.
+
                 if shift > 0 {
                     let hi = word >> (64 - shift);
                     if hi != 0 && tw + 1 < self.pixels.len() && self.pixels[tw + 1] & hi != 0 {
@@ -493,8 +432,6 @@ impl Bitmap {
         false
     }
 
-    /// Stamp `other` at (ox, oy) into `self` (bitwise OR).  Used after a
-    /// successful placement to mark the atlas region as occupied.
     fn paint(&mut self, other: &Bitmap, ox: u32, oy: u32) {
         let word_off = ox as usize / 64;
         let shift = ox % 64;
@@ -701,9 +638,7 @@ pub unsafe extern "C" fn uvpacker_add_mesh(
 ) {
     let positions =
         unsafe { slice::from_raw_parts(positions as *const Vector3, position_count as usize) };
-
     let uvs = unsafe { slice::from_raw_parts(uvs as *const Vector2, uv_count as usize) };
-
     let indices = unsafe { slice::from_raw_parts(indices, index_count as usize) };
 
     let packer = unsafe { &mut *handle };
