@@ -1,78 +1,26 @@
-# Todo
+# Stilb Lightmap Baker
+
+A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
+
+## Notes
+
+- Currently requires a GPU with `VK_KHR_ray_query` extension, however it will support any GPU with a software fallback in the future. Check GPU support here `https://vulkan.gpuinfo.org/listdevices.php`, most modern GPUs should work.
+- While the lightmapper is working, it is still in early stages and might lack some features
 
 ## Features
-- [x] UV Packing
-  - [x] Scale offset
-  - [ ] Per chart
-  - [ ] Padding
-- [ ] Bake lightprobes with new shader
-- [ ] Directional lightmaps
-- [ ] Terrain Support
-- [ ] Higher resolution alpha
-- [ ] Sky light
-- [ ] Spot lights
-- [ ] Light Cookies
-- [ ] Area lights
-- [ ] Light Probes Deringing
-- [ ] Bake reflection probes button with super sampling
-- [ ] Shadowmask
-- [ ] Subtractive
-- [ ] Ambient Occlusion
-- [ ] SH Lightmaps
-- [ ] Adaptive Probe Volumes
-- [ ] Light Volumes
-- [ ] Probe occlusion
-- [ ] Emissive multiplier
-- [ ] Indirect multiplier
-- [ ] Add support for CWBVH
-- [ ] Global fix seams instead of per renderer
 
-## Optimization
-- [ ] Light tree?
-- [ ] Tiles
-- [ ] Proper sync for bake loop
-- [ ] Try to stop unity from slowing down the bake start for no reason
-- [ ] Adjust sample positions before baking
-- [ ] Make seam detection faster
-- [ ] Make emissive triangle detection check only emissive meshes
-- [ ] Create visibility shader only once and reuse
-- [ ] Memory optimizations (compress previous diffuse between bounces, destroy emission etc)
-- [ ] Deduplicate light probe positions
-- [ ] Sample alpha in bake init shader as well to skip some rays
+- Works on Windows and Linux
+- Hardware accelerated ray-tracing (can take advantage of RTX)
+- Realtime preview
+- Denoiser
+- Seam stiching with a least squares solver
+- Light Probe baking (L2 Spherical Harmonics)
+- UV Packing
+- Physically correct
+- Emissive materials, Directional, Spot and Point Lights
+- Unity URP and Built-In pipeline supported
 
-## Bugs
-- [ ] Include OIDN dlls
-- [ ] Match point/spot light shadow radius
-- [ ] Sync scene view fov
-- [ ] No licence yet
-- [ ] Previous diffuse is flipped on Y
-- [ ] handle not optimal swapchain
-- [ ] Emissive triangles only detect opaque meshes
-- [ ] Backface GI and Transparent flags are set for entire renderer instead of per submesh
-- [ ] Some negatively scaled exported objects have flipped normals
-- [ ] Preview emission doesnt have 1 bounce
-- [ ] Can only bake one currently loaded scene
+## Stack
 
-
-# Complete
-- [x] Log and progress callback
-- [x] Alpha test
-- [x] Conservative rasterization
-- [x] Return codes for bake success, fail, cancel
-- [x] Better panic handling
-- [x] Seam stitching
-- [x] Figure out why light probes are a bit darker
-- [x] Blue noise
-- [x] Double sided global illumination
-- [x] Clamp max samples and bounces
-- [x] Move test to another crate so gltf and image are not dependencies
-- [x] Configurable nearest and linear sampler
-- [x] Configurable probe samples and bounces
-- [X] L2 SH
-- [x] Export light probe positions and accumulate SH
-- [x] Set all the globals in the unity meta pass
-- [x] OIDN2 bindings and apply denoise
-
-## Readme
-
-- Supports only linear color space
+- Written in Rust, using the lightweight Ash vulkan crate, with minimal dependencies
+- Shaders written in Slang
