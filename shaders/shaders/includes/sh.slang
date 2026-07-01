@@ -4,7 +4,7 @@
 
 #pragma once
 
-struct SHProbe
+struct SHProbeL2
 {
     float3 position;
     float pad0;

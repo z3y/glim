@@ -20,8 +20,7 @@ struct Hit
     bool frontFace;
 }
 
-float4
-EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP)
+float4 EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP)
 {
     uint encoded = 0;
     if (isVisible)
@@ -61,7 +60,7 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 }
 
 // hit is not always initialized
-#pragma warning(disable : 41018)
+#pragma warning(disable: 41018)
 bool TraceRay(Ray ray, out Hit hit)
 {
     RayDesc rayDesc;
@@ -94,7 +93,7 @@ bool TraceRay(Ray ray, out Hit hit)
 
     return false;
 }
-#pragma warning(default : 41018)
+#pragma warning(default: 41018)
 
 bool TraceShadowRay(Ray ray)
 {
@@ -159,15 +158,8 @@ float CalculateTriangleArea(uint primitiveID)
 
 float2 Hammersley(uint i, uint N)
 {
-    // radical inverse (Van der Corput) in base 2
-    uint bits = i;
-    bits = (bits << 16u) | (bits >> 16u);
-    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
-    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
-    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
-    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
-    float radicalInverse = float(bits) * 2.3283064365386963e-10; // / 2^32
-
+    uint bits = reversebits(i);
+    float radicalInverse = float(bits) * 2.3283064365386963e-10;
     return float2(float(i) / float(N), radicalInverse);
 }
 
@@ -210,86 +202,36 @@ float3 RandomDirectionInHemisphere(float3 normal, float2 rand)
     return tangent * localDir.x + bitangent * localDir.y + normal * localDir.z;
 }
 
-void AccumulateColor(RWTexture2D<float4> tex, uint2 coords, uint sampleIndex, float4 color)
+void AccumulateColor(inout float4 previous, uint sampleIndex, float4 color)
 {
     if (sampleIndex == 0)
     {
-        tex[coords] = color;
+        previous = color;
     }
     else
     {
-        float4 previousColor = LightmapDiffuse[coords];
-
         float weight = 1.0 / (float(sampleIndex) + 1.0);
-        float4 accumulatedColor = lerp(previousColor, color, weight);
-
-        tex[coords] = accumulatedColor;
+        float4 accumulatedColor = lerp(previous, color, weight);
+        previous = accumulatedColor;
     }
 }
 
-#ifdef LIGHTPROBE_SH
-void AccumulateSH(RWStructuredBuffer<SHProbe> buffer, uint probeIndex, Spectrum spectrum)
+void AccumulateL2(inout SHProbeL2 previous, uint sampleIndex, float4 color, float3 wi)
 {
-    SHProbe probe = buffer[probeIndex];
-
-    probe.sh[0].xyz += spectrum.sh[0];
-
-    probe.sh[1].xyz += spectrum.sh[1];
-    probe.sh[2].xyz += spectrum.sh[2];
-    probe.sh[3].xyz += spectrum.sh[3];
-
-    probe.sh[4].xyz += spectrum.sh[4];
-    probe.sh[5].xyz += spectrum.sh[5];
-    probe.sh[6].xyz += spectrum.sh[6];
-    probe.sh[7].xyz += spectrum.sh[7];
-    probe.sh[8].xyz += spectrum.sh[8];
-
-    buffer[probeIndex] = probe;
-}
-#endif
-
-struct Spectrum
-{
-#ifdef LIGHTPROBE_SH
-    float3 sh[9];
-#else
-    float3 color;
-#endif
-};
-
-Spectrum SpectrumZero()
-{
-    Spectrum spectrum;
-
-#ifdef LIGHTPROBE_SH
-    spectrum.sh = {0};
-#else
-    spectrum.color = 0;
-#endif
-
-    return spectrum;
-}
-
-void SpectrumAdd(inout Spectrum spectrum, float3 color, float3 wi)
-{
-#ifdef LIGHTPROBE_SH
     // flip Z for Unity
     wi.z = -wi.z;
 
-    spectrum.sh[0] += color * Y0() * A_HAT_0 * L0_NORMALIZATION;
+    previous.sh[0] += color * Y0() * A_HAT_0 * L0_NORMALIZATION;
 
-    spectrum.sh[1] += color * Y1_1(wi) * A_HAT_1 * L1_NORMALIZATION;
-    spectrum.sh[2] += color * Y10(wi) * A_HAT_1 * L1_NORMALIZATION;
-    spectrum.sh[3] += color * Y11(wi) * A_HAT_1 * L1_NORMALIZATION;
+    previous.sh[1] += color * Y1_1(wi) * A_HAT_1 * L1_NORMALIZATION;
+    previous.sh[2] += color * Y10(wi) * A_HAT_1 * L1_NORMALIZATION;
+    previous.sh[3] += color * Y11(wi) * A_HAT_1 * L1_NORMALIZATION;
 
-    spectrum.sh[4] += color * Y2_2(wi) * A_HAT_2 * L2_2_NORMALIZATION;
-    spectrum.sh[5] += color * Y2_1(wi) * A_HAT_2 * L2_2_NORMALIZATION;
-    spectrum.sh[6] += color * Y20(wi) * A_HAT_2 * L20_NORMALIZATION;
-    spectrum.sh[7] += color * Y21(wi) * A_HAT_2 * L2_2_NORMALIZATION;
-    spectrum.sh[8] += color * Y22(wi) * A_HAT_2 * L22_NORMALIZATION;
-#else
-    spectrum.color += color;
-#endif
+    previous.sh[4] += color * Y2_2(wi) * A_HAT_2 * L2_2_NORMALIZATION;
+    previous.sh[5] += color * Y2_1(wi) * A_HAT_2 * L2_2_NORMALIZATION;
+    previous.sh[6] += color * Y20(wi) * A_HAT_2 * L20_NORMALIZATION;
+    previous.sh[7] += color * Y21(wi) * A_HAT_2 * L2_2_NORMALIZATION;
+    previous.sh[8] += color * Y22(wi) * A_HAT_2 * L22_NORMALIZATION;
 }
 
 bool UseSmoothPosition(Surface surface)
@@ -356,7 +298,7 @@ float4 AdjustSamplePositions(Surface surface, float4 visibility)
 
     float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
     float3 v = normalize(worldTexelV - dot(worldTexelV, surface.Ng) * surface.Ng);
-    float3 rayDirs[4] = {u, -u, v, -v};
+    float3 rayDirs[4] = { u, -u, v, -v };
 
     Ray leakRay;
     leakRay.P = RayOffset(surface.P, surface.Ng);
@@ -385,79 +327,131 @@ float4 AdjustSamplePositions(Surface surface, float4 visibility)
     return visibility;
 }
 
-float MISWeight(float pdf1, float pdf2)
-{
-    float p1 = pdf1 * pdf1;
-    float p2 = pdf2 * pdf2;
-    return p1 / (p1 + p2);
-}
+// float MISWeight(float pdf1, float pdf2)
+// {
+//     float p1 = pdf1 * pdf1;
+//     float p2 = pdf2 * pdf2;
+//     return p1 / (p1 + p2);
+// }
 
 float Luminance(float3 rgb)
 {
     return dot(rgb, float3(0.2126, 0.7152, 0.0722));
 }
 
-float3 ShadeTriangleLight(uint primitiveID, Surface surface, float2 xi, float3 throughput, float randomEmissiveTrianglePdf, out float pdf)
+// float3 ShadeTriangleLight(uint primitiveID, Surface surface, float2 xi, float3 throughput, float randomEmissiveTrianglePdf, out float pdf)
+// {
+//     float r0 = sqrt(xi.x);
+//     float r1 = xi.y;
+//     float2 bary = float2(r0 * (1.0f - r1), r0 * r1);
+
+//     Surface emissiveSurface = Surface::Get(primitiveID, bary);
+
+//     float3 lightColor = SampleEmission(emissiveSurface.uv, emissiveSurface.lightmapGroup).rgb / float.getPi();
+
+//     if (!any(lightColor > 0.0))
+//     {
+//         pdf = 0.0;
+//         return 0.0;
+//     }
+
+//     float triangleArea = CalculateTriangleArea(primitiveID);
+//     float pdfArea = randomEmissiveTrianglePdf / triangleArea;
+
+//     float3 L = emissiveSurface.P;
+//     float3 positionToLight = L - surface.P;
+//     L = normalize(positionToLight);
+//     float distanceSquare = dot(positionToLight, positionToLight);
+
+//     float cosTheta = saturate(dot(surface.N, L));
+
+//     float cosThetaLight = dot(-L, emissiveSurface.N);
+
+//     if (emissiveSurface.backfaceGI)
+//     {
+//         cosThetaLight = saturate(abs(cosThetaLight));
+//     }
+//     else
+//     {
+//         cosThetaLight = saturate(cosThetaLight);
+//     }
+
+//     if (cosThetaLight <= 0.0001f)
+//     {
+//         pdf = 0.0;
+//         return 0.0;
+//     }
+
+//     float solidAngleWeight = cosThetaLight / (distanceSquare * pdfArea);
+
+//     float3 color = cosTheta * solidAngleWeight * lightColor * throughput;
+
+//     Ray shadowRay;
+//     shadowRay.P = RayOffset(surface.P, surface.Ng);
+//     shadowRay.tMin = 0;
+//     shadowRay.tMax = sqrt(distanceSquare) - 0.001f;
+//     shadowRay.D = L;
+//     [branch]
+//     if (any(color > 0.0))
+//     {
+//         if (TraceShadowRay(shadowRay))
+//         {
+//             color = 0.0;
+//         }
+//     }
+
+//     pdf = pdfArea * distanceSquare / cosThetaLight;
+
+//     return color;
+// }
+
+float3 ShadeLightDirect(Light light, Surface surface, float2 xi, float3 throughput, out float3 L)
 {
-    float r0 = sqrt(xi.x);
-    float r1 = xi.y;
-    float2 bary = float2(r0 * (1.0f - r1), r0 * r1);
-
-    Surface emissiveSurface = Surface::Get(primitiveID, bary);
-
-    float3 lightColor = SampleEmission(emissiveSurface.uv, emissiveSurface.lightmapGroup).rgb / float.getPi();
-
-    if (!any(lightColor > 0.0))
-    {
-        pdf = 0.0;
-        return 0.0;
-    }
-
-    float triangleArea = CalculateTriangleArea(primitiveID);
-    float pdfArea = randomEmissiveTrianglePdf / triangleArea;
-
-    float3 L = emissiveSurface.P;
-    float3 positionToLight = L - surface.P;
-    L = normalize(positionToLight);
-    float distanceSquare = dot(positionToLight, positionToLight);
-
-    float cosTheta = saturate(dot(surface.N, L));
-
-    float cosThetaLight = dot(-L, emissiveSurface.N);
-
-    if (emissiveSurface.backfaceGI)
-    {
-        cosThetaLight = saturate(abs(cosThetaLight));
-    }
-    else
-    {
-        cosThetaLight = saturate(cosThetaLight);
-    }
-
-    if (cosThetaLight <= 0.0001f)
-    {
-        pdf = 0.0;
-        return 0.0;
-    }
-
-    float solidAngleWeight = cosThetaLight / (distanceSquare * pdfArea);
-
-    float3 color = cosTheta * solidAngleWeight * lightColor * throughput;
-
     Ray shadowRay;
     shadowRay.P = RayOffset(surface.P, surface.Ng);
     shadowRay.tMin = 0;
-    shadowRay.tMax = sqrt(distanceSquare) - 0.001f;
+
+    float falloff;
+    if (light.type == LightType::Directional)
+    {
+        L = GetDirectionalLightAngle(light.direction, light.ShadowRangeOrAngle, xi);
+        falloff = 1.0;
+
+        shadowRay.tMax = RAY_MAX;
+    }
+    else
+    {
+        if (light.ShadowRangeOrAngle > 0.0)
+        {
+            L = RandomPointOnOrientedDisk(light.position, light.ShadowRangeOrAngle, surface.P, xi);
+        }
+
+        float3 positionToLight = L - surface.P;
+        L = normalize(positionToLight);
+
+        float distanceSquare = dot(positionToLight, positionToLight);
+
+        float rangeSq = light.range * light.range;
+
+        falloff = LightFalloff(distanceSquare, 1.0 / rangeSq);
+
+        shadowRay.tMax = sqrt(distanceSquare);
+    }
+
+    float cosTheta = saturate(dot(surface.N, L));
+
     shadowRay.D = L;
-    [branch] if (any(color > 0.0))
+
+    float3 color = cosTheta * falloff * light.color * throughput;
+
+    [branch]
+    if (any(color > 0.0))
     {
         if (TraceShadowRay(shadowRay))
         {
             color = 0.0;
         }
     }
-
-    pdf = pdfArea * distanceSquare / cosThetaLight;
 
     return color;
 }

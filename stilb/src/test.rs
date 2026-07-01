@@ -38,9 +38,9 @@ mod tests {
             light_falloff: LightFalloffType::InverseSquare,
             vulkan_validation_layers: true,
             seams_debug: false,
-            direct_samples: 64,
+            direct_samples: 256,
             indirect_samples: 64,
-            bounce_count: 5,
+            bounce_count: 0,
             log_callback: log_callback,
             mis: false,
         };

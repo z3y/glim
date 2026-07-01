@@ -8,8 +8,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 shaders = { path = "../shaders" }
-ash = { version = "0.38", default-features = false, features = ["linked", "std", "debug"] }
-glfw-sys = { version = "8", default-features = false, features = ["prebuilt-libs", "native-handles"] }
+ash = { version = "0.38", default-features = false, features = ["loaded", "std", "debug"] }
+glfw-sys = { version = "8", default-features = false, features = ["src-build", "prebuilt-libs", "native-handles", "x11", "wayland"] }
 libloading = "0.9.0"
 rayon = { version = "1.12", default-features = false }
 

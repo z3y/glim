@@ -56,7 +56,8 @@ impl VulkanContext {
         config: &VulkanConfig,
         create_surface_callback: impl Fn(&Instance) -> vk::SurfaceKHR,
     ) -> Self {
-        let entry = ash::Entry::linked();
+        // let entry = ash::Entry::linked();
+        let entry = unsafe { ash::Entry::load().unwrap() };
 
         const APP_NAME: &CStr = c"stilb";
         const VALIDATION_LAYER_NAME: &CStr = c"VK_LAYER_KHRONOS_validation";

@@ -18,8 +18,8 @@ struct PushConstants
 };
 
 [shader("compute")]
-    [numthreads(8, 8, 1)] void
-    main(uint3 threadID : SV_DispatchThreadID)
+[numthreads(8, 8, 1)]
+void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint2 coords = threadID.xy;
     uint2 resolution = uint2(Push.width, Push.height);
@@ -29,65 +29,63 @@ struct PushConstants
         return;
     }
 
-    Spectrum spectrum = SpectrumZero();
+    // float4 visibility = VisibilityBuffer[coords];
 
-    float4 visibility = VisibilityBuffer[coords];
+    // uint encoded = asuint(visibility.a);
 
-    uint encoded = asuint(visibility.a);
+    // if (encoded == 0)
+    // {
+    //     return;
+    // }
 
-    if (encoded == 0)
-    {
-        return;
-    }
+    // uint primitiveID = asuint(visibility.z);
+    // float2 bary = visibility.xy;
+    // bool useSmoothP = (encoded & (1 << 1)) != 0;
 
-    uint primitiveID = asuint(visibility.z);
-    float2 bary = visibility.xy;
-    bool useSmoothP = (encoded & (1 << 1)) != 0;
+    // Surface surface = Surface::Get(primitiveID, bary);
 
-    Surface surface = Surface::Get(primitiveID, bary);
+    // uint sampleIndex = Push.sampleIndex;
+    // uint sampleCount = Push.maxSamples;
+    // uint bounceIndex = Push.bounceIndex;
 
-    uint sampleIndex = Push.sampleIndex;
-    uint sampleCount = Push.maxSamples;
-    uint bounceIndex = Push.bounceIndex;
+    // uint sobolIndexMask = ~0u;
 
-    uint sobolIndexMask = ~0u;
+    // SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
+    // uint pixelSeed = RNGPixelInit(coords, pattern);
+    // uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
 
-    SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
-    uint pixelSeed = RNGPixelInit(coords, pattern);
-    uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
+    // uint dimension = bounceIndex + 3;
+    // float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
 
-    uint dimension = bounceIndex + 3;
-    float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
+    // Ray bounceRay;
+    // bounceRay.P = RayOffset(surface.P, surface.Ng);
+    // bounceRay.D = RandomDirectionInHemisphere(surface.N, xiBounce);
+    // bounceRay.tMin = 0;
+    // bounceRay.tMax = RAY_MAX;
 
-    Ray bounceRay;
-    bounceRay.P = RayOffset(surface.P, surface.Ng);
-    bounceRay.D = RandomDirectionInHemisphere(surface.N, xiBounce);
-    bounceRay.tMin = 0;
-    bounceRay.tMax = RAY_MAX;
+    // Hit bounceHit;
+    // if (TraceRay(bounceRay, bounceHit))
+    // {
+    //     Surface previousSurface = surface;
+    //     surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary);
 
-    Hit bounceHit;
-    if (TraceRay(bounceRay, bounceHit))
-    {
-        Surface previousSurface = surface;
-        surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary);
+    //     if (!bounceHit.frontFace)
+    //     {
+    //         if (!surface.backfaceGI)
+    //         {
+    //             return;
+    //         }
 
-        if (!bounceHit.frontFace)
-        {
-            if (!surface.backfaceGI)
-            {
-                return;
-            }
+    //         surface.N = -surface.N;
+    //         surface.Ng = -surface.Ng;
+    //     }
 
-            surface.N = -surface.N;
-            surface.Ng = -surface.Ng;
-        }
+    //     float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
 
-        float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
+    //     // todo why flipped
+    //     float3 previousDiffuse = SamplePreviousDiffuse(float2(surface.uv.x, 1.0 - surface.uv.y), surface.lightmapGroup).rgb;
+    //     SpectrumAdd(spectrum, previousDiffuse * bounceAlbedo, 0);
+    // }
 
-        // todo why flipped
-        float3 previousDiffuse = SamplePreviousDiffuse(float2(surface.uv.x, 1.0 - surface.uv.y), surface.lightmapGroup).rgb;
-        SpectrumAdd(spectrum, previousDiffuse * bounceAlbedo, 0);
-    }
-
-    AccumulateColor(LightmapDiffuse, coords, sampleIndex, float4(spectrum.color, 1.0));
+    // AccumulateColor(LightmapDiffuse, coords, sampleIndex, float4(spectrum.color, 1.0));
 }

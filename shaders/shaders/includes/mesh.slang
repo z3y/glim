@@ -68,7 +68,7 @@ struct Surface
     uint lightmapGroup;
     bool backfaceGI;
 
-    static Surface Get(uint primitiveID, float2 bary)
+    static Surface Get(uint primitiveID, float2 bary, bool frontFace = true)
     {
         float u = bary.x;
         float v = bary.y;
@@ -105,6 +105,12 @@ struct Surface
         float3 sp1 = P - n1 * dot(P - p1, n1);
         float3 sp2 = P - n2 * dot(P - p2, n2);
         float3 smoothP = sp0 * w + sp1 * u + sp2 * v;
+
+        if (!frontFace)
+        {
+            N = -N;
+            Ng = -Ng;
+        }
 
         Surface surface;
         surface.P = P;

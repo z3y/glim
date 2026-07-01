@@ -20,11 +20,6 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let shader_dir = Path::new("shaders");
 
-    let slangc = env::var("SLANG_DIR")
-        .map(|p| PathBuf::from(p).join("bin/slangc"))
-        .or_else(|_| env::var("VULKAN_SDK").map(|p| PathBuf::from(p).join("bin/slangc")))
-        .unwrap_or_else(|_| PathBuf::from("slangc"));
-
     println!("cargo:rerun-if-changed=shaders");
 
     let mut shaders = Vec::new();
@@ -121,7 +116,7 @@ fn main() {
             args.push("geometry");
         }
 
-        let status = Command::new(&slangc)
+        let status = Command::new("slangc")
             .arg(shader_path.to_str().unwrap())
             // .arg("-warnings-as-errors")
             // .arg("all")

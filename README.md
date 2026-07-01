@@ -31,3 +31,8 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
 - Written in Rust, using the lightweight Ash vulkan crate, with minimal dependencies
 - Shaders written in Slang
+
+## Building
+
+- Add the [slang](https://github.com/shader-slang/slang) compiler to PATH
+- `cargo build --release`
