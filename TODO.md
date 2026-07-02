@@ -26,6 +26,7 @@
 - [ ] Indirect multiplier
 - [ ] Add support for CWBVH
 - [ ] Global fix seams instead of per renderer
+- [ ] Bake sky reflection probe
 
 ## Optimization
 - [ ] Proper sync for bake loop

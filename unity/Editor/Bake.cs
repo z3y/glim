@@ -86,7 +86,14 @@ namespace stilb
                 List<LightmapData> lightmapDatas = new();
 
                 var scenePath = _context.scene.path;
-                string sceneDirectory = Path.GetDirectoryName(scenePath);
+                string sceneName = _context.scene.name;
+                string outputFolder = Path.Combine(Path.GetDirectoryName(scenePath), sceneName);
+
+                if (!AssetDatabase.IsValidFolder(outputFolder))
+                {
+                    AssetDatabase.CreateFolder(Path.GetDirectoryName(scenePath), sceneName);
+                }
+
 
                 foreach (var result in _bakeResults)
                 {
@@ -96,27 +103,27 @@ namespace stilb
                     var diffuseTex = new Texture2D((int)data.width, (int)data.height, TextureFormat.RGBAFloat, false, true);
                     diffuseTex.wrapMode = TextureWrapMode.Clamp;
                     diffuseTex.SetPixels(result.pixelsDiffuseCopy);
-                    var fileName = $"{_context.scene.name} LightmapDiffuse_{data.group_index}";
+                    var fileName = $"Lightmap-{data.group_index}_comp_light";
                     diffuseTex.name = fileName;
 
                     var assets = new UnityEngine.Object[] { diffuseTex };
                     string path;
                     if (groupAsset.format == LightmapSaveFormat.EXR)
                     {
-                        string metaPath = Path.Combine(sceneDirectory, $"{fileName}.exr.meta");
+                        string metaPath = Path.Combine(outputFolder, $"{fileName}.exr.meta");
                         if (!File.Exists(metaPath))
                         {
                             var guid = GUID.Generate().ToString();
                             var yaml = CreateTextureImporterMeta(guid);
                             File.WriteAllText(metaPath, yaml);
                         }
-                        path = Path.Combine(sceneDirectory, $"{fileName}.exr");
+                        path = Path.Combine(outputFolder, $"{fileName}.exr");
                         var bytes = diffuseTex.EncodeToEXR(groupAsset.exrFlags);
                         File.WriteAllBytes(path, bytes);
                     }
                     else // asset
                     {
-                        path = Path.Combine(sceneDirectory, $"{fileName}.asset");
+                        path = Path.Combine(outputFolder, $"{fileName}.asset");
                         InternalEditorUtility.SaveToSerializedFileAndForget(assets, path, false);
                     }
 
@@ -183,43 +190,12 @@ namespace stilb
                     EditorUtility.SetDirty(obj);
                 }
 
-                // slow
-                // using var probesSo = new SerializedObject(lightProbesRef);
-                // LightingData.InspectorModeObject.SetValue(probesSo, InspectorMode.DebugInternal);
-                // var bakedCoeff = probesSo.FindProperty("m_BakedCoefficients");
-                // int bakedCoeffCount = bakedCoeff.arraySize;
-                // for (int i = 0; i < bakedCoeffCount; i++)
-                // {
-                //     SerializedProperty prop = bakedCoeff.GetArrayElementAtIndex(i);
-
-                //     Bindings.SHProbe probeData = _bakeProbesResults[i];
-
-                //     float[] flatCoefficients = new float[27]
-                //     {
-                //         probeData.L0.x, probeData.L1_1.x, probeData.L10.x, probeData.L11.x, probeData.L2_2.x, probeData.L2_1.x, probeData.L20.x, probeData.L21.x, probeData.L22.x,
-                //         probeData.L0.y, probeData.L1_1.y, probeData.L10.y, probeData.L11.y, probeData.L2_2.y, probeData.L2_1.y, probeData.L20.y, probeData.L21.y, probeData.L22.y,
-                //         probeData.L0.z, probeData.L1_1.z, probeData.L10.z, probeData.L11.z, probeData.L2_2.z, probeData.L2_1.z, probeData.L20.z, probeData.L21.z, probeData.L22.z
-                //     };
-
-                //     prop.Next(true);
-
-                //     for (int j = 0; j < flatCoefficients.Length; j++)
-                //     {
-                //         prop.floatValue = flatCoefficients[j];
-                //         prop.Next(false);
-                //     }
-
-                // }
-                // probesSo.ApplyModifiedPropertiesWithoutUndo();
-
-
-                var storagePath = Path.Combine(sceneDirectory, $"{_context.scene.name} LightmapStorage.asset");
 
                 lda.ApplyModifiedPropertiesWithoutUndo();
-                string ldaName = _context.scene.name + " LightingData";
+                string ldaName = "LightingData";
 
                 // move 
-                string destPath = Path.Combine(Path.GetDirectoryName(scenePath), $"{ldaName}.asset").Replace("\\", "/");
+                string destPath = Path.Combine(outputFolder, $"{ldaName}.asset").Replace("\\", "/");
                 if (AssetDatabase.LoadMainAssetAtPath(destPath) != null)
                 {
                     AssetDatabase.DeleteAsset(destPath);
@@ -234,12 +210,7 @@ namespace stilb
                 Lightmapping.lightingDataAsset = newLda;
                 EditorSceneManager.MarkSceneDirty(_context.scene);
 
-                // cursed
-                // EditorSceneManager.SaveScene(_context.scene);
-                // Scene tempScene = EditorSceneManager.OpenScene(LightingData.TempScenePath, OpenSceneMode.Additive);
-                // EditorSceneManager.CloseScene(_context.scene, false);
-                // EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
-                // EditorSceneManager.CloseScene(tempScene, true);
+                LightmapBakerEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1);
             }
             finally
             {
