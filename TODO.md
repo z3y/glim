@@ -5,12 +5,12 @@
   - [x] Scale offset
   - [ ] Per chart
   - [x] Padding
+- [ ] Spot lights
 - [ ] Bake lightprobes with new shader
 - [ ] Directional lightmaps
 - [ ] Terrain Support
 - [ ] Higher resolution alpha
 - [ ] Sky light
-- [ ] Spot lights
 - [ ] Light Cookies
 - [ ] Area lights
 - [ ] Light Probes Deringing
@@ -37,12 +37,13 @@
 - [ ] Memory optimizations (compress previous diffuse between bounces, destroy emission etc)
 - [ ] Deduplicate light probe positions
 - [ ] Sample alpha in bake init shader as well to skip some rays
+- [ ] Manually build the LightingData asset
 
 ## Bugs
 - [ ] Include OIDN dlls
 - [x] Match point/spot light shadow radius
 - [ ] Sync scene view fov
-- [ ] No licence yet
+- [x] No licence yet
 - [ ] Previous diffuse is flipped on Y
 - [ ] handle not optimal swapchain
 - [ ] Emissive triangles only detect opaque meshes

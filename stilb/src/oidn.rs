@@ -102,7 +102,9 @@ impl Oidn {
         };
 
         unsafe {
-            let lib = Library::new(lib_path)?;
+            let lib = Library::new(&lib_path)?;
+
+            println!("Loading oidn from {:?}", &lib_path);
 
             let new_device: FnNewDevice = *lib.get(b"oidnNewDevice\0")?;
             let commit_device: FnCommitDevice = *lib.get(b"oidnCommitDevice\0")?;

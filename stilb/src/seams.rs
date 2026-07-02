@@ -226,66 +226,6 @@ pub fn find_seams(
     seams
 }
 
-// todo slow
-pub fn _dilate(pixels: &mut [f32], width: u32, height: u32, valid_threshold: f32) {
-    let w = width as usize;
-    let h = height as usize;
-
-    loop {
-        let mut any_filled = false;
-
-        let prev = pixels.to_vec();
-
-        for y in 0..h {
-            for x in 0..w {
-                let idx = (y * w + x) * 4;
-
-                if prev[idx + 3] > valid_threshold {
-                    continue;
-                }
-
-                let neighbors = [
-                    (x.wrapping_sub(1), y),
-                    (x + 1, y),
-                    (x, y.wrapping_sub(1)),
-                    (x, y + 1),
-                ];
-
-                let mut r = 0.0_f32;
-                let mut g = 0.0_f32;
-                let mut b = 0.0_f32;
-                let mut count = 0_u32;
-
-                for (nx, ny) in neighbors {
-                    if nx >= w || ny >= h {
-                        continue;
-                    }
-                    let nidx = (ny * w + nx) * 4;
-                    if prev[nidx + 3] > valid_threshold {
-                        r += prev[nidx];
-                        g += prev[nidx + 1];
-                        b += prev[nidx + 2];
-                        count += 1;
-                    }
-                }
-
-                if count > 0 {
-                    let inv = 1.0 / count as f32;
-                    pixels[idx] = r * inv;
-                    pixels[idx + 1] = g * inv;
-                    pixels[idx + 2] = b * inv;
-                    pixels[idx + 3] = 1.0;
-                    any_filled = true;
-                }
-            }
-        }
-
-        if !any_filled {
-            break;
-        }
-    }
-}
-
 pub fn inpaint(
     pixels: &mut [f32],
     width: u32,

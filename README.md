@@ -25,8 +25,9 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
 ## How to use
 
-
-1. Install OpenImageDenoise
+1. Install Open Image Denoise 2
+  - Windows: `https://github.com/RenderKit/oidn/releases`
+  - Fedora Linux: `sudo dnf install oidn`
 
 todo
 
