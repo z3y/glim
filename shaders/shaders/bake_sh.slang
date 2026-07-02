@@ -18,8 +18,8 @@ struct PushConstants
 };
 
 [shader("compute")]
-[numthreads(64, 1, 1)]
-void main(uint3 threadID: SV_DispatchThreadID)
+    [numthreads(64, 1, 1)] void
+    main(uint3 threadID : SV_DispatchThreadID)
 {
     uint probeIndex = threadID.x;
 
@@ -28,89 +28,55 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
-    // SHProbe probe = SHProbes[probeIndex];
-    // float3 probePosition = probe.position;
+    SHProbeL2 probe = SHProbes[probeIndex];
+    float3 probePosition = probe.position;
 
-    // Spectrum spectrum = SpectrumZero();
-    // float3 throughput = float3(1.0);
+    uint sampleIndex = Push.sampleIndex;
+    uint sampleCount = Push.maxSamples;
+    uint bounceCount = Push.bounceCount;
+    uint lightCount = Push.lightCount;
 
-    // uint sampleIndex = Push.sampleIndex;
-    // uint sampleCount = Push.maxSamples;
-    // uint bounceCount = Push.bounceCount;
-    // uint lightCount = Push.lightCount;
-    // // todo set constant
-    // // this is actually incorrect in cycles
-    // // uint sobolIndexMask = reversebits(NextPowerOfTwo(sampleCount - 1) - 1);
-    // uint sobolIndexMask = NextPowerOfTwo(sampleCount - 1) - 1;
+    uint sobolIndexMask = ~0u;
+    SamplingPattern pattern = SamplingPattern::BlueNoisePure;
+    uint pixelSeed = RNGPixelInit(uint2(probeIndex.x, 0), pattern);
+    uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
+    uint dimension = 0;
 
-    // SamplingPattern pattern = SamplingPattern::BlueNoisePure;
-    // uint pixelSeed = RNGPixelInit(uint2(probeIndex.x, 0), pattern);
-    // uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
-    // uint dimension = 0;
+    float2 xiLight = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
 
-    // float2 xiLight = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
+    float3 throughput = float3(1.0);
 
-    // for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
-    // {
-    //     ShadeLightDirect(spectrum, Lights[lightIndex], probePosition, xiLight, throughput);
-    // }
+    for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
+    {
+        float3 L;
+        float3 color = ShadeLightDirectSH(Lights[lightIndex], probePosition, xiLight, throughput, L);
+        AccumulateL2(probe, sampleIndex, color, L);
+    }
 
-    // float2 xiBounce0 = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
+    float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
 
-    // Ray bounceRay;
-    // bounceRay.P = probePosition;
-    // bounceRay.D = RandomDirectionSphere(xiBounce0);
-    // bounceRay.tMin = 0;
-    // bounceRay.tMax = RAY_MAX;
-    // float3 wi = bounceRay.D;
+    Ray bounceRay;
+    bounceRay.P = probePosition;
+    bounceRay.D = RandomDirectionSphere(xiBounce);
+    bounceRay.tMin = 0;
+    bounceRay.tMax = RAY_MAX;
 
-    // float3 indirect = 0;
+    Hit bounceHit;
+    if (TraceRay(bounceRay, bounceHit))
+    {
+        Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
 
-    // // bounces
-    // for (uint bounceIndex = 0; bounceIndex < bounceCount; bounceIndex++)
-    // {
-    //     Hit bounceHit;
-    //     if (TraceRay(bounceRay, bounceHit))
-    //     {
-    //         Surface surfaceBounce = Surface::Get(bounceHit.primitiveID, bounceHit.bary);
-    //         bool backfaceGI = surfaceBounce.backfaceGI;
+        bool backface = !bounceHit.frontFace && !surface.backfaceGI;
 
-    //         if (!bounceHit.frontFace)
-    //         {
-    //             if (!backfaceGI)
-    //             {
-    //                 break;
-    //             }
+        if (!backface)
+        {
+            float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+            AccumulateL2(probe, sampleIndex, bounceEmission.rgb * 4, bounceRay.D);
 
-    //             surfaceBounce.N = -surfaceBounce.N;
-    //             surfaceBounce.Ng = -surfaceBounce.Ng;
-    //         }
-
-    //         float3 bounceEmission = SampleEmission(surfaceBounce.uv, surfaceBounce.lightmapGroup).rgb;
-    //         float3 bounceAlbedo = SampleAlbedo(surfaceBounce.uv, surfaceBounce.lightmapGroup).rgb;
-
-    //         indirect += bounceEmission * throughput;
-
-    //         throughput *= bounceAlbedo;
-
-    //         float2 xiLight = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
-    //         float2 xiBounce = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
-
-    //         for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
-    //         {
-    //             indirect += ShadeLightIndirect(spectrum, Lights[lightIndex], surfaceBounce, xiLight, throughput);
-    //         }
-
-    //         bounceRay.P = RayOffset(surfaceBounce.P, surfaceBounce.Ng);
-    //         bounceRay.D = RandomDirectionInHemisphere(surfaceBounce.N, xiBounce);
-    //     }
-    //     else
-    //     {
-    //         break;
-    //     }
-    // }
-
-    // SpectrumAdd(spectrum, indirect * 4.0, wi);
-
-    // AccumulateSH(SHProbes, probeIndex, spectrum);
+            float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
+            // todo why flipped
+            float3 previousDiffuse = SamplePreviousDiffuse(float2(surface.uv.x, 1.0 - surface.uv.y), surface.lightmapGroup).rgb;
+            AccumulateL2(probe, sampleIndex, previousDiffuse * bounceAlbedo * 4, bounceRay.D);
+        }
+    }
 }

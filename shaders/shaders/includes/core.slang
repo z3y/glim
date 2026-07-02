@@ -217,22 +217,22 @@ void AccumulateColor(inout float4 previous, uint sampleIndex, float4 color)
     }
 }
 
-void AccumulateL2(inout SHProbeL2 previous, uint sampleIndex, float4 color, float3 wi)
+void AccumulateL2(inout SHProbeL2 previous, uint sampleIndex, float3 color, float3 wi)
 {
     // flip Z for Unity
     wi.z = -wi.z;
 
-    previous.sh[0] += color * Y0() * A_HAT_0 * L0_NORMALIZATION;
+    previous.sh[0].xyz += color * Y0() * A_HAT_0 * L0_NORMALIZATION;
 
-    previous.sh[1] += color * Y1_1(wi) * A_HAT_1 * L1_NORMALIZATION;
-    previous.sh[2] += color * Y10(wi) * A_HAT_1 * L1_NORMALIZATION;
-    previous.sh[3] += color * Y11(wi) * A_HAT_1 * L1_NORMALIZATION;
+    previous.sh[1].xyz += color * Y1_1(wi) * A_HAT_1 * L1_NORMALIZATION;
+    previous.sh[2].xyz += color * Y10(wi) * A_HAT_1 * L1_NORMALIZATION;
+    previous.sh[3].xyz += color * Y11(wi) * A_HAT_1 * L1_NORMALIZATION;
 
-    previous.sh[4] += color * Y2_2(wi) * A_HAT_2 * L2_2_NORMALIZATION;
-    previous.sh[5] += color * Y2_1(wi) * A_HAT_2 * L2_2_NORMALIZATION;
-    previous.sh[6] += color * Y20(wi) * A_HAT_2 * L20_NORMALIZATION;
-    previous.sh[7] += color * Y21(wi) * A_HAT_2 * L2_2_NORMALIZATION;
-    previous.sh[8] += color * Y22(wi) * A_HAT_2 * L22_NORMALIZATION;
+    previous.sh[4].xyz += color * Y2_2(wi) * A_HAT_2 * L2_2_NORMALIZATION;
+    previous.sh[5].xyz += color * Y2_1(wi) * A_HAT_2 * L2_2_NORMALIZATION;
+    previous.sh[6].xyz += color * Y20(wi) * A_HAT_2 * L20_NORMALIZATION;
+    previous.sh[7].xyz += color * Y21(wi) * A_HAT_2 * L2_2_NORMALIZATION;
+    previous.sh[8].xyz += color * Y22(wi) * A_HAT_2 * L22_NORMALIZATION;
 }
 
 bool UseSmoothPosition(Surface surface)
@@ -454,6 +454,64 @@ float3 ShadeLightDirect(Light light, Surface surface, float2 xi, float3 throughp
     shadowRay.D = L;
 
     float3 color = cosTheta * falloff * light.color * throughput;
+
+    [branch] if (any(color > 0.0))
+    {
+        if (TraceShadowRay(shadowRay))
+        {
+            color = 0.0;
+        }
+    }
+
+    return color;
+}
+
+float3 ShadeLightDirectSH(Light light, float3 position, float2 xi, float3 throughput, out float3 L)
+{
+    Ray shadowRay;
+    shadowRay.P = position;
+    shadowRay.tMin = 0;
+
+    float falloff;
+    if (light.type == LightType::Directional)
+    {
+        L = GetDirectionalLightAngle(light.direction, light.ShadowRangeOrAngle, xi);
+        falloff = 1.0;
+
+        shadowRay.tMax = RAY_MAX;
+    }
+    else
+    {
+        if (light.ShadowRangeOrAngle > 0.0)
+        {
+            L = RandomPointOnOrientedDisk(light.position, light.ShadowRangeOrAngle, position, xi);
+        }
+
+        float3 positionToLight = L - position;
+        L = normalize(positionToLight);
+
+        float distanceSquare = dot(positionToLight, positionToLight);
+
+        float rangeSq = light.range * light.range;
+
+        falloff = LightFalloff(distanceSquare, 1.0 / rangeSq);
+
+        if (light.type == LightType::Spot)
+        {
+            float spotScale;
+            float spotOffset;
+            GetSpotScaleOffset(light.SpotOuter, light.SpotInnerPercent, spotScale, spotOffset);
+            float spotAttenuation = GetSpotAngleAttenuation(light.direction, L, spotScale, spotOffset);
+
+            falloff *= spotAttenuation;
+        }
+
+        shadowRay.tMax = sqrt(distanceSquare);
+    }
+
+    shadowRay.D = L;
+
+    float3 color = falloff * light.color * throughput;
 
     [branch] if (any(color > 0.0))
     {
