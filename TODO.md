@@ -53,7 +53,7 @@
 - [ ] Preview emission doesnt have 1 bounce
 - [ ] Can only bake one currently loaded scene
 - [ ] Preview crashes when closing on linux
-- [ ] OpenGL unity is flipped xd
+- [x] OpenGL unity is flipped xd
 - [ ] Fix URP light falloff
 
 

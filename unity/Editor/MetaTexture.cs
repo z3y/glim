@@ -138,6 +138,9 @@ namespace stilb
             var _Color = Shader.PropertyToID("_Color");
             var unity_LightmapST = Shader.PropertyToID("unity_LightmapST");
 
+            bool flipY = !SystemInfo.graphicsUVStartsAtTop;
+
+
             for (int offsetIndex = 0; offsetIndex < uvOffset.Length; offsetIndex++)
             {
                 for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
@@ -151,6 +154,13 @@ namespace stilb
                     }
 
                     var so = renderer.lightmapScaleOffset;
+
+                    if (flipY)
+                    {
+                        so.y = -so.y;
+                        so.w = 1.0f - so.w;
+                    }
+
                     so.z += uvOffset[offsetIndex].z;
                     so.w += uvOffset[offsetIndex].w;
 
