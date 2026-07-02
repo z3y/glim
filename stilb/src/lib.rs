@@ -2216,6 +2216,17 @@ fn update_render_target(app: &mut Stilb, settings: &LightmapSettings, group_inde
                     | vk::ImageUsageFlags::TRANSFER_DST,
                 String::from("Lightmap Diffuse"),
             );
+        } else {
+            let cmd = app.vk.begin_single_use_cmd();
+            clear_texture(
+                &app.vk,
+                &mut app.render_target.diffuse,
+                cmd,
+                vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 0.0],
+                },
+            );
+            app.vk.end_single_use_cmd(cmd);
         }
     }
 
