@@ -510,6 +510,10 @@ fn initialize_render(app: &mut Stilb) {
             range: 0.0,
             color: Vector3::ZERO,
             shadow_radius_or_angle: 0.0,
+            spot_inner_percent: 0.0,
+            spot_outer: 0.0,
+            pad0: 0,
+            pad1: 0,
         }];
         app.gpu_lights = Buffer::new(
             &app.vk,

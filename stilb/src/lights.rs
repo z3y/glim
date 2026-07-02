@@ -19,6 +19,11 @@ pub struct Light {
 
     pub color: Vector3,
     pub shadow_radius_or_angle: f32,
+
+    pub spot_inner_percent: f32,
+    pub spot_outer: f32,
+    pub pad0: u32,
+    pub pad1: u32,
 }
 
 pub fn light_buffer_flags() -> vk::BufferUsageFlags {

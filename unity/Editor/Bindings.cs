@@ -184,6 +184,11 @@ namespace stilb
 
             public Vector3 color;
             public float shadow_radius_or_angle;
+
+            public float spot_inner_percent;
+            public float spot_outer;
+            public uint pad0;
+            public uint pad1;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 16)]

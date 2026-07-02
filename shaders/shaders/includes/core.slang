@@ -20,7 +20,8 @@ struct Hit
     bool frontFace;
 }
 
-float4 EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP)
+float4
+EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP)
 {
     uint encoded = 0;
     if (isVisible)
@@ -60,7 +61,7 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 }
 
 // hit is not always initialized
-#pragma warning(disable: 41018)
+#pragma warning(disable : 41018)
 bool TraceRay(Ray ray, out Hit hit)
 {
     RayDesc rayDesc;
@@ -93,7 +94,7 @@ bool TraceRay(Ray ray, out Hit hit)
 
     return false;
 }
-#pragma warning(default: 41018)
+#pragma warning(default : 41018)
 
 bool TraceShadowRay(Ray ray)
 {
@@ -298,7 +299,7 @@ float4 AdjustSamplePositions(Surface surface, float4 visibility)
 
     float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
     float3 v = normalize(worldTexelV - dot(worldTexelV, surface.Ng) * surface.Ng);
-    float3 rayDirs[4] = { u, -u, v, -v };
+    float3 rayDirs[4] = {u, -u, v, -v};
 
     Ray leakRay;
     leakRay.P = RayOffset(surface.P, surface.Ng);
@@ -435,6 +436,16 @@ float3 ShadeLightDirect(Light light, Surface surface, float2 xi, float3 throughp
 
         falloff = LightFalloff(distanceSquare, 1.0 / rangeSq);
 
+        if (light.type == LightType::Spot)
+        {
+            float spotScale;
+            float spotOffset;
+            GetSpotScaleOffset(light.SpotOuter, light.SpotInnerPercent, spotScale, spotOffset);
+            float spotAttenuation = GetSpotAngleAttenuation(light.direction, L, spotScale, spotOffset);
+
+            falloff *= spotAttenuation;
+        }
+
         shadowRay.tMax = sqrt(distanceSquare);
     }
 
@@ -444,8 +455,7 @@ float3 ShadeLightDirect(Light light, Surface surface, float2 xi, float3 throughp
 
     float3 color = cosTheta * falloff * light.color * throughput;
 
-    [branch]
-    if (any(color > 0.0))
+    [branch] if (any(color > 0.0))
     {
         if (TraceShadowRay(shadowRay))
         {

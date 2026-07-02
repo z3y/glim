@@ -95,6 +95,7 @@ namespace stilb
             var rootObjects = scene.GetRootGameObjects().Where(x => x.activeInHierarchy);
 
             var lights = rootObjects.SelectMany(x => x.GetComponentsInChildren<Light>(false)).ToArray();
+            var builtIn = GraphicsSettings.currentRenderPipeline == null;
 
             var addedLights = new List<Light>();
             foreach (var light in lights)
@@ -125,7 +126,7 @@ namespace stilb
                     lightType = Bindings.LightType.Point;
                 }
 
-                float radiusOrAngle = lightType == Bindings.LightType.Directional ?
+                float radiusOrAngle = light.type == LightType.Directional ?
                     Mathf.Deg2Rad * light.shadowAngle : light.shadowRadius;
 
                 var l = new Bindings.Light
@@ -137,6 +138,20 @@ namespace stilb
                     color = color,
                     shadow_radius_or_angle = radiusOrAngle,
                 };
+
+
+                if (light.type == LightType.Spot)
+                {
+                    l.spot_outer = light.spotAngle;
+                    l.spot_inner_percent = light.innerSpotAngle;
+                    l.ty = Bindings.LightType.Spot;
+                    l.direction = -light.transform.forward;
+
+                    if (builtIn)
+                    {
+                        l.spot_inner_percent = 80; // todo this doesnt match built in spot lights exactly
+                    }
+                }
 
                 addedLights.Add(light);
                 sceneLights.Add(l);

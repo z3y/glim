@@ -19,6 +19,11 @@ struct Light
 
     float3 color;
     float ShadowRangeOrAngle;
+
+    float SpotInnerPercent;
+    float SpotOuter;
+    float pad0;
+    float pad1;
 };
 
 void CreateOrthoBasis(float3 n, out float3 b1, out float3 b2)
@@ -30,9 +35,6 @@ void CreateOrthoBasis(float3 n, out float3 b1, out float3 b2)
     b2 = float3(b, s + n.y * n.y * a, -n.y);
 }
 
-// L: Main light direction (pointing toward the light)
-// angle: Spread angle in radians (e.g., radians(0.53) for the Sun)
-// xi: Uniform random samples [0, 1]
 float3 GetDirectionalLightAngle(float3 L, float angle, float2 xi)
 {
     float cosThetaMax = cos(angle);
@@ -99,4 +101,21 @@ float3 RandomPointOnOrientedDisk(float3 center, float radius, float3 positionWS,
     float2 diskPoint = float2(r * cos(phi), r * sin(phi));
 
     return center + (lightRight * diskPoint.x + lightUp * diskPoint.y) * radius;
+}
+
+float GetSpotAngleAttenuation(float3 spotForward, float3 l, float spotScale, float spotOffset)
+{
+    float cd = dot(-spotForward, l);
+    float attenuation = saturate(cd * spotScale + spotOffset);
+    return attenuation * attenuation;
+}
+
+void GetSpotScaleOffset(float outerAngle, float innerAnglePercent, out float spotScale, out float spotOffset)
+{
+    float innerAngle = outerAngle / 100 * innerAnglePercent;
+    innerAngle = innerAngle / 360 * float.getPi();
+    outerAngle = outerAngle / 360 * float.getPi();
+    float cosOuter = cos(outerAngle);
+    spotScale = 1.0 / max(cos(innerAngle) - cosOuter, 1e-4);
+    spotOffset = -cosOuter * spotScale;
 }
