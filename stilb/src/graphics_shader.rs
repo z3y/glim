@@ -6,7 +6,7 @@ use shaders::{
     get_init_from_bake_vertex_shader,
 };
 
-use crate::{texture2d::Texture2D, vulkan_context::VulkanContext};
+use crate::{shader_bindings::bind_sampler, texture2d::Texture2D, vulkan_context::VulkanContext};
 
 pub struct GraphicsShader {
     vertex_module: vk::ShaderModule,
@@ -301,6 +301,7 @@ pub struct VisibilityPushConstants {
 pub fn create_visibility_shader(
     vk: &mut VulkanContext,
     visibility: &Texture2D,
+    lightmap_groups: u32,
     conservative: bool,
 ) -> GraphicsShader {
     let mut bindings = Vec::new();
@@ -324,6 +325,23 @@ pub fn create_visibility_shader(
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         descriptor_count: 1,
         stage_flags,
+        ..Default::default()
+    });
+
+    // Albedo
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 3,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        descriptor_count: lightmap_groups,
+        stage_flags: vk::ShaderStageFlags::FRAGMENT,
+        ..Default::default()
+    });
+
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 6,
+        descriptor_type: vk::DescriptorType::SAMPLER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::FRAGMENT,
         ..Default::default()
     });
 
@@ -352,6 +370,8 @@ pub fn update_visibility_shader(
     shader: &GraphicsShader,
     indices: vk::Buffer,
     vertices: vk::Buffer,
+    albedos: &[vk::ImageView],
+    sampler: vk::Sampler,
 ) {
     let mut descriptor_writes = Vec::new();
 
@@ -383,6 +403,39 @@ pub fn update_visibility_shader(
         ..Default::default()
     };
     write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // Albedos
+    let infos: Vec<vk::DescriptorImageInfo> = albedos
+        .iter()
+        .map(|tex| vk::DescriptorImageInfo {
+            image_view: *tex,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ..Default::default()
+        })
+        .collect();
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 3,
+        dst_array_element: 0,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&infos);
+    descriptor_writes.push(write);
+
+    // TextureSampler
+    let info = [vk::DescriptorImageInfo {
+        sampler,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 6,
+        descriptor_type: vk::DescriptorType::SAMPLER,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
     descriptor_writes.push(write);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };

@@ -103,6 +103,9 @@ static const float2 kJitterOffsets[25] = {
     : SV_Target
 {
     float2 bary = saturate(varyings.bary);
-    // todo sample alpha here
-    return EncodeVisibilityBuffer(bary, varyings.primitiveID, true, false);
+
+    Surface surf = Surface::Get(varyings.primitiveID, bary);
+    float alpha = SampleAlbedo(surf.uv, surf.lightmapGroup).a;
+    bool visible = alpha >= 0.5;
+    return EncodeVisibilityBuffer(bary, varyings.primitiveID, visible, false);
 }

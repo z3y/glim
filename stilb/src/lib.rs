@@ -196,20 +196,27 @@ fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, gro
     let visibility = &app.render_target.visibility;
 
     // todo create shader once
-    let mut shader = create_visibility_shader(vk, visibility, false);
-    let mut shader_convervative = create_visibility_shader(vk, visibility, true);
+    let groups_count = app.groups.len() as u32;
+    let mut shader = create_visibility_shader(vk, visibility, groups_count, false);
+    let mut shader_convervative = create_visibility_shader(vk, visibility, groups_count, true);
+
+    let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
 
     update_visibility_shader(
         vk,
         &shader,
         app.gpu_mesh.index_buffer.buffer,
         app.gpu_mesh.vertex_buffer.buffer,
+        &albedos,
+        app.texture_sampler,
     );
     update_visibility_shader(
         vk,
         &shader_convervative,
         app.gpu_mesh.index_buffer.buffer,
         app.gpu_mesh.vertex_buffer.buffer,
+        &albedos,
+        app.texture_sampler,
     );
 
     let clear_values = [vk::ClearValue {

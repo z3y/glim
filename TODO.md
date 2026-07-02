@@ -5,7 +5,7 @@
   - [x] Scale offset
   - [ ] Per chart
   - [x] Padding
-- [ ] Spot lights
+- [x] Spot lights
 - [ ] Bake lightprobes with new shader
 - [ ] Directional lightmaps
 - [ ] Terrain Support
@@ -31,14 +31,14 @@
 ## Optimization
 - [ ] Proper sync for bake loop
 - [ ] Try to stop unity from slowing down the bake start for no reason
+- [ ] Manually build the LightingData asset
 - [ ] Adjust sample positions before baking
 - [ ] Make seam detection faster
 - [ ] Make emissive triangle detection check only emissive meshes
 - [ ] Create visibility shader only once and reuse
 - [ ] Memory optimizations (compress previous diffuse between bounces, destroy emission etc)
 - [ ] Deduplicate light probe positions
-- [ ] Sample alpha in bake init shader as well to skip some rays
-- [ ] Manually build the LightingData asset
+- [x] Sample alpha in bake init shader as well to skip some rays
 
 ## Bugs
 - [ ] Include OIDN dlls
