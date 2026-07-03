@@ -1155,12 +1155,6 @@ fn render_lightmaps(app: &mut Stilb) {
 
     for i in 0..app.groups.len() {
         let group = &mut app.groups[i];
-        let pixels = &group.lightmap_diffuse_final;
-        previous_diffuses[i].set_pixels(&app.vk, pixels, &app.staging_buffer);
-    }
-
-    for i in 0..app.groups.len() {
-        let group = &mut app.groups[i];
         let group_index = group.index;
         let mut pixels = &mut group.lightmap_diffuse_final;
         let settings = group.settings.clone();
@@ -1227,6 +1221,10 @@ fn render_lightmaps(app: &mut Stilb) {
         };
 
         (app.config.lightmap_read_callback)(readback_data);
+
+        // todo emissions and previous diffuse can be merged here for light probes
+        // but one is flipped for some reson
+        previous_diffuses[i].set_pixels(&app.vk, pixels, &app.staging_buffer);
     }
 
     if app.probes.len() > 0 {
@@ -1247,8 +1245,6 @@ fn render_lightmaps(app: &mut Stilb) {
             app.gpu_mesh.vertex_buffer.buffer,
             app.gpu_lights.buffer,
         );
-
-        let probes_samples = app.config.probe_samples;
 
         let mut push = BakeSHPushConstants {
             lights_count,
