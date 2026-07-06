@@ -175,7 +175,7 @@ Shader "Unlit/Light Mesh"
                     intensityScale = UNITY_PI * area;
                 }
 
-                color.rgb = _LightColor.rgb * _LightIntensity / max(intensityScale, 0.0001);
+                color.rgb = _LightColor.rgb * _LightIntensity / max(intensityScale, 0.001);
 
                 float4 positionCS = mul(UNITY_MATRIX_VP, float4(positionWS, 1.0));
                 float ndcDepth = positionCS.z / positionCS.w;
