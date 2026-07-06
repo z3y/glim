@@ -210,7 +210,7 @@ namespace stilb
                 Lightmapping.lightingDataAsset = newLda;
                 EditorSceneManager.MarkSceneDirty(_context.scene);
 
-                LightmapBakerEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1);
+                LightmapBakerEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1, _context.reflectionProbesSpecular);
             }
             finally
             {

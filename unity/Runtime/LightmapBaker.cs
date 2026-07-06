@@ -37,6 +37,7 @@ namespace stilb
 
         [NonSerialized] public bool multipleImportanceSampling = false;
         public bool reflectionProbesSuperSampling = true;
+        public bool reflectionProbesSpecular = false;
 
 
         [Header("Preview Settings")]

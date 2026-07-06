@@ -70,6 +70,7 @@ namespace stilb
         public Scene scene;
 
         public bool reflectionProbesSuperSampling;
+        public bool reflectionProbesSpecular;
 
         private static int GetDepth(Transform t)
         {
@@ -81,6 +82,8 @@ namespace stilb
         public BakeContext(LightmapBaker baker, Bindings.StilbConfig config)
         {
             this.reflectionProbesSuperSampling = baker.reflectionProbesSuperSampling;
+            this.reflectionProbesSpecular = baker.reflectionProbesSpecular;
+
             SerializedObject lda;
             if (!config.is_preview)
             {

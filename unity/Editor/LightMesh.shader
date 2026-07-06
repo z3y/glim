@@ -2,11 +2,12 @@ Shader "Unlit/Light Mesh"
 {
     Properties
     {
-        [Enum(Point, 0, Spot, 1, Directional, 2, Area, 4)] _LightType ("Light Type", Int) = 0
+        [Enum(Point, 0, Spot, 1, Directional, 2, Area, 3)] _LightType ("Light Type", Int) = 0
         _LightColor ("Light Color", Color) = (1,1,1,1)
         _LightIntensity ("Light Intensity", Float) = 1.0
         _LightSpotAngle ("Spot Angle", Range(0, 179)) = 30
         _LightDirectionalAngle ("Directional Angle", Float) = 0.526
+        // todo light range
     }
     SubShader
     {
@@ -50,7 +51,7 @@ Shader "Unlit/Light Mesh"
                 Varyings o;
 
                 float3 positionOS = attributes.positionOS;
-                if (_LightType == 4)
+                if (_LightType == 3)
                 {
                     positionOS.z = 0.0;
                 }
@@ -125,7 +126,7 @@ Shader "Unlit/Light Mesh"
 
                 float3 positionWS = ro + rd * t;
 
-                if (_LightType == 4)
+                if (_LightType == 3)
                 {
                     positionWS = varyings.positionWS;
                     float3 toCam = normalize(CameraPositionWS() - positionWS);

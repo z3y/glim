@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
@@ -108,7 +109,7 @@ namespace stilb
                 };
                 button.clicked += () =>
                 {
-                    BakeAllReflectionProbesSnapshots(EditorSceneManager.GetActiveScene(), baker.reflectionProbesSuperSampling ? 2 : 1);
+                    BakeAllReflectionProbesSnapshots(EditorSceneManager.GetActiveScene(), baker.reflectionProbesSuperSampling ? 2 : 1, baker.reflectionProbesSpecular);
                 };
                 root.Add(button);
             }
@@ -188,11 +189,67 @@ namespace stilb
             return nestedInspector;
         }
 
-        public static void BakeAllReflectionProbesSnapshots(Scene scene, int supersampling)
+        public static void BakeAllReflectionProbesSnapshots(Scene scene, int supersampling, bool specularProbes)
         {
             var root = scene.GetRootGameObjects();
 
-            var probes = root.SelectMany(x => x.GetComponentsInChildren<ReflectionProbe>()).ToArray();
+            var probes = root.SelectMany(x => x.GetComponentsInChildren<ReflectionProbe>(false)).ToArray();
+
+            var speculars = new List<GameObject>();
+            if (specularProbes)
+            {
+                var lights = root.SelectMany(x => x.GetComponentsInChildren<Light>(true))
+                    .Where(l => l.enabled && l.gameObject.activeInHierarchy)
+                    .Distinct()
+                    .ToArray();
+
+                var lightMeshMat = AssetDatabase.LoadAssetAtPath<Material>("Packages/io.github.z3y.stilb/Editor/LightMesh.mat");
+
+                foreach (var l in lights)
+                {
+                    GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    go.name = "Light Mesh";
+                    speculars.Add(go);
+
+                    go.transform.position = l.transform.position;
+                    go.transform.forward = l.transform.forward;
+
+                    GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.ReflectionProbeStatic);
+
+                    var mr = go.GetComponent<MeshRenderer>();
+                    mr.sharedMaterial = lightMeshMat;
+
+                    var mpb = new MaterialPropertyBlock();
+
+                    mpb.SetColor("_LightColor", l.color);//todo temperature
+                    mpb.SetFloat("_LightIntensity", l.intensity);
+
+                    if (l.type == LightType.Point)
+                    {
+                        mpb.SetInt("_LightType", 0);
+                        go.transform.localScale = new Vector3(l.shadowRadius, l.shadowRadius, l.shadowRadius) * 0.5f;
+                    }
+                    else if (l.type == LightType.Spot)
+                    {
+                        mpb.SetInt("_LightType", 1);
+                        mpb.SetFloat("_LightSpotAngle", l.spotAngle);
+                        go.transform.localScale = new Vector3(l.shadowRadius, l.shadowRadius, l.shadowRadius) * 0.5f;
+                    }
+                    else if (l.type == LightType.Directional)
+                    {
+                        mpb.SetInt("_LightType", 2);
+                        mpb.SetFloat("_LightDirectionalAngle", l.shadowAngle);
+                        go.transform.localScale = new Vector3(999999, 999999, 999999);
+                    }
+                    else if (l.type == LightType.Rectangle)
+                    {
+                        mpb.SetInt("_LightType", 3);
+                        go.transform.localScale = new Vector3(l.areaSize.x, l.areaSize.y, 0.01f);
+                    }
+
+                    mr.SetPropertyBlock(mpb);
+                }
+            }
 
             if (supersampling > 1)
             {
@@ -229,6 +286,11 @@ namespace stilb
                         textureImporter.maxTextureSize = probe.resolution;
                         textureImporter.SaveAndReimport();
                     }
+                }
+
+                foreach (var go in speculars)
+                {
+                    DestroyImmediate(go);
                 }
             }
         }

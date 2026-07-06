@@ -23,24 +23,14 @@ Material:
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
-    m_TexEnvs:
-    - _MainTex:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
+    m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _BoxProjection: 1
     - _LightDirectionalAngle: 0.526
     - _LightIntensity: 1
-    - _LightRadius: 0.1
-    - _LightSpotAngle: 69
+    - _LightSpotAngle: 30
     - _LightType: 0
     m_Colors:
     - _LightColor: {r: 1, g: 1, b: 1, a: 1}
-    - _LightPosition: {r: 0.1647127, g: 0.2609188, b: -0.05759916, a: 0}
-    - _ProbePosition: {r: 0.031, g: 0.573, b: -0.689, a: 0}
-    - _ProbeSize: {r: 4.948491, g: 3.286743, b: 4.798308, a: 0}
-    - _ReflectionProbePosition: {r: 0, g: 0, b: 0, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
