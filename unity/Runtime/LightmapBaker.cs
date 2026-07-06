@@ -36,8 +36,12 @@ namespace stilb
         public float lightProbeRadius = 0.0f;
 
         [NonSerialized] public bool multipleImportanceSampling = false;
+
+        [Tooltip("Temporarly increases reflection probe resolution by 2x and downsamples on the imported cubemap")]
         public bool reflectionProbesSuperSampling = true;
-        public bool reflectionProbesSpecular = false;
+
+        [Tooltip("Creates a mesh for each light visible in reflection probes, based on the shadow radius, area size or directional angle")]
+        public bool reflectionProbesSpecular = false; // todo URP Shader
 
 
         [Header("Preview Settings")]

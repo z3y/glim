@@ -23,9 +23,9 @@ Shader "Unlit/Light Mesh"
 
             #include "UnityCG.cginc"
 
-            float4 _LightColor;
-            float _LightIntensity;
             uint _LightType;
+            float3 _LightColor;
+            float _LightIntensity;
             float _LightSpotAngle;
             float _LightDirectionalAngle;
 
@@ -64,6 +64,7 @@ Shader "Unlit/Light Mesh"
                 return o;
             }
 
+            // https://iquilezles.org/articles/intersectors/
             float SphereIntersect(float3 ro, float3 rd, float4 sph)
             {
                 float3 oc = ro - sph.xyz;
@@ -156,7 +157,6 @@ Shader "Unlit/Light Mesh"
 
                 float4 color = 1.0;
                 color.rgb = _LightColor.rgb * _LightIntensity * 3.14159;
-
 
                 float4 positionCS = mul(UNITY_MATRIX_VP, float4(positionWS, 1.0));
                 float ndcDepth = positionCS.z / positionCS.w;
