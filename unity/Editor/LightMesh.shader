@@ -157,6 +157,7 @@ Shader "Unlit/Light Mesh"
 
                 float4 color = 1.0;
 
+                // todo verify this
                 float intensityScale = 1.0;
                 if (_LightType == 0 || _LightType == 1)
                 {
@@ -170,7 +171,7 @@ Shader "Unlit/Light Mesh"
                 }
                 if (_LightType == 3)
                 {
-                    float area = 1.0; // todo
+                    float area = length(UNITY_MATRIX_M._m00_m10_m20) * length(UNITY_MATRIX_M._m01_m11_m21);
                     intensityScale = UNITY_PI * area;
                 }
 

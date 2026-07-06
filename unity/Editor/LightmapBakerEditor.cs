@@ -239,7 +239,7 @@ namespace stilb
                     {
                         mpb.SetInt("_LightType", 2);
                         mpb.SetFloat("_LightDirectionalAngle", l.shadowAngle);
-                        go.transform.localScale = new Vector3(999999, 999999, 999999);
+                        go.transform.localScale = new Vector3(999, 999, 999); // todo this needs to be visible from all reflection probes and still not get culled
                     }
                     else if (l.type == LightType.Rectangle)
                     {
