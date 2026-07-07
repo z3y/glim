@@ -105,15 +105,14 @@ static const float2 kJitterOffsets[25] = {
     float2 bary = saturate(varyings.bary);
 
     Surface surf = Surface::Get(varyings.primitiveID, bary);
+
     float alpha = SampleAlbedo(surf.uv, surf.lightmapGroup).a;
     bool visible = alpha >= 0.5;
 
-    float3 positionWS = surf.P;
-    float3 normalWS = surf.N;
-    float packed = PackNormalOctahedron(normalWS);
-    if (!visible)
-    {
-        packed = 0;
-    }
-    return float4(positionWS, packed);
+    return EncodeVisibilityBuffer(bary, varyings.primitiveID, visible, false);
+
+    // float3 positionWS = RayOffset(surf.P, surf.Ng);
+    // float packed = PackNormalOctahedron(surf.N);
+
+    // return float4(positionWS, packed);
 }

@@ -33,6 +33,15 @@ pub fn get_bake_direct_shader() -> &'static [u32] {
     &SHADER
 }
 
+pub fn get_adjust_samples_shader() -> &'static [u32] {
+    const LEN: usize = include_bytes!(concat!(env!("OUT_DIR"), "/adjust_samples.spv")).len() / 4;
+
+    static SHADER: [u32; LEN] =
+        include_transmute!(concat!(env!("OUT_DIR"), "/adjust_samples.spv"), [u32; LEN]);
+
+    &SHADER
+}
+
 pub fn get_bake_bounce_shader() -> &'static [u32] {
     const LEN: usize = include_bytes!(concat!(env!("OUT_DIR"), "/bake_bounce.spv")).len() / 4;
 

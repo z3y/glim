@@ -56,6 +56,12 @@ fn main() {
 
     shaders.push(Shader {
         ty: ShaderType::Compute,
+        src: "adjust_samples.slang".into(),
+        dst: "adjust_samples.spv".into(),
+    });
+
+    shaders.push(Shader {
+        ty: ShaderType::Compute,
         src: "bake_sh.slang".into(),
         dst: "bake_sh.spv".into(),
     });

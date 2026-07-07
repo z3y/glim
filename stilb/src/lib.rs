@@ -82,6 +82,8 @@ pub struct Stilb {
     pub probes_buffer: Buffer,
     pub bake_probes_shader: ComputeShader,
 
+    pub adjust_samples_shader: ComputeShader,
+
     pub staging_buffer: Buffer,
 
     pub render_target: RenderTarget,
@@ -315,7 +317,37 @@ fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, gro
         vk.device.cmd_draw(cmd, mesh.index_len, 25, 0, 0);
 
         vk.device.cmd_end_render_pass(cmd);
+
+        let shader = &app.adjust_samples_shader;
+
+        // adjust sample positions
+        update_adjust_samples_shader(
+            &vk,
+            shader,
+            app.tlas.acceleration_structure(),
+            visibility.view(),
+            app.gpu_mesh.index_buffer.buffer,
+            app.gpu_mesh.vertex_buffer.buffer,
+        );
+
+        vk.device
+            .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+        vk.device.cmd_bind_descriptor_sets(
+            cmd,
+            vk::PipelineBindPoint::COMPUTE,
+            shader.pipeline_layout,
+            0,
+            &[shader.descriptor_set],
+            &[],
+        );
+
+        let groups_x = (width + 7) / 8;
+        let groups_y = (height + 7) / 8;
+
+        vk.device.cmd_dispatch(cmd, groups_x, groups_y, 1);
     }
+
     vk.end_single_use_cmd(cmd);
 
     shader.destroy(vk);
@@ -809,6 +841,8 @@ fn render_lightmaps(app: &mut Stilb) {
         None
     };
 
+    app.adjust_samples_shader = load_adjust_samples_shader(&app.vk);
+
     let mut bake_direct_shader = load_bake_direct_shader(
         &app.vk,
         app.config.light_falloff,
@@ -1152,6 +1186,7 @@ fn render_lightmaps(app: &mut Stilb) {
     }
 
     bake_bounce_shader.destroy(&app.vk);
+    app.adjust_samples_shader.destroy(&app.vk);
 
     for i in 0..app.groups.len() {
         let group = &mut app.groups[i];
@@ -2647,6 +2682,7 @@ impl Stilb {
             emissive_triangles: Vec::new(),
             emissive_triangles_buffer: Buffer::null(),
             staging_buffer,
+            adjust_samples_shader: ComputeShader::null(),
         }
     }
 }
