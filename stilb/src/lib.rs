@@ -320,12 +320,15 @@ fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, gro
 
         let shader = &app.adjust_samples_shader;
 
+        let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
+
         // adjust sample positions
         update_adjust_samples_shader(
             &vk,
             shader,
             app.tlas.acceleration_structure(),
             visibility.view(),
+            &albedos,
             app.gpu_mesh.index_buffer.buffer,
             app.gpu_mesh.vertex_buffer.buffer,
         );
@@ -841,7 +844,7 @@ fn render_lightmaps(app: &mut Stilb) {
         None
     };
 
-    app.adjust_samples_shader = load_adjust_samples_shader(&app.vk);
+    app.adjust_samples_shader = load_adjust_samples_shader(&app.vk, app.groups.len() as u32);
 
     let mut bake_direct_shader = load_bake_direct_shader(
         &app.vk,

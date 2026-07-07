@@ -462,13 +462,14 @@ pub fn load_bake_direct_shader(
     )
 }
 
-pub fn load_adjust_samples_shader(vk: &VulkanContext) -> ComputeShader {
+pub fn load_adjust_samples_shader(vk: &VulkanContext, lightmap_group_count: u32) -> ComputeShader {
     let mut bindings = Vec::new();
 
     bind_tlas(&mut bindings);
     bind_visibility(&mut bindings);
     bind_indices(&mut bindings);
     bind_vertices(&mut bindings);
+    bind_albedos(&mut bindings, lightmap_group_count);
 
     let specialization_info = vk::SpecializationInfo::default();
 
@@ -1090,6 +1091,7 @@ pub fn update_adjust_samples_shader(
     shader: &ComputeShader,
     tlas: vk::AccelerationStructureKHR,
     target_visibility: vk::ImageView,
+    albedos: &[vk::ImageView],
     indices: vk::Buffer,
     vertices: vk::Buffer,
 ) {
@@ -1150,6 +1152,25 @@ pub fn update_adjust_samples_shader(
         ..Default::default()
     };
     write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // Albedo
+    let infos: Vec<vk::DescriptorImageInfo> = albedos
+        .iter()
+        .map(|tex| vk::DescriptorImageInfo {
+            image_view: *tex,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ..Default::default()
+        })
+        .collect();
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 3,
+        dst_array_element: 0,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&infos);
     descriptor_writes.push(write);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };

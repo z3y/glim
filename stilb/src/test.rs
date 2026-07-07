@@ -14,6 +14,20 @@ mod tests {
     use crate::pack::UVPacker;
     use crate::*;
 
+    #[test]
+    fn test_preview() {
+        let mut config = make_config();
+        config.is_preview = true;
+        test_render(config, false);
+    }
+
+    #[test]
+    fn test_bake() {
+        let mut config = make_config();
+        config.is_preview = false;
+        test_render(config, true);
+    }
+
     fn make_config() -> StilbConfig {
         let preview_settings = LightmapSettings {
             width: 1024,
@@ -45,20 +59,6 @@ mod tests {
             mis: false,
         };
         config
-    }
-
-    #[test]
-    fn test_preview() {
-        let mut config = make_config();
-        config.is_preview = true;
-        test_render(config, false);
-    }
-
-    #[test]
-    fn test_bake() {
-        let mut config = make_config();
-        config.is_preview = false;
-        test_render(config, true);
     }
 
     fn test_render(mut config: StilbConfig, test_probes: bool) {

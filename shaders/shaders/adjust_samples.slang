@@ -3,7 +3,7 @@
 
 float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
 {
-    float3 positionWS = surface.P;
+    float3 positionWS = RayOffset(surface.P, surface.Ng);
 
     bool smoothP = UseSmoothPosition(surface);
 
@@ -49,7 +49,7 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
     float3 rayDirs[4] = {u, -u, v, -v};
 
     Ray leakRay;
-    leakRay.P = RayOffset(surface.P, surface.Ng);
+    leakRay.P = positionWS;
     leakRay.tMin = 0;
     leakRay.tMax = rayLength;
     Hit leakHit;
@@ -99,10 +99,8 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
 
     Surface surface = Surface::Get(primitiveID, bary);
 
-    // float3 positionWS = AdjustSamplePosition(surface, primitiveID, bary);
-    float3 positionWS = surface.P;
+    float3 positionWS = AdjustSamplePosition(surface, primitiveID, bary);
 
-    positionWS = RayOffset(positionWS, surface.Ng);
     float packed = PackNormalOctahedron(surface.N);
 
     VisibilityBuffer[coords] = float4(positionWS, packed);
