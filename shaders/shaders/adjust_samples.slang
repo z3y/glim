@@ -5,12 +5,8 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
 {
     bool smoothP = UseSmoothPosition(surface);
 
-    float3 positionWS = RayOffset(surface.P, surface.Ng);
-
-    if (smoothP)
-    {
-        positionWS = surface.smoothP;
-    }
+    float3 positionWS = smoothP ? surface.smoothP : surface.P;
+    positionWS = RayOffset(positionWS, surface.Ng);
 
     uint2 resolution;
     VisibilityBuffer.GetDimensions(resolution.x, resolution.y);
@@ -42,7 +38,7 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
     float3 worldTexelU = dPdU * texelSizeUV.x;
     float3 worldTexelV = dPdV * texelSizeUV.y;
 
-    float rayLength = (length(worldTexelU) + length(worldTexelV)) * sqrt(2.0) * 0.5;
+    float rayLength = (length(worldTexelU) + length(worldTexelV)) * sqrt(2.0);
 
     float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
     float3 v = normalize(worldTexelV - dot(worldTexelV, surface.Ng) * surface.Ng);
