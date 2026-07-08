@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026, Pema Malling
+// Adapted parts of the code for editing the LightingData asset
+// https://github.com/pema99/GITweaks/blob/master/Editor/GITweaksLightingDataAssetEditor.cs
+
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -10,8 +15,6 @@ namespace stilb
     {
         public const string TempScenePath = "Packages/io.github.z3y.stilb/Editor/Scene/Temp.unity";
         public const string TempLightingDataPath = "Packages/io.github.z3y.stilb/Editor/Scene/Temp/LightingData.asset";
-
-        // todo https://github.com/pema99/GITweaks/blob/master/Editor/GITweaksLightingDataAssetEditor.cs
 
         public static System.Reflection.PropertyInfo InspectorModeObject =
                     typeof(SerializedObject).GetProperty("inspectorMode", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
