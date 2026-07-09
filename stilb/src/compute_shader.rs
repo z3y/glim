@@ -491,6 +491,7 @@ pub fn load_bake_bounce_shader(
     bind_indices(&mut bindings);
     bind_vertices(&mut bindings);
     bind_previous_diffuse(&mut bindings, constants.lightmap_group_count);
+    bind_dominant_direction(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
@@ -1174,6 +1175,7 @@ pub fn update_bake_bounce_shader(
     sampler: vk::Sampler,
     indices: vk::Buffer,
     vertices: vk::Buffer,
+    dominant_direction: vk::Buffer,
 ) {
     let mut descriptor_writes = Vec::new();
 
@@ -1299,6 +1301,21 @@ pub fn update_bake_bounce_shader(
         ..Default::default()
     };
     write = write.image_info(&infos);
+    descriptor_writes.push(write);
+
+    // DominantDirection
+    let info = [vk::DescriptorBufferInfo {
+        buffer: dominant_direction,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 14,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };

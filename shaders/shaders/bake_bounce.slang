@@ -52,16 +52,17 @@ struct PushConstants
     uint dimension = bounceIndex + 3;
     float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
 
-    Ray bounceRay;
-    bounceRay.P = positionWS;
-    bounceRay.D = RandomDirectionInHemisphere(normalWS, xiBounce);
-    bounceRay.tMin = 0;
-    bounceRay.tMax = RAY_MAX;
+    Ray ray;
+    ray.P = positionWS;
+    ray.D = RandomDirectionInHemisphere(normalWS, xiBounce);
+    ray.tMin = 0;
+    ray.tMax = RAY_MAX;
 
     float4 color = 0.0;
+    float4 dominantDirection = 0.0;
 
     Hit bounceHit;
-    if (TraceRay(bounceRay, bounceHit))
+    if (TraceRay(ray, bounceHit))
     {
         Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
 
@@ -75,11 +76,19 @@ struct PushConstants
 
         float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
         float3 previousDiffuse = SamplePreviousDiffuse(surface.uv, surface.lightmapGroup).rgb;
-        color.rgb += previousDiffuse * bounceAlbedo;
+        float3 current = previousDiffuse * bounceAlbedo;
+        color.rgb += current;
+        dominantDirection.xyz += ray.D * Luminance(current);
     }
 
     float4 previous = LightmapDiffuse[coords];
     color.a = previous.a;
     AccumulateColor(previous, sampleIndex, color);
     LightmapDiffuse[coords] = previous;
+
+    uint index = (coords.x + coords.y * resolution.x) * 4;
+    dominantDirection.z = -dominantDirection.z; // unity coords
+    DominantDirection[index + 0] += dominantDirection.x;
+    DominantDirection[index + 1] += dominantDirection.y;
+    DominantDirection[index + 2] += dominantDirection.z;
 }

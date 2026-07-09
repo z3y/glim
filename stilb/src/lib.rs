@@ -1091,6 +1091,7 @@ fn render_lightmaps(app: &mut Stilb) {
                 app.texture_sampler,
                 app.gpu_mesh.index_buffer.buffer,
                 app.gpu_mesh.vertex_buffer.buffer,
+                dominant_direction_buffer.buffer, // todo copy back to cpu for multiple groups
             );
 
             let cmd = app.vk.command_buffer;
