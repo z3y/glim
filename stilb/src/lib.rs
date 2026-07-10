@@ -152,6 +152,7 @@ pub struct LightmapGroup {
     pub emission_pixels: Vec<f32>,
 
     pub lightmap_diffuse_final: Vec<f32>,
+    pub lightmap_directional: Vec<f32>,
     pub lightmap_diffuse_previous_bounce: Vec<f32>,
 }
 
@@ -869,6 +870,8 @@ fn render_lightmaps(app: &mut Stilb) {
         usage,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
+    let mut directional_pixels_temp =
+        vec![0.0f32; (max_resolution.0 * max_resolution.1 * 4) as usize];
 
     let mut bake_direct_shader = load_bake_direct_shader(&app.vk, &app.constants);
 
@@ -1037,6 +1040,17 @@ fn render_lightmaps(app: &mut Stilb) {
             &mut app.groups[i].lightmap_diffuse_final,
             &app.staging_buffer,
         );
+
+        // todo this is pretty bad as it allocates a temp buffer every time
+        app.vk.download_buffer(
+            dominant_direction_buffer.buffer,
+            &mut directional_pixels_temp,
+        );
+        app.groups[i].lightmap_directional = vec![0.0; app.groups[i].lightmap_diffuse_final.len()];
+        let dir = &mut app.groups[i].lightmap_directional;
+        for i in 0..dir.len() {
+            dir[i] = directional_pixels_temp[i];
+        }
     }
 
     bake_direct_shader.destroy(&app.vk);
@@ -1091,7 +1105,7 @@ fn render_lightmaps(app: &mut Stilb) {
                 app.texture_sampler,
                 app.gpu_mesh.index_buffer.buffer,
                 app.gpu_mesh.vertex_buffer.buffer,
-                dominant_direction_buffer.buffer, // todo copy back to cpu for multiple groups
+                dominant_direction_buffer.buffer,
             );
 
             let cmd = app.vk.command_buffer;
@@ -1189,6 +1203,25 @@ fn render_lightmaps(app: &mut Stilb) {
             for (d, s) in dst.iter_mut().zip(src) {
                 *d += s;
             }
+
+            app.vk.download_buffer(
+                dominant_direction_buffer.buffer,
+                &mut directional_pixels_temp,
+            );
+            let src = &directional_pixels_temp;
+            let dst = &mut group.lightmap_directional;
+
+            for i in 0..(group.settings.width * group.settings.height) as usize {
+                let i = i * 4;
+
+                let x = i + 0;
+                let y = i + 1;
+                let z = i + 2;
+
+                dst[x] += src[x];
+                dst[y] += src[y];
+                dst[z] += src[z];
+            }
         }
 
         let last_bounce = bounce_index == bounce_count - 1;
@@ -1208,12 +1241,9 @@ fn render_lightmaps(app: &mut Stilb) {
     for i in 0..app.groups.len() {
         let group = &mut app.groups[i];
         let group_index = group.index;
-        let mut pixels = &mut group.lightmap_diffuse_final;
-        let mut direction_pixels = vec![0.0f32; pixels.len()];
-        app.vk
-            .download_buffer(dominant_direction_buffer.buffer, &mut direction_pixels);
-
-        encode_directional_lightmap(pixels, &mut direction_pixels);
+        let pixels = &mut group.lightmap_diffuse_final;
+        let direction_pixels = &mut group.lightmap_directional;
+        encode_directional_lightmap(pixels, direction_pixels);
 
         let settings = group.settings.clone();
 
@@ -1238,7 +1268,7 @@ fn render_lightmaps(app: &mut Stilb) {
 
             match &oidn {
                 Some(oidn) => {
-                    oidn.denoise(&mut pixels, width as usize, height as usize);
+                    oidn.denoise(pixels, width as usize, height as usize);
                 }
                 None => {}
             }
@@ -1254,7 +1284,7 @@ fn render_lightmaps(app: &mut Stilb) {
             let start_time = std::time::Instant::now();
 
             fix_seams(
-                &mut pixels,
+                pixels,
                 width,
                 height,
                 &app.seams,
@@ -2648,6 +2678,7 @@ impl LightmapGroup {
             lightmap_diffuse_final: Vec::new(),
             lightmap_diffuse_previous_bounce: Vec::new(),
             index,
+            lightmap_directional: Vec::new(),
         }
     }
 

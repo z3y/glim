@@ -88,7 +88,18 @@ struct PushConstants
 
     uint index = (coords.x + coords.y * resolution.x) * 4;
     dominantDirection.z = -dominantDirection.z; // unity coords
-    DominantDirection[index + 0] += dominantDirection.x;
-    DominantDirection[index + 1] += dominantDirection.y;
-    DominantDirection[index + 2] += dominantDirection.z;
+
+    // todo temp
+    if (sampleIndex == 0)
+    {
+        DominantDirection[index + 0] = dominantDirection.x;
+        DominantDirection[index + 1] = dominantDirection.y;
+        DominantDirection[index + 2] = dominantDirection.z;
+    }
+    else
+    {
+        DominantDirection[index + 0] += dominantDirection.x;
+        DominantDirection[index + 1] += dominantDirection.y;
+        DominantDirection[index + 2] += dominantDirection.z;
+    }
 }

@@ -86,7 +86,7 @@ struct PushConstants
         float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
         float3 current = bounceEmission * color.a;
         color.rgb += bounceEmission * color.a;
-        dominantDirection.xyz += -ray.D * Luminance(current);
+        dominantDirection.xyz += ray.D * Luminance(current);
     }
 
     float4 previous = LightmapDiffuse[coords];
@@ -96,12 +96,19 @@ struct PushConstants
 
     uint index = (coords.x + coords.y * resolution.x) * 4;
     dominantDirection.z = -dominantDirection.z; // unity coords
-    DominantDirection[index + 0] += dominantDirection.x;
-    DominantDirection[index + 1] += dominantDirection.y;
-    DominantDirection[index + 2] += dominantDirection.z;
+
     // todo temp
-    if (sampleIndex == sampleCount - 1)
+    if (sampleIndex == 0)
     {
+        DominantDirection[index + 0] = dominantDirection.x;
+        DominantDirection[index + 1] = dominantDirection.y;
+        DominantDirection[index + 2] = dominantDirection.z;
         DominantDirection[index + 3] = PackNormalOctahedron(float3(normalWS.xy, -normalWS.z));
+    }
+    else
+    {
+        DominantDirection[index + 0] += dominantDirection.x;
+        DominantDirection[index + 1] += dominantDirection.y;
+        DominantDirection[index + 2] += dominantDirection.z;
     }
 }

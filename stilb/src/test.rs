@@ -254,9 +254,9 @@ mod tests {
         let settings = LightmapSettings {
             width: w,
             height: h,
-            denoise: false,
-            dilate: false,
-            fix_seams: false,
+            denoise: true,
+            dilate: true,
+            fix_seams: true,
         };
         app_add_lightmap_group(
             app,
