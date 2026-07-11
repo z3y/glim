@@ -22,6 +22,8 @@
 - [ ] Add support for CWBVH
 - [ ] Bake sky reflection probe
 - [ ] Per chart UV Packing
+- [ ] Light Probes/Volumes are noisy with direct light from small emissives
+  - [ ] Maybe denoise or do MIS
 
 ## Optimization
 - [ ] Manually build the LightingData asset

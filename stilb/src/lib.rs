@@ -863,6 +863,8 @@ fn render_lightmaps(app: &mut Stilb) {
         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
         | vk::BufferUsageFlags::TRANSFER_SRC;
 
+    // todo diffuse should probably be switched to a buffer as well to not waste the alpha and for easier copy
+
     let dominant_direction_buffer = Buffer::empty(
         &app.vk,
         "Dominant Direction".to_owned(),
@@ -872,6 +874,13 @@ fn render_lightmaps(app: &mut Stilb) {
     );
     let mut directional_pixels_temp =
         vec![0.0f32; (max_resolution.0 * max_resolution.1 * 4) as usize];
+    let usage = vk::BufferUsageFlags::TRANSFER_DST;
+    let properties = vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+    let (staging_buffer, staging_memory, _) = app.vk.create_buffer(
+        dominant_direction_pixels_size as vk::DeviceSize,
+        usage,
+        properties,
+    );
 
     let mut bake_direct_shader = load_bake_direct_shader(&app.vk, &app.constants);
 
@@ -1041,12 +1050,21 @@ fn render_lightmaps(app: &mut Stilb) {
             &app.staging_buffer,
         );
 
-        // todo this is pretty bad as it allocates a temp buffer every time
-        app.vk.download_buffer(
+        app.groups[i].lightmap_directional = vec![0.0; app.groups[i].lightmap_diffuse_final.len()];
+
+        let regions = vk::BufferCopy {
+            src_offset: 0,
+            dst_offset: 0,
+            size: (app.groups[i].lightmap_directional.len() * std::mem::size_of::<f32>())
+                as vk::DeviceSize,
+        };
+        app.vk.download_buffer_with_staging(
             dominant_direction_buffer.buffer,
             &mut directional_pixels_temp,
+            staging_buffer,
+            staging_memory,
+            regions,
         );
-        app.groups[i].lightmap_directional = vec![0.0; app.groups[i].lightmap_diffuse_final.len()];
         let dir = &mut app.groups[i].lightmap_directional;
         for i in 0..dir.len() {
             dir[i] = directional_pixels_temp[i];
@@ -1204,9 +1222,18 @@ fn render_lightmaps(app: &mut Stilb) {
                 *d += s;
             }
 
-            app.vk.download_buffer(
+            let regions = vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size: (group.lightmap_directional.len() * std::mem::size_of::<f32>())
+                    as vk::DeviceSize,
+            };
+            app.vk.download_buffer_with_staging(
                 dominant_direction_buffer.buffer,
                 &mut directional_pixels_temp,
+                staging_buffer,
+                staging_memory,
+                regions,
             );
             let src = &directional_pixels_temp;
             let dst = &mut group.lightmap_directional;
@@ -1239,12 +1266,16 @@ fn render_lightmaps(app: &mut Stilb) {
     bake_bounce_shader.destroy(&app.vk);
     app.adjust_samples_shader.destroy(&app.vk);
 
+    unsafe {
+        app.vk.device.destroy_buffer(staging_buffer, None);
+        app.vk.device.free_memory(staging_memory, None);
+    };
+
     for i in 0..app.groups.len() {
         let group = &mut app.groups[i];
         let group_index = group.index;
         let pixels = &mut group.lightmap_diffuse_final;
         let direction_pixels = &mut group.lightmap_directional;
-        encode_directional_lightmap(pixels, direction_pixels);
 
         let settings = group.settings.clone();
 
@@ -1255,7 +1286,7 @@ fn render_lightmaps(app: &mut Stilb) {
             let start_time = std::time::Instant::now();
             let backface_threshold = 0.0;
 
-            inpaint(pixels, width, height, backface_threshold, 16);
+            // inpaint(pixels, width, height, backface_threshold, 16);
 
             let now = std::time::Instant::now();
             let elapsed = now.duration_since(start_time).as_secs_f32();
@@ -1269,7 +1300,7 @@ fn render_lightmaps(app: &mut Stilb) {
 
             match &oidn {
                 Some(oidn) => {
-                    oidn.denoise(pixels, width as usize, height as usize);
+                    oidn.denoise(pixels, width as usize, height as usize, false);
                 }
                 None => {}
             }
@@ -1299,6 +1330,17 @@ fn render_lightmaps(app: &mut Stilb) {
             let message = format!("Seam Fix Complete {}s", elapsed);
             (log)(LogMessage::message(&message));
         }
+
+        encode_directional_lightmap_rgb(pixels, direction_pixels);
+        if settings.denoise {
+            match &oidn {
+                Some(oidn) => {
+                    oidn.denoise(direction_pixels, width as usize, height as usize, true);
+                }
+                None => {}
+            }
+        }
+        encode_directional_lightmap_alpha(pixels, direction_pixels);
 
         let readback_data = LightmapReadbackData {
             group_index,
@@ -1485,7 +1527,7 @@ fn unpack_normal_octahedron(packed: f32) -> Vector3 {
     decode_normal_octahedron(oct)
 }
 
-fn encode_directional_lightmap(diffuse: &[f32], dir: &mut [f32]) {
+fn encode_directional_lightmap_rgb(diffuse: &[f32], dir: &mut [f32]) {
     for i in 0..(diffuse.len() / 4) {
         let index = i * 4;
         let diffuse_r = diffuse[index + 0];
@@ -1503,9 +1545,7 @@ fn encode_directional_lightmap(diffuse: &[f32], dir: &mut [f32]) {
         let dir_x = dir[index + 0];
         let dir_y = dir[index + 1];
         let dir_z = dir[index + 2];
-        let dir_w = dir[index + 3];
 
-        let normal = unpack_normal_octahedron(dir_w);
         let v = Vector3::new(dir_x, dir_y, dir_z);
 
         let normalized_dir = (v / luminance).normalize();
@@ -1513,6 +1553,28 @@ fn encode_directional_lightmap(diffuse: &[f32], dir: &mut [f32]) {
         dir[index + 0] = normalized_dir.x * 0.5 + 0.5;
         dir[index + 1] = normalized_dir.y * 0.5 + 0.5;
         dir[index + 2] = normalized_dir.z * 0.5 + 0.5;
+    }
+}
+
+fn encode_directional_lightmap_alpha(diffuse: &[f32], dir: &mut [f32]) {
+    for i in 0..(diffuse.len() / 4) {
+        let index = i * 4;
+        let diffuse_a = diffuse[index + 3];
+
+        if diffuse_a == 0.0 {
+            continue;
+        }
+
+        let dir_w = dir[index + 3];
+
+        let normal = unpack_normal_octahedron(dir_w);
+
+        let normalized_dir = Vector3 {
+            x: (dir[index + 0] - 0.5) * 2.0,
+            y: (dir[index + 1] - 0.5) * 2.0,
+            z: (dir[index + 2] - 0.5) * 2.0,
+        };
+
         dir[index + 3] = normal.dot(normalized_dir).clamp(0.0, 1.0) * 0.5 + 0.5;
     }
 }

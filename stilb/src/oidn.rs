@@ -131,7 +131,7 @@ impl Oidn {
         }
     }
 
-    pub fn denoise(&self, pixels: &mut [f32], width: usize, height: usize) {
+    pub fn denoise(&self, pixels: &mut [f32], width: usize, height: usize, directional: bool) {
         let pixel_stride = 4 * std::mem::size_of::<f32>();
 
         let filter = self.filter;
@@ -160,6 +160,7 @@ impl Oidn {
                 pixel_stride,
                 0,
             );
+            (self.set_filter_bool)(filter, c"directional".as_ptr(), directional);
 
             (self.commit_filter)(filter);
             (self.execute_filter)(filter);
