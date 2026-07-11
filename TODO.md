@@ -2,6 +2,7 @@
 
 ## Priority
 - [ ] Include OIDN dlls
+- [ ] Fix directional lightmap import settings
 
 ## Features
 - [ ] Directional lightmaps
