@@ -819,16 +819,19 @@ fn render_preview(app: &mut Stilb) {
 
 fn render_lightmaps3(app: &mut Stilb) {
     let mut max_resolution = (1, 1);
+    let mut total_pixel_count = 0;
     for group in &app.groups {
         max_resolution.0 = u32::max(max_resolution.0, group.settings.width);
         max_resolution.1 = u32::max(max_resolution.1, group.settings.height);
+
+        total_pixel_count += group.settings.width * group.settings.height;
     }
 
     // let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
     // let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
 
-    let max_pixels_size =
-        (max_resolution.0 * max_resolution.1 * std::mem::size_of::<f32>() as u32) as vk::DeviceSize;
+    let max_pixel_count = max_resolution.0 * max_resolution.1;
+    let max_pixels_size = (max_pixel_count * std::mem::size_of::<f32>() as u32) as vk::DeviceSize;
 
     let mut visibility_expanded = Texture2D::new(
         &app.vk,
@@ -854,8 +857,7 @@ fn render_lightmaps3(app: &mut Stilb) {
     );
 
     let mut compaction_shader = load_shader_compaction_mask(&app.vk, &app.constants);
-
-    let mut compaction_mask = Buffer::empty(
+    let mut compaction_mask_buffer = Buffer::empty(
         &app.vk,
         "Compaction Mask".to_owned(),
         max_pixels_size / 32,
@@ -865,180 +867,169 @@ fn render_lightmaps3(app: &mut Stilb) {
             | vk::BufferUsageFlags::TRANSFER_SRC,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
-
     update_shader_compaction_mask(
         &app.vk,
         &compaction_shader,
         visibility_expanded.view(),
-        compaction_mask.buffer,
+        compaction_mask_buffer.buffer,
     );
 
-    let clear_values = [vk::ClearValue {
+    let mut mask_temp: Vec<u32> = vec![0; (max_pixel_count / 32) as usize];
+    let mut visible_pixels: Vec<u32> = Vec::with_capacity(total_pixel_count as usize);
+    let mut visible_pixels_group_start: Vec<u32> = Vec::with_capacity(app.groups.len());
+
+    let visibility_clear = [vk::ClearValue {
         color: vk::ClearColorValue {
             float32: [0.0, 0.0, 0.0, 0.0],
         },
     }];
 
-    let group_index = 0;
-    let group = &app.groups[group_index].settings;
+    for group_index in 0..app.groups.len() {
+        let group = &app.groups[group_index].settings;
 
-    let mut render_pass_begin = vk::RenderPassBeginInfo {
-        render_pass: visibility_shader.render_pass,
-        framebuffer: visibility_shader.framebuffer,
-        render_area: vk::Rect2D {
-            offset: vk::Offset2D { x: 0, y: 0 },
-            extent: vk::Extent2D {
-                width: group.width,
-                height: group.height,
+        let mut render_pass_begin = vk::RenderPassBeginInfo {
+            render_pass: visibility_shader.render_pass,
+            framebuffer: visibility_shader.framebuffer,
+            render_area: vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: vk::Extent2D {
+                    width: group.width,
+                    height: group.height,
+                },
             },
-        },
-        ..Default::default()
-    };
+            ..Default::default()
+        };
+        render_pass_begin = render_pass_begin.clear_values(&visibility_clear);
 
-    render_pass_begin = render_pass_begin.clear_values(&clear_values);
+        let cmd = app.vk.begin_single_use_cmd();
+        let mesh = &app.gpu_mesh;
 
-    let cmd = app.vk.begin_single_use_cmd();
-    let mesh = &app.gpu_mesh;
-
-    let visibility_push = VisibilityPushConstants {
-        width: group.width,
-        height: group.height,
-        group_index: group_index as u32,
-        convervative: 1,
-    };
-    let visibility_push_bytes = as_bytes(&visibility_push);
-
-    let compaction_push = CompactionPushConstants {
-        width: group.width,
-        height: group.height,
-        pad0: 0,
-        pad1: 0,
-    };
-    let compaction_push_bytes = as_bytes(&compaction_push);
-
-    unsafe {
-        let vk = &app.vk.device;
-
-        vk.cmd_begin_render_pass(cmd, &render_pass_begin, vk::SubpassContents::INLINE);
-        vk.cmd_bind_pipeline(
-            cmd,
-            vk::PipelineBindPoint::GRAPHICS,
-            visibility_shader.pipeline,
-        );
-        vk.cmd_bind_descriptor_sets(
-            cmd,
-            vk::PipelineBindPoint::GRAPHICS,
-            visibility_shader.pipeline_layout,
-            0,
-            &[visibility_shader.descriptor_set],
-            &[],
-        );
-
-        vk.cmd_push_constants(
-            cmd,
-            visibility_shader.pipeline_layout,
-            vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::VERTEX,
-            0,
-            &visibility_push_bytes,
-        );
-
-        // vk.cmd_set_viewport(
-        //     cmd,
-        //     0,
-        //     &[vk::Viewport {
-        //         x: 0.0,
-        //         y: 0.0,
-        //         width: group.width as f32,
-        //         height: group.height as f32,
-        //         min_depth: 0.0,
-        //         max_depth: 1.0,
-        //     }],
-        // );
-
-        // vk.cmd_set_scissor(
-        //     cmd,
-        //     0,
-        //     &[vk::Rect2D {
-        //         offset: vk::Offset2D { x: 0, y: 0 },
-        //         extent: vk::Extent2D {
-        //             width: group.width,
-        //             height: group.height,
-        //         },
-        //     }],
-        // );
-
-        vk.cmd_draw(cmd, mesh.index_len * 3, 1, 0, 0);
-        vk.cmd_end_render_pass(cmd);
-
-        // compaction
-
-        vk.cmd_bind_pipeline(
-            cmd,
-            vk::PipelineBindPoint::COMPUTE,
-            compaction_shader.pipeline,
-        );
-        vk.cmd_bind_descriptor_sets(
-            cmd,
-            vk::PipelineBindPoint::COMPUTE,
-            compaction_shader.pipeline_layout,
-            0,
-            &[compaction_shader.descriptor_set],
-            &[],
-        );
-        vk.cmd_push_constants(
-            cmd,
-            compaction_shader.pipeline_layout,
-            vk::ShaderStageFlags::COMPUTE,
-            0,
-            &compaction_push_bytes,
-        );
-
-        let groups_x = ((group.width * group.height) + 63) / 64;
-        let groups_y = 1;
-        vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
-    }
-
-    app.vk.end_single_use_cmd(cmd);
-
-    // mask debugging
-    {
-        let pixel_count = (group.width * group.height) as usize;
-        let mut mask: Vec<u32> = vec![0; pixel_count / 32];
-        app.vk.download_buffer(compaction_mask.buffer, &mut mask);
-
-        let mut pixels: Vec<f32> = Vec::with_capacity(pixel_count * 4);
-        for i in 0..pixel_count {
-            let word = i / 32;
-            let bit = i % 32;
-
-            let visible = (mask[word] & (1u32 << bit)) != 0;
-
-            let value = if visible { 1.0 } else { 0.0 };
-
-            pixels.push(value);
-            pixels.push(value);
-            pixels.push(value);
-            pixels.push(1.0);
-        }
-
-        let readback_data = LightmapReadbackData {
-            group_index: group_index as u32,
-            ty: 0,
-            pixels: pixels.as_ptr(),
-            pixels_count: pixels.len() as u32,
+        let visibility_push = VisibilityPushConstants {
             width: group.width,
             height: group.height,
+            group_index: group_index as u32,
+            convervative: 1,
         };
+        let visibility_push_bytes = as_bytes(&visibility_push);
 
-        (app.config.lightmap_read_callback)(readback_data);
+        let compaction_push = CompactionPushConstants {
+            width: group.width,
+            height: group.height,
+            pad0: 0,
+            pad1: 0,
+        };
+        let compaction_push_bytes = as_bytes(&compaction_push);
+
+        unsafe {
+            let vk = &app.vk.device;
+
+            vk.cmd_begin_render_pass(cmd, &render_pass_begin, vk::SubpassContents::INLINE);
+            vk.cmd_bind_pipeline(
+                cmd,
+                vk::PipelineBindPoint::GRAPHICS,
+                visibility_shader.pipeline,
+            );
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::GRAPHICS,
+                visibility_shader.pipeline_layout,
+                0,
+                &[visibility_shader.descriptor_set],
+                &[],
+            );
+            vk.cmd_push_constants(
+                cmd,
+                visibility_shader.pipeline_layout,
+                vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::VERTEX,
+                0,
+                &visibility_push_bytes,
+            );
+
+            vk.cmd_draw(cmd, mesh.index_len * 3, 1, 0, 0);
+            vk.cmd_end_render_pass(cmd);
+
+            // compaction
+            vk.cmd_bind_pipeline(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                compaction_shader.pipeline,
+            );
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                compaction_shader.pipeline_layout,
+                0,
+                &[compaction_shader.descriptor_set],
+                &[],
+            );
+            vk.cmd_push_constants(
+                cmd,
+                compaction_shader.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &compaction_push_bytes,
+            );
+            let groups_x = ((group.width * group.height) + 63) / 64;
+            let groups_y = 1;
+            vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+        }
+
+        app.vk.end_single_use_cmd(cmd);
+
+        {
+            let pixel_count = (group.width * group.height) as usize;
+            let regions = vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size: (pixel_count * std::mem::size_of::<u32>() / 32) as u64,
+            };
+
+            app.vk
+                .download_buffer(compaction_mask_buffer.buffer, &mut mask_temp, regions);
+
+            const DEBUG_COMPACTION_MASK: bool = true;
+            let mut debug_pixels: Vec<f32> = Vec::new();
+
+            visible_pixels_group_start.push(visible_pixels.len() as u32);
+
+            for i in 0..pixel_count {
+                let word = i / 32;
+                let bit = i % 32;
+
+                let visible = (mask_temp[word] & (1u32 << bit)) != 0;
+
+                if visible {
+                    visible_pixels.push(i as u32);
+                }
+
+                if DEBUG_COMPACTION_MASK {
+                    let value = if visible { 1.0 } else { 0.0 };
+                    debug_pixels.push(value);
+                    debug_pixels.push(value);
+                    debug_pixels.push(value);
+                    debug_pixels.push(1.0);
+                }
+            }
+
+            if DEBUG_COMPACTION_MASK {
+                let readback_data = LightmapReadbackData {
+                    group_index: group_index as u32,
+                    ty: 0,
+                    pixels: debug_pixels.as_ptr(),
+                    pixels_count: debug_pixels.len() as u32,
+                    width: group.width,
+                    height: group.height,
+                };
+                (app.config.lightmap_read_callback)(readback_data);
+            }
+        }
     }
-
     // let mut pixels = Vec::new();
     // visibility_expanded.read_pixels(&app.vk, &mut pixels, &app.staging_buffer);
 
     visibility_shader.destroy(&app.vk);
     compaction_shader.destroy(&app.vk);
-    compaction_mask.destroy(&app.vk);
+    compaction_mask_buffer.destroy(&app.vk);
     visibility_expanded.destroy(&app.vk);
 
     // let readback_data = LightmapReadbackData {

@@ -449,7 +449,12 @@ impl VulkanContext {
         };
     }
 
-    pub fn download_buffer<T: Copy>(&self, src: vk::Buffer, dst: &mut [T]) {
+    pub fn download_buffer<T: Copy>(
+        &self,
+        src: vk::Buffer,
+        dst: &mut [T],
+        regions: vk::BufferCopy,
+    ) {
         let size = (dst.len() * std::mem::size_of::<T>()) as vk::DeviceSize;
 
         if size == 0 {
@@ -461,12 +466,6 @@ impl VulkanContext {
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
 
         let (staging_buffer, staging_memory, _) = self.create_buffer(size, usage, properties);
-
-        let regions = vk::BufferCopy {
-            src_offset: 0,
-            dst_offset: 0,
-            size,
-        };
 
         self.download_buffer_with_staging(src, dst, staging_buffer, staging_memory, regions);
 
