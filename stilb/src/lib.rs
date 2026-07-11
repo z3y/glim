@@ -15,7 +15,9 @@ use crate::lights::light_buffer_flags;
 use crate::math::Vector2;
 use crate::seams::{Seam, fix_seams, inpaint};
 use crate::sh::SHProbeL2;
-use crate::shaders::compaction_mask::{load_shader_compaction_mask, update_shader_compaction_mask};
+use crate::shaders::compaction_mask::{
+    CompactionPushConstants, load_shader_compaction_mask, update_shader_compaction_mask,
+};
 use crate::{
     camera::Camera,
     compute_shader::{
@@ -898,15 +900,31 @@ fn render_lightmaps3(app: &mut Stilb) {
     let cmd = app.vk.begin_single_use_cmd();
     let mesh = &app.gpu_mesh;
 
+    let visibility_push = VisibilityPushConstants {
+        width: group.width,
+        height: group.height,
+        group_index: group_index as u32,
+        convervative: 1,
+    };
+    let visibility_push_bytes = as_bytes(&visibility_push);
+
+    let compaction_push = CompactionPushConstants {
+        width: group.width,
+        height: group.height,
+        pad0: 0,
+        pad1: 0,
+    };
+    let compaction_push_bytes = as_bytes(&compaction_push);
+
     unsafe {
         let vk = &app.vk.device;
+
         vk.cmd_begin_render_pass(cmd, &render_pass_begin, vk::SubpassContents::INLINE);
         vk.cmd_bind_pipeline(
             cmd,
             vk::PipelineBindPoint::GRAPHICS,
             visibility_shader.pipeline,
         );
-
         vk.cmd_bind_descriptor_sets(
             cmd,
             vk::PipelineBindPoint::GRAPHICS,
@@ -916,19 +934,12 @@ fn render_lightmaps3(app: &mut Stilb) {
             &[],
         );
 
-        let push = VisibilityPushConstants {
-            width: group.width,
-            height: group.height,
-            group_index: group_index as u32,
-            convervative: 1,
-        };
-        let constants_bytes = as_bytes(&push);
         vk.cmd_push_constants(
             cmd,
             visibility_shader.pipeline_layout,
             vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::VERTEX,
             0,
-            &constants_bytes,
+            &visibility_push_bytes,
         );
 
         // vk.cmd_set_viewport(
@@ -957,7 +968,6 @@ fn render_lightmaps3(app: &mut Stilb) {
         // );
 
         vk.cmd_draw(cmd, mesh.index_len * 3, 1, 0, 0);
-
         vk.cmd_end_render_pass(cmd);
 
         // compaction
@@ -967,7 +977,6 @@ fn render_lightmaps3(app: &mut Stilb) {
             vk::PipelineBindPoint::COMPUTE,
             compaction_shader.pipeline,
         );
-
         vk.cmd_bind_descriptor_sets(
             cmd,
             vk::PipelineBindPoint::COMPUTE,
@@ -976,14 +985,53 @@ fn render_lightmaps3(app: &mut Stilb) {
             &[compaction_shader.descriptor_set],
             &[],
         );
+        vk.cmd_push_constants(
+            cmd,
+            compaction_shader.pipeline_layout,
+            vk::ShaderStageFlags::COMPUTE,
+            0,
+            &compaction_push_bytes,
+        );
 
-        let groups_x = (group.width + 63) / 64;
+        let groups_x = ((group.width * group.height) + 63) / 64;
         let groups_y = 1;
         vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
     }
 
     app.vk.end_single_use_cmd(cmd);
-    unsafe { app.vk.device.queue_wait_idle(app.vk.compute_queue).unwrap() };
+
+    // mask debugging
+    {
+        let pixel_count = (group.width * group.height) as usize;
+        let mut mask: Vec<u32> = vec![0; pixel_count / 32];
+        app.vk.download_buffer(compaction_mask.buffer, &mut mask);
+
+        let mut pixels: Vec<f32> = Vec::with_capacity(pixel_count * 4);
+        for i in 0..pixel_count {
+            let word = i / 32;
+            let bit = i % 32;
+
+            let visible = (mask[word] & (1u32 << bit)) != 0;
+
+            let value = if visible { 1.0 } else { 0.0 };
+
+            pixels.push(value);
+            pixels.push(value);
+            pixels.push(value);
+            pixels.push(1.0);
+        }
+
+        let readback_data = LightmapReadbackData {
+            group_index: group_index as u32,
+            ty: 0,
+            pixels: pixels.as_ptr(),
+            pixels_count: pixels.len() as u32,
+            width: group.width,
+            height: group.height,
+        };
+
+        (app.config.lightmap_read_callback)(readback_data);
+    }
 
     // let mut pixels = Vec::new();
     // visibility_expanded.read_pixels(&app.vk, &mut pixels, &app.staging_buffer);
