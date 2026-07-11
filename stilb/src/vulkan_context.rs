@@ -467,11 +467,18 @@ impl VulkanContext {
 
         let (staging_buffer, staging_memory, _) = self.create_buffer(size, usage, properties);
 
-        self.download_buffer_with_staging(src, dst, staging_buffer, staging_memory, regions);
+        let ptr = unsafe {
+            self.device
+                .map_memory(staging_memory, 0, regions.size, vk::MemoryMapFlags::empty())
+                .unwrap()
+        } as *const u8;
+
+        self.download_buffer_with_staging(src, dst, staging_buffer, ptr, regions);
 
         unsafe {
             self.device.destroy_buffer(staging_buffer, None);
             self.device.free_memory(staging_memory, None);
+            self.device.unmap_memory(staging_memory);
         };
     }
 
@@ -480,7 +487,7 @@ impl VulkanContext {
         src: vk::Buffer,
         dst: &mut [T],
         staging_buffer: vk::Buffer,
-        staging_memory: vk::DeviceMemory,
+        staging_ptr: *const u8,
         regions: vk::BufferCopy,
     ) {
         let cmd = self.begin_single_use_cmd();
@@ -492,17 +499,13 @@ impl VulkanContext {
 
         self.end_single_use_cmd(cmd);
 
-        let ptr = unsafe {
-            self.device
-                .map_memory(staging_memory, 0, regions.size, vk::MemoryMapFlags::empty())
-                .unwrap()
-        } as *const u8;
-
         unsafe {
-            std::ptr::copy_nonoverlapping(ptr, dst.as_mut_ptr() as *mut u8, regions.size as usize);
+            std::ptr::copy_nonoverlapping(
+                staging_ptr,
+                dst.as_mut_ptr() as *mut u8,
+                regions.size as usize,
+            );
         };
-
-        unsafe { self.device.unmap_memory(staging_memory) };
     }
 }
 

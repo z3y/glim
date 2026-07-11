@@ -856,6 +856,15 @@ fn render_lightmaps3(app: &mut Stilb) {
         app.gpu_mesh.vertex_buffer.buffer,
     );
 
+    // todo most gpus wouldnt even need a staging buffer
+    let mut staging_buffer = Buffer::empty(
+        &app.vk,
+        "Staging Buffer".to_owned(),
+        max_pixels_size * 4,
+        vk::BufferUsageFlags::TRANSFER_DST,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    );
+
     let mut compaction_shader = load_shader_compaction_mask(&app.vk, &app.constants);
     let mut compaction_mask_buffer = Buffer::empty(
         &app.vk,
@@ -886,6 +895,7 @@ fn render_lightmaps3(app: &mut Stilb) {
 
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index].settings;
+        let current_pixel_count = (group.width * group.height) as usize;
 
         let mut render_pass_begin = vk::RenderPassBeginInfo {
             render_pass: visibility_shader.render_pass,
@@ -901,7 +911,6 @@ fn render_lightmaps3(app: &mut Stilb) {
         };
         render_pass_begin = render_pass_begin.clear_values(&visibility_clear);
 
-        let cmd = app.vk.begin_single_use_cmd();
         let mesh = &app.gpu_mesh;
 
         let visibility_push = VisibilityPushConstants {
@@ -921,6 +930,7 @@ fn render_lightmaps3(app: &mut Stilb) {
         let compaction_push_bytes = as_bytes(&compaction_push);
 
         unsafe {
+            let cmd = app.vk.begin_single_use_cmd();
             let vk = &app.vk.device;
 
             vk.cmd_begin_render_pass(cmd, &render_pass_begin, vk::SubpassContents::INLINE);
@@ -972,65 +982,89 @@ fn render_lightmaps3(app: &mut Stilb) {
             let groups_x = ((group.width * group.height) + 63) / 64;
             let groups_y = 1;
             vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
-        }
 
-        app.vk.end_single_use_cmd(cmd);
+            let barrier = vk::BufferMemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(vk::AccessFlags::TRANSFER_READ)
+                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .buffer(compaction_mask_buffer.buffer)
+                .offset(0)
+                .size(vk::WHOLE_SIZE);
+            vk.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[barrier],
+                &[],
+            );
 
-        {
-            let pixel_count = (group.width * group.height) as usize;
             let regions = vk::BufferCopy {
                 src_offset: 0,
                 dst_offset: 0,
-                size: (pixel_count * std::mem::size_of::<u32>() / 32) as u64,
+                size: (current_pixel_count * std::mem::size_of::<u32>() / 32) as u64,
             };
+            vk.cmd_copy_buffer(
+                cmd,
+                compaction_mask_buffer.buffer,
+                staging_buffer.buffer,
+                &[regions],
+            );
 
-            app.vk
-                .download_buffer(compaction_mask_buffer.buffer, &mut mask_temp, regions);
+            app.vk.end_single_use_cmd(cmd);
 
-            const DEBUG_COMPACTION_MASK: bool = true;
-            let mut debug_pixels: Vec<f32> = Vec::new();
+            std::ptr::copy_nonoverlapping(
+                staging_buffer.ptr as *const u8,
+                mask_temp.as_mut_ptr() as *mut u8,
+                regions.size as usize,
+            );
+        };
 
-            visible_pixels_group_start.push(visible_pixels.len() as u32);
+        const DEBUG_COMPACTION_MASK: bool = true;
+        let mut debug_pixels: Vec<f32> = Vec::new();
 
-            for i in 0..pixel_count {
-                let word = i / 32;
-                let bit = i % 32;
+        visible_pixels_group_start.push(visible_pixels.len() as u32);
 
-                let visible = (mask_temp[word] & (1u32 << bit)) != 0;
+        for i in 0..current_pixel_count {
+            let word = i / 32;
+            let bit = i % 32;
 
-                if visible {
-                    visible_pixels.push(i as u32);
-                }
+            let visible = (mask_temp[word] & (1u32 << bit)) != 0;
 
-                if DEBUG_COMPACTION_MASK {
-                    let value = if visible { 1.0 } else { 0.0 };
-                    debug_pixels.push(value);
-                    debug_pixels.push(value);
-                    debug_pixels.push(value);
-                    debug_pixels.push(1.0);
-                }
+            if visible {
+                visible_pixels.push(i as u32);
             }
 
             if DEBUG_COMPACTION_MASK {
-                let readback_data = LightmapReadbackData {
-                    group_index: group_index as u32,
-                    ty: 0,
-                    pixels: debug_pixels.as_ptr(),
-                    pixels_count: debug_pixels.len() as u32,
-                    width: group.width,
-                    height: group.height,
-                };
-                (app.config.lightmap_read_callback)(readback_data);
+                let value = if visible { 1.0 } else { 0.0 };
+                debug_pixels.push(value);
+                debug_pixels.push(value);
+                debug_pixels.push(value);
+                debug_pixels.push(1.0);
             }
         }
-    }
-    // let mut pixels = Vec::new();
-    // visibility_expanded.read_pixels(&app.vk, &mut pixels, &app.staging_buffer);
 
-    visibility_shader.destroy(&app.vk);
+        if DEBUG_COMPACTION_MASK {
+            let readback_data = LightmapReadbackData {
+                group_index: group_index as u32,
+                ty: 0,
+                pixels: debug_pixels.as_ptr(),
+                pixels_count: debug_pixels.len() as u32,
+                width: group.width,
+                height: group.height,
+            };
+            (app.config.lightmap_read_callback)(readback_data);
+        }
+    }
     compaction_shader.destroy(&app.vk);
     compaction_mask_buffer.destroy(&app.vk);
+
+    visibility_shader.destroy(&app.vk);
     visibility_expanded.destroy(&app.vk);
+
+    staging_buffer.destroy(&app.vk);
 
     // let readback_data = LightmapReadbackData {
     //     group_index: group_index as u32,
