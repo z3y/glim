@@ -1054,15 +1054,24 @@ fn render_lightmaps3(app: &mut Stilb) {
     };
 
     const DEBUG_COMPACTION_MASK: bool = true;
-    if DEBUG_COMPACTION_MASK {
-        let mut debug_pixels: Vec<f32> = Vec::new();
+    let mut debug_pixels: Vec<f32> = Vec::new();
 
-        for group_index in 0..app.groups.len() {
-            let group_start = expanded_groups_start[group_index];
-            let group = &app.groups[group_index].settings;
+    for group_index in 0..app.groups.len() {
+        let group_start = expanded_groups_start[group_index];
 
-            let pixel_count = (group.width * group.height) as usize;
+        let group = &app.groups[group_index].settings;
+        let pixel_count = (group.width * group.height) as usize;
 
+        let mut prefix_sum = 0;
+        for i in 0..pixel_count / 32 {
+            let i = group_start + i * 2 + 1;
+
+            let bits = compaction_buffer_cpu[i];
+            compaction_buffer_cpu[i] = prefix_sum;
+            prefix_sum += bits;
+        }
+
+        if DEBUG_COMPACTION_MASK {
             for i in 0..pixel_count {
                 let word = i / 32;
 
@@ -1076,17 +1085,15 @@ fn render_lightmaps3(app: &mut Stilb) {
                 debug_pixels.push(1.0);
             }
 
-            if DEBUG_COMPACTION_MASK {
-                let readback_data = LightmapReadbackData {
-                    group_index: group_index as u32,
-                    ty: 0,
-                    pixels: debug_pixels.as_ptr(),
-                    pixels_count: debug_pixels.len() as u32,
-                    width: group.width,
-                    height: group.height,
-                };
-                (app.config.lightmap_read_callback)(readback_data);
-            }
+            let readback_data = LightmapReadbackData {
+                group_index: group_index as u32,
+                ty: 0,
+                pixels: debug_pixels.as_ptr(),
+                pixels_count: debug_pixels.len() as u32,
+                width: group.width,
+                height: group.height,
+            };
+            (app.config.lightmap_read_callback)(readback_data);
         }
     }
 
