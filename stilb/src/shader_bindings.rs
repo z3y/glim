@@ -148,3 +148,13 @@ pub fn bind_compaction_mask_buffer(bindings: &mut Vec<vk::DescriptorSetLayoutBin
         ..Default::default()
     });
 }
+
+pub fn bind_compaction_prefix_buffer(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 16,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+}

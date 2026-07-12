@@ -173,7 +173,7 @@ impl GraphicsShader {
         };
 
         let color_attachments = [vk::AttachmentDescription {
-            format: vk::Format::R32G32B32A32_SFLOAT,
+            format: target.format(),
             samples: vk::SampleCountFlags::TYPE_1,
             load_op: vk::AttachmentLoadOp::CLEAR,
             store_op: vk::AttachmentStoreOp::STORE,

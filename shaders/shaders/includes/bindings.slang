@@ -14,8 +14,8 @@ StructuredBuffer<float4> CWBVHNodes;
 StructuredBuffer<float4> CWBVHTriangles;
 #endif
 
-[[vk::binding(2, 0)]] [[vk::image_format("rgba32f")]]
-RWTexture2D<float4> VisibilityBuffer;
+[[vk::binding(2, 0)]] [[vk::image_format("rg32ui")]]
+RWTexture2D<uint2> VisibilityBuffer;
 
 [[vk::binding(3, 0)]]
 Texture2D<float4> Albedo[];
@@ -55,6 +55,9 @@ RWStructuredBuffer<float> DominantDirection;
 
 [[vk::binding(15, 0)]]
 RWStructuredBuffer<uint> CompactionMaskBuffer;
+
+[[vk::binding(16, 0)]]
+RWStructuredBuffer<uint> CompactionPrefixBuffer;
 
 [vk::constant_id(0)] const uint USE_CAMERA;
 [vk::constant_id(1)] const uint LIGHT_FALLOFF_TYPE;

@@ -23,7 +23,8 @@ struct PushConstants
 
     if (coords.x >= resolution.x || coords.y >= resolution.y)
     {
-        VisibilityBuffer[coords] = EncodeVisibilityBuffer(float2(0, 0), 0, false, false);
+        // TODO encode new
+        // VisibilityBuffer[coords] = EncodeVisibilityBuffer(float2(0, 0), 0, false, false);
         return;
     }
 
@@ -61,5 +62,6 @@ struct PushConstants
         result = EncodeVisibilityBuffer(float2(0, 0), 0, false, false);
     }
 
-    VisibilityBuffer[coords] = result;
+    // TODO encode new
+    // VisibilityBuffer[coords] = result;
 }

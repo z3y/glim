@@ -837,7 +837,7 @@ fn render_lightmaps3(app: &mut Stilb) {
         &app.vk,
         max_resolution.0,
         max_resolution.1,
-        vk::Format::R32G32B32A32_SFLOAT,
+        vk::Format::R32G32_UINT,
         vk::ImageUsageFlags::STORAGE
             | vk::ImageUsageFlags::TRANSFER_SRC
             | vk::ImageUsageFlags::TRANSFER_DST
@@ -872,8 +872,18 @@ fn render_lightmaps3(app: &mut Stilb) {
         max_pixels_size / 32,
         vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::STORAGE_BUFFER
-            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-            | vk::BufferUsageFlags::TRANSFER_SRC,
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    );
+    let mut compaction_prefix_buffer = Buffer::empty(
+        &app.vk,
+        "Compaction Prefix".to_owned(),
+        max_pixels_size / 32,
+        vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::STORAGE_BUFFER
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
     update_shader_compaction_mask(
@@ -881,6 +891,7 @@ fn render_lightmaps3(app: &mut Stilb) {
         &compaction_shader,
         visibility_expanded.view(),
         compaction_mask_buffer.buffer,
+        compaction_prefix_buffer.buffer,
     );
 
     let mut mask_temp: Vec<u32> = vec![0; (max_pixel_count / 32) as usize];
@@ -924,7 +935,7 @@ fn render_lightmaps3(app: &mut Stilb) {
         let compaction_push = CompactionPushConstants {
             width: group.width,
             height: group.height,
-            pad0: 0,
+            offset: 0,
             pad1: 0,
         };
         let compaction_push_bytes = as_bytes(&compaction_push);
@@ -1088,8 +1099,10 @@ fn render_lightmaps3(app: &mut Stilb) {
             (app.config.lightmap_read_callback)(readback_data);
         }
     }
+
     compaction_shader.destroy(&app.vk);
     compaction_mask_buffer.destroy(&app.vk);
+    compaction_prefix_buffer.destroy(&app.vk);
 
     visibility_shader.destroy(&app.vk);
     visibility_expanded.destroy(&app.vk);

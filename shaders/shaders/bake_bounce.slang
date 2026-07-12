@@ -29,7 +29,8 @@ struct PushConstants
         return;
     }
 
-    float4 visibility = VisibilityBuffer[coords];
+    // float4 visibility = VisibilityBuffer[coords];
+    float4 visibility = 0;
 
     if (all(visibility == 0))
     {

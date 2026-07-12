@@ -82,7 +82,8 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
         return;
     }
 
-    float4 visibility = VisibilityBuffer[coords];
+    // float4 visibility = VisibilityBuffer[coords];
+    float4 visibility = 0;
 
     uint encoded = asuint(visibility.a);
     if (encoded == 0)
@@ -100,5 +101,5 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
 
     float packed = PackNormalOctahedron(surface.N);
 
-    VisibilityBuffer[coords] = float4(positionWS, packed);
+    // VisibilityBuffer[coords] = float4(positionWS, packed);
 }

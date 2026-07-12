@@ -6,7 +6,7 @@ PushConstants Push;
 struct PushConstants
 {
     uint2 resolution;
-    uint pad0;
+    uint offset;
     uint pad1;
 };
 
@@ -24,14 +24,16 @@ struct PushConstants
         coords.x = threadID.x % resolution.x;
         coords.y = threadID.x / resolution.x;
 
-        float4 visibility = VisibilityBuffer[coords];
-        visible = asuint(visibility.x) != uint::maxValue;
+        uint2 visibility = VisibilityBuffer[coords];
+        visible = visibility.x != uint::maxValue;
     }
 
     uint mask = WaveActiveBallot(visible).x;
 
     if (WaveIsFirstLane())
     {
-        CompactionMaskBuffer[groupID.x] = mask;
+        CompactionMaskBuffer[groupID.x + Push.offset] = mask;
     }
+
+    uint activeCount = countbits(mask);
 }

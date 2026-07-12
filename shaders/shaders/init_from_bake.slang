@@ -50,11 +50,14 @@ struct Varyings
     return o;
 }
 
-    [shader("fragment")] float4 fragment(Varyings varyings)
+    [shader("fragment")] uint2 fragment(Varyings varyings)
     : SV_Target
 {
     uint primitiveID = varyings.primitiveID;
     float2 bary = varyings.bary;
 
-    return float4(asfloat(primitiveID), bary, 1);
+    // todo encode bary
+    return uint2(primitiveID, 0);
+
+    // return float4(asfloat(primitiveID), bary, 1);
 }
