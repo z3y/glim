@@ -984,76 +984,40 @@ fn render_lightmaps3(app: &mut Stilb) {
             let groups_y = 1;
             vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
 
-            // let barrier = vk::BufferMemoryBarrier::default()
-            //     .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            //     .dst_access_mask(vk::AccessFlags::TRANSFER_READ)
-            //     .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            //     .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            //     .buffer(compaction_buffer.buffer)
-            //     .offset(0)
-            //     .size(vk::WHOLE_SIZE);
-            // vk.cmd_pipeline_barrier(
-            //     cmd,
-            //     vk::PipelineStageFlags::COMPUTE_SHADER,
-            //     vk::PipelineStageFlags::TRANSFER,
-            //     vk::DependencyFlags::empty(),
-            //     &[],
-            //     &[barrier],
-            //     &[],
-            // );
-
-            // let regions = vk::BufferCopy {
-            //     src_offset: 0,
-            //     dst_offset: 0,
-            //     size: current_buffer_size,
-            // };
-            // vk.cmd_copy_buffer(
-            //     cmd,
-            //     compaction_buffer.buffer,
-            //     staging_buffer.buffer,
-            //     &[regions],
-            // );
-
             app.vk.end_single_use_cmd(cmd);
-
-            // std::ptr::copy_nonoverlapping(
-            //     staging_buffer.ptr as *const u8,
-            //     mask_temp.as_mut_ptr() as *mut u8,
-            //     regions.size as usize,
-            // );
         };
 
         expanded_groups_start[group_index] = expanded_group_offset as usize;
         expanded_group_offset += group.width * group.height;
     }
 
-    let cmd = app.vk.begin_single_use_cmd();
-    let regions = vk::BufferCopy {
-        src_offset: 0,
-        dst_offset: 0,
-        size: compaction_buffer.bytes,
-    };
+    let mut compaction_buffer_cpu = vec![0u32; compaction_buffer.bytes as usize / 4];
+
     unsafe {
+        let cmd = app.vk.begin_single_use_cmd();
+
+        let regions = vk::BufferCopy {
+            src_offset: 0,
+            dst_offset: 0,
+            size: compaction_buffer.bytes,
+        };
         app.vk.device.cmd_copy_buffer(
             cmd,
             compaction_buffer.buffer,
             staging_buffer.buffer,
             &[regions],
-        )
-    };
-    app.vk.end_single_use_cmd(cmd);
+        );
 
-    let mut compaction_buffer_cpu = vec![0u32; compaction_buffer.bytes as usize / 4];
+        app.vk.end_single_use_cmd(cmd);
 
-    unsafe {
         std::ptr::copy_nonoverlapping(
             staging_buffer.ptr as *const u8,
             compaction_buffer_cpu.as_mut_ptr() as *mut u8,
             regions.size as usize,
-        )
-    };
+        );
+    }
 
-    const DEBUG_COMPACTION_MASK: bool = true;
+    const DEBUG_COMPACTION: bool = true;
     let mut debug_pixels: Vec<f32> = Vec::new();
 
     for group_index in 0..app.groups.len() {
@@ -1071,17 +1035,41 @@ fn render_lightmaps3(app: &mut Stilb) {
             prefix_sum += bits;
         }
 
-        if DEBUG_COMPACTION_MASK {
+        if DEBUG_COMPACTION {
             for i in 0..pixel_count {
                 let word = i / 32;
+                let bit = i & 31;
 
                 let mask = compaction_buffer_cpu[group_start + word * 2];
-                let visible = (mask & (1 << (i & 31))) != 0;
+                let offset = compaction_buffer_cpu[group_start + word * 2 + 1];
 
-                let value = if visible { 1.0 } else { 0.0 };
-                debug_pixels.push(value);
-                debug_pixels.push(value);
-                debug_pixels.push(value);
+                let active = (mask & (1 << bit)) != 0;
+                let mut rank = 0;
+                let r = if active {
+                    let mut temp = mask;
+
+                    while temp != 0 {
+                        let next_bit = temp.trailing_zeros();
+
+                        if next_bit == bit as u32 {
+                            break;
+                        }
+
+                        rank += 1;
+                        temp &= temp - 1;
+                    }
+
+                    let compact_index = offset + rank;
+
+                    (compact_index % 32) as f32 / 32.0
+                } else {
+                    0.0
+                };
+                let g = if active { 1.0 } else { 0.0 };
+
+                debug_pixels.push(r);
+                debug_pixels.push(g);
+                debug_pixels.push(0.0);
                 debug_pixels.push(1.0);
             }
 
