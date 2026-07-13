@@ -12,6 +12,40 @@ struct PushConstants
     uint lightCount;
 };
 
+float2 BaryFromUV(uint primitiveID, float2 uv)
+{
+    uint i0 = Indices[primitiveID * 3 + 0];
+    uint i1 = Indices[primitiveID * 3 + 1];
+    uint i2 = Indices[primitiveID * 3 + 2];
+
+    Vertex v0 = Vertices[i0];
+    Vertex v1 = Vertices[i1];
+    Vertex v2 = Vertices[i2];
+
+    float2 uv0 = v0.GetUV();
+    float2 uv1 = v1.GetUV();
+    float2 uv2 = v2.GetUV();
+
+    float2 e0 = uv1 - uv0;
+    float2 e1 = uv2 - uv0;
+    float2 p = uv - uv0;
+
+    float det = e0.x * e1.y - e0.y * e1.x;
+
+    if (abs(det) < 1e-8)
+    {
+        return float2(0.0, 0.0);
+    }
+
+    float invDet = 1.0 / det;
+
+    float b1 = (p.x * e1.y - p.y * e1.x) * invDet;
+    float b2 = (-p.x * e0.y + p.y * e0.x) * invDet;
+    float b0 = 1.0 - b1 - b2;
+
+    return float2(b1, b2);
+}
+
 [shader("compute")]
     [numthreads(64, 1, 1)] void
     main(uint3 threadID : SV_DispatchThreadID)
@@ -23,11 +57,14 @@ struct PushConstants
         return;
     }
 
-    // float4 visibility = VisibilityBuffer[coords];
-    // float4 visibility = VisibilityBuffer[coords];
     uint2 visibility = CompactedVisibility[index];
     uint primitiveID = visibility.x;
-    // float2 coords = float2(UnpackCoords(visibility.x)) + 0.5;
+    float2 uv = float2(UnpackCoords(visibility.y)) + 0.5;
+    float2 bary = BaryFromUV(primitiveID, uv);
+
+    Surface surface = Surface::Get(primitiveID, bary, true);
+
+    CompactedDiffuse[index] = surface.Ng;
 
     // float3 positionWS = visibility.xyz;
     // float3 normalWS = UnpackNormalOctahedron(visibility.w);

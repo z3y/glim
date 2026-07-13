@@ -15,13 +15,16 @@ use crate::lights::light_buffer_flags;
 use crate::math::Vector2;
 use crate::seams::{Seam, fix_seams, inpaint};
 use crate::sh::SHProbeL2;
+use crate::shaders::bake_direct::{
+    BakeDirectPushConstants, load_bake_direct_shader, update_bake_direct_shader,
+};
 use crate::shaders::compact_visibility::{
     CompactPushConstants, load_shader_compact_visibility, update_shader_compact_visibility,
 };
 use crate::shaders::compaction_mask::{
     CompactionPushConstants, load_shader_compaction_mask, update_shader_compaction_mask,
 };
-use crate::shaders::decompact::{self, load_shader_decompact, update_shader_decompact};
+use crate::shaders::decompact::{load_shader_decompact, update_shader_decompact};
 use crate::{
     camera::Camera,
     compute_shader::{
@@ -839,9 +842,6 @@ fn render_lightmaps3(app: &mut Stilb) {
         total_pixel_count += group.settings.width * group.settings.height;
     }
 
-    // let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
-    // let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
-
     // let max_pixel_count = max_resolution.0 * max_resolution.1;
     // let max_pixels_size = (max_pixel_count * std::mem::size_of::<f32>() as u32) as vk::DeviceSize;
 
@@ -1253,7 +1253,7 @@ fn render_lightmaps3(app: &mut Stilb) {
     visibility_shader.destroy(&app.vk);
     compact_visibility_shader.destroy(&app.vk);
 
-    let mut diffuse_buffer = Buffer::empty(
+    let mut compacted_diffuse = Buffer::empty(
         &app.vk,
         "Diffuse Buffer".to_owned(),
         compacted_pixels_count as u64 * (std::mem::size_of::<f32>() * 3) as u64,
@@ -1264,45 +1264,63 @@ fn render_lightmaps3(app: &mut Stilb) {
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
 
-    // let mut bake_direct_shader = load_bake_direct_shader(&app.vk, &app.constants);
-    // let mut bake_direct_push = BakeDirectPushConstants {
-    //     sample_index: 0,
-    //     max_samples: app.config.direct_samples,
-    //     lights_count: app.cpu_lights.len() as u32,
-    //     compacted_count: compacted_pixels_count,
-    // };
-    // let groups_x = (compacted_pixels_count + 63) / 64;
-    // for sample_index in 0..app.config.direct_samples {
-    //     bake_direct_push.sample_index = sample_index;
+    let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
+    let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
 
-    //     let vk = &app.vk.device;
-    //     let shader = &bake_direct_shader;
-    //     let bake_direct_push_bytes = as_bytes(&bake_direct_push);
+    let mut bake_direct_shader = load_bake_direct_shader(&app.vk, &app.constants);
+    update_bake_direct_shader(
+        &app.vk,
+        &bake_direct_shader,
+        app.tlas.acceleration_structure(),
+        &albedos,
+        &emissions,
+        app.gpu_mesh.index_buffer.buffer,
+        app.gpu_mesh.vertex_buffer.buffer,
+        app.gpu_lights.buffer,
+        app.emissive_triangles_buffer.buffer,
+        compacted_visibility.buffer,
+        compacted_diffuse.buffer,
+    );
 
-    //     let cmd = app.vk.begin_single_use_cmd();
-    //     unsafe {
-    //         vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-    //         vk.cmd_bind_descriptor_sets(
-    //             cmd,
-    //             vk::PipelineBindPoint::COMPUTE,
-    //             shader.pipeline_layout,
-    //             0,
-    //             &[shader.descriptor_set],
-    //             &[],
-    //         );
-    //         vk.cmd_push_constants(
-    //             cmd,
-    //             shader.pipeline_layout,
-    //             vk::ShaderStageFlags::COMPUTE,
-    //             0,
-    //             &bake_direct_push_bytes,
-    //         );
+    let mut bake_direct_push = BakeDirectPushConstants {
+        sample_index: 0,
+        max_samples: app.config.direct_samples,
+        lights_count: app.cpu_lights.len() as u32,
+        compacted_count: compacted_pixels_count,
+    };
 
-    //         vk.cmd_dispatch(cmd, groups_x, 1, 1);
-    //     };
-    //     app.vk.end_single_use_cmd(cmd);
-    // }
-    // bake_direct_shader.destroy(&app.vk);
+    let groups_x = (compacted_pixels_count + 63) / 64;
+    for sample_index in 0..app.config.direct_samples {
+        bake_direct_push.sample_index = sample_index;
+
+        let vk = &app.vk.device;
+        let shader = &bake_direct_shader;
+        let bake_direct_push_bytes = as_bytes(&bake_direct_push);
+
+        let cmd = app.vk.begin_single_use_cmd();
+        unsafe {
+            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                shader.pipeline_layout,
+                0,
+                &[shader.descriptor_set],
+                &[],
+            );
+            vk.cmd_push_constants(
+                cmd,
+                shader.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &bake_direct_push_bytes,
+            );
+
+            vk.cmd_dispatch(cmd, groups_x, 1, 1);
+        };
+        app.vk.end_single_use_cmd(cmd);
+    }
+    bake_direct_shader.destroy(&app.vk);
 
     let mut decompact_shader = load_shader_decompact(&app.vk, &app.constants);
 
@@ -1311,6 +1329,7 @@ fn render_lightmaps3(app: &mut Stilb) {
         &decompact_shader,
         compaction_buffer.buffer,
         staging_buffer.buffer,
+        compacted_diffuse.buffer,
     );
 
     for group_index in 0..app.groups.len() {
@@ -1380,7 +1399,7 @@ fn render_lightmaps3(app: &mut Stilb) {
 
     decompact_shader.destroy(&app.vk);
 
-    diffuse_buffer.destroy(&app.vk);
+    compacted_diffuse.destroy(&app.vk);
     compacted_visibility.destroy(&app.vk);
     compaction_buffer.destroy(&app.vk);
     staging_buffer.destroy(&app.vk);

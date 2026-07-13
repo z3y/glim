@@ -14,6 +14,7 @@ pub fn load_shader_decompact(
 
     bind_compaction_buffer(&mut bindings);
     bind_decompact_target(&mut bindings);
+    bind_compacted_diffuse(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
@@ -43,6 +44,7 @@ pub fn update_shader_decompact(
     shader: &ComputeShader,
     compaction: vk::Buffer,
     decompact_target: vk::Buffer,
+    compacted_diffuse: vk::Buffer,
 ) {
     let mut descriptor_writes = Vec::new();
 
@@ -70,6 +72,21 @@ pub fn update_shader_decompact(
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
         dst_binding: 17,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // CompactedDiffuse
+    let info = [vk::DescriptorBufferInfo {
+        buffer: compacted_diffuse,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 18,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
