@@ -1017,9 +1017,9 @@ fn render_lightmaps3(app: &mut Stilb) {
 
     compaction_shader.destroy(&app.vk);
 
-    let mut compaction_buffer_cpu = vec![0u32; compaction_buffer.bytes as usize / 4];
+    // let mut compaction_buffer_cpu = vec![0u32; compaction_buffer.bytes as usize / 4];
 
-    unsafe {
+    let compaction_buffer_cpu = unsafe {
         let cmd = app.vk.begin_single_use_cmd();
 
         let regions = vk::BufferCopy {
@@ -1036,15 +1036,20 @@ fn render_lightmaps3(app: &mut Stilb) {
 
         app.vk.end_single_use_cmd(cmd);
 
-        std::ptr::copy_nonoverlapping(
-            staging_buffer.ptr as *const u8,
-            compaction_buffer_cpu.as_mut_ptr() as *mut u8,
-            regions.size as usize,
-        );
-    }
+        // std::ptr::copy_nonoverlapping(
+        //     staging_buffer.ptr as *const u8,
+        //     compaction_buffer_cpu.as_mut_ptr() as *mut u8,
+        //     regions.size as usize,
+        // );
+
+        std::slice::from_raw_parts_mut(
+            staging_buffer.ptr as *mut u32,
+            (compaction_buffer.bytes as usize / 4) as usize,
+        )
+    };
 
     let mut compacted_pixels_count = 0;
-    let mut compacted_groups_start: Vec<u32> = vec![0; app.groups.len()];
+    let mut compacted_groups_start = vec![0u32; app.groups.len()];
 
     for group_index in 0..app.groups.len() {
         let group_start = expanded_groups_start[group_index] * 2;
@@ -1113,11 +1118,11 @@ fn render_lightmaps3(app: &mut Stilb) {
 
     // copy back the compaction buffer with prefix sum calculated
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            compaction_buffer_cpu.as_ptr() as *const u8,
-            staging_buffer.ptr as *mut u8,
-            compaction_buffer.bytes as usize,
-        );
+        // std::ptr::copy_nonoverlapping(
+        //     compaction_buffer_cpu.as_ptr() as *const u8,
+        //     staging_buffer.ptr as *mut u8,
+        //     compaction_buffer.bytes as usize,
+        // );
 
         let cmd = app.vk.begin_single_use_cmd();
 
@@ -1136,6 +1141,8 @@ fn render_lightmaps3(app: &mut Stilb) {
 
         app.vk.end_single_use_cmd(cmd);
     }
+
+    _ = compaction_buffer_cpu;
 
     let log = app.config.log_callback;
     let reduction = 1.0 - (compacted_pixels_count as f32 / total_pixel_count as f32);
@@ -1197,7 +1204,7 @@ fn render_lightmaps3(app: &mut Stilb) {
         let compaction_push = CompactPushConstants {
             width: group.width,
             height: group.height,
-            offset: expanded_groups_start[group_index] as u32,
+            offset: compacted_groups_start[group_index] as u32,
             pad1: 0,
         };
         let compaction_push_bytes = as_bytes(&compaction_push);
@@ -1404,31 +1411,22 @@ fn render_lightmaps3(app: &mut Stilb) {
             app.vk.end_single_use_cmd(cmd);
         };
 
-        let mut pixels = vec![0.0f32; (group.width * group.height * 4) as usize];
-
-        let regions = vk::BufferCopy {
-            src_offset: 0,
-            dst_offset: 0,
-            size: (group.width * group.height * 4) as u64 * std::mem::size_of::<f32>() as u64,
-        };
-
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                staging_buffer.ptr as *const u8,
-                pixels.as_mut_ptr() as *mut u8,
-                regions.size as usize,
-            )
-        };
+            let pixels: &[f32] = std::slice::from_raw_parts(
+                staging_buffer.ptr as *const f32,
+                (group.width * group.height * 4) as usize,
+            );
 
-        let readback_data = LightmapReadbackData {
-            group_index: group_index as u32,
-            ty: 0,
-            pixels: pixels.as_ptr(),
-            pixels_count: pixels.len() as u32,
-            width: group.width,
-            height: group.height,
+            let readback_data = LightmapReadbackData {
+                group_index: group_index as u32,
+                ty: 0,
+                pixels: pixels.as_ptr(),
+                pixels_count: pixels.len() as u32,
+                width: group.width,
+                height: group.height,
+            };
+            (app.config.lightmap_read_callback)(readback_data);
         };
-        (app.config.lightmap_read_callback)(readback_data);
     }
 
     decompact_shader.destroy(&app.vk);
