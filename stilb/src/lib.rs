@@ -873,7 +873,9 @@ fn render_lightmaps3(app: &mut Stilb) {
         &app.vk,
         "Staging Buffer".to_owned(),
         (max_resolution.0 * max_resolution.1 * 4) as u64 * std::mem::size_of::<f32>() as u64, // todo this might not be enough to copy compaction with lots of small groups
-        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
+        vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::STORAGE_BUFFER,
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     );
 
