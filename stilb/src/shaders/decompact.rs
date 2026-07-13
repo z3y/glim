@@ -1,25 +1,19 @@
 use ash::vk;
 use shaders::load_shader_bytes;
 
-use crate::{as_bytes, compute_shader::*, shader_bindings::*, vulkan_context::VulkanContext};
+use crate::{
+    as_bytes, compute_shader::*, shader_bindings::*,
+    shaders::compact_visibility::CompactPushConstants, vulkan_context::VulkanContext,
+};
 
-#[repr(C)]
-pub struct CompactPushConstants {
-    pub width: u32,
-    pub height: u32,
-    pub offset: u32,
-    pub pad1: u32,
-}
-
-pub fn load_shader_compact_visibility(
+pub fn load_shader_decompact(
     vk: &VulkanContext,
     constants: &SpecializationConstants,
 ) -> ComputeShader {
     let mut bindings = Vec::new();
 
-    bind_visibility(&mut bindings);
     bind_compaction_buffer(&mut bindings);
-    bind_compacted_visibility_buffer(&mut bindings);
+    bind_decompact_target(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
@@ -33,7 +27,7 @@ pub fn load_shader_compact_visibility(
         size: std::mem::size_of::<CompactPushConstants>() as u32,
     }];
 
-    let bytes = load_shader_bytes(shaders::ShaderName::CompactVisibility);
+    let bytes = load_shader_bytes(shaders::ShaderName::Decompact);
 
     ComputeShader::new(
         vk,
@@ -44,29 +38,13 @@ pub fn load_shader_compact_visibility(
     )
 }
 
-pub fn update_shader_compact_visibility(
+pub fn update_shader_decompact(
     vk: &VulkanContext,
     shader: &ComputeShader,
-    visibility: vk::ImageView,
     compaction: vk::Buffer,
-    compacted_visibility: vk::Buffer,
+    decompact_target: vk::Buffer,
 ) {
     let mut descriptor_writes = Vec::new();
-
-    // VisibilityBuffer
-    let info = [vk::DescriptorImageInfo {
-        image_view: visibility,
-        image_layout: vk::ImageLayout::GENERAL,
-        ..Default::default()
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 2,
-        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-        ..Default::default()
-    };
-    write = write.image_info(&info);
-    descriptor_writes.push(write);
 
     // CompactionBuffer
     let info = [vk::DescriptorBufferInfo {
@@ -83,15 +61,15 @@ pub fn update_shader_compact_visibility(
     write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
-    // CompactedVisibility
+    // DecompactTarget
     let info = [vk::DescriptorBufferInfo {
-        buffer: compacted_visibility,
+        buffer: decompact_target,
         offset: 0,
         range: vk::WHOLE_SIZE,
     }];
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: 16,
+        dst_binding: 17,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };

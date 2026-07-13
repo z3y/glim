@@ -147,15 +147,10 @@ pub struct BakeSHPushConstants {
 
 #[repr(C)]
 pub struct BakeDirectPushConstants {
-    pub width: u32,
-    pub height: u32,
+    pub compacted_count: u32,
     pub sample_index: u32,
     pub max_samples: u32,
-
     pub lights_count: u32,
-    pub pad0: u32,
-    pub pad1: u32,
-    pub pad2: u32,
 }
 
 #[repr(C)]

@@ -158,3 +158,13 @@ pub fn bind_compacted_visibility_buffer(bindings: &mut Vec<vk::DescriptorSetLayo
         ..Default::default()
     });
 }
+
+pub fn bind_decompact_target(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 17,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+}

@@ -84,6 +84,18 @@ fn main() {
         dst: "compaction_mask.spv".into(),
     });
 
+    shaders.push(Shader {
+        ty: ShaderType::Compute,
+        src: "compact_visibility.slang".into(),
+        dst: "compact_visibility.spv".into(),
+    });
+
+    shaders.push(Shader {
+        ty: ShaderType::Compute,
+        src: "decompact.slang".into(),
+        dst: "decompact.spv".into(),
+    });
+
     for shader in shaders {
         let shader_path = shader_dir.join(shader.src);
         let spv_path = out_dir.join(shader.dst);

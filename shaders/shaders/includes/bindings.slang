@@ -59,6 +59,9 @@ RWStructuredBuffer<uint2> CompactionBuffer;
 [[vk::binding(16, 0)]]
 RWStructuredBuffer<uint2> CompactedVisibility;
 
+[[vk::binding(17, 0)]]
+RWStructuredBuffer<float4> DecompactTarget;
+
 [vk::constant_id(0)] const uint USE_CAMERA;
 [vk::constant_id(1)] const uint LIGHT_FALLOFF_TYPE;
 [vk::constant_id(2)] const uint TRANSPARENT_PRIMITIVE_ID_OFFSET;
