@@ -1,12 +1,11 @@
 use std::ffi::CStr;
 
-use ash::vk::{self, Handle, SpecializationInfo};
+use ash::vk::{self, Handle};
 use shaders::*;
 
 use crate::{
-    LightFalloffType, as_bytes, math::Vector3, shader_bindings::*,
-    shaders::bake_direct::BakeDirectPushConstants, texture2d::Texture2D,
-    vulkan_context::VulkanContext,
+    as_bytes, math::Vector3, shader_bindings::*, shaders::bake_direct::BakeDirectPushConstants,
+    texture2d::Texture2D, vulkan_context::VulkanContext,
 };
 
 pub struct ComputeShader {
@@ -434,8 +433,6 @@ pub fn load_bake_bounce_shader(
     bind_lightmap_diffuse(&mut bindings);
     bind_indices(&mut bindings);
     bind_vertices(&mut bindings);
-    bind_previous_diffuse(&mut bindings, constants.lightmap_group_count);
-    bind_dominant_direction(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);

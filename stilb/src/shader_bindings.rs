@@ -106,29 +106,6 @@ pub fn bind_emissive_triangles(bindings: &mut Vec<vk::DescriptorSetLayoutBinding
     });
 }
 
-pub fn bind_previous_diffuse(
-    bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>,
-    lightmap_group_count: u32,
-) {
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 13,
-        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-        descriptor_count: lightmap_group_count,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-}
-
-pub fn bind_dominant_direction(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 14,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-}
-
 pub fn bind_compaction_buffer(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
     bindings.push(vk::DescriptorSetLayoutBinding {
         binding: 15,

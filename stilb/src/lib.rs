@@ -12,7 +12,6 @@ use crate::buffer::Buffer;
 use crate::compute_shader::*;
 use crate::graphics_shader::update_visibility_shader;
 use crate::lights::light_buffer_flags;
-use crate::math::Vector2;
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
 use crate::shaders::bake_direct::{
@@ -213,7 +212,7 @@ fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, gro
     let mut shader = load_visibility_shader(vk, visibility, false, &app.constants);
     let mut shader_convervative = load_visibility_shader(vk, visibility, true, &app.constants);
 
-    let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
+    // let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
 
     update_visibility_shader(
         vk,
@@ -624,97 +623,6 @@ fn initialize_preview_push_constants(
     };
 }
 
-fn copy_image(vk: &VulkanContext, src: &mut Texture2D, dst: &mut Texture2D) {
-    unsafe { vk.device.queue_wait_idle(vk.compute_queue).unwrap() }
-
-    let cmd = vk.begin_single_use_cmd();
-
-    let region = vk::ImageCopy {
-        src_subresource: vk::ImageSubresourceLayers {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            mip_level: 0,
-            base_array_layer: 0,
-            layer_count: 1,
-        },
-        src_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
-        dst_subresource: vk::ImageSubresourceLayers {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            mip_level: 0,
-            base_array_layer: 0,
-            layer_count: 1,
-        },
-        dst_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
-        extent: vk::Extent3D {
-            width: src.width(),
-            height: src.height(),
-            depth: 1,
-        },
-        ..Default::default()
-    };
-
-    unsafe {
-        if src.layout() != vk::ImageLayout::TRANSFER_SRC_OPTIMAL {
-            let barrier = src.barrier(
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                vk::AccessFlags::default(),
-                vk::AccessFlags::TRANSFER_READ,
-            );
-            vk.device.cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            );
-        }
-
-        if dst.layout() != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
-            let barrier = dst.barrier(
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                vk::AccessFlags::default(),
-                vk::AccessFlags::TRANSFER_WRITE,
-            );
-            vk.device.cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            );
-        }
-
-        vk.device.cmd_copy_image(
-            cmd,
-            src.image(),
-            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-            dst.image(),
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            &[region],
-        );
-
-        let barrier = dst.barrier(
-            vk::ImageLayout::GENERAL,
-            vk::AccessFlags::TRANSFER_WRITE,
-            vk::AccessFlags::SHADER_READ,
-        );
-        vk.device.cmd_pipeline_barrier(
-            cmd,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::PipelineStageFlags::COMPUTE_SHADER,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            &[barrier],
-        );
-    };
-
-    vk.end_single_use_cmd(cmd);
-}
-
 fn render_preview(app: &mut Stilb) {
     let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
     let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
@@ -786,7 +694,7 @@ fn render_preview(app: &mut Stilb) {
                 }
             }
 
-            if !render_sample_camera(app, &preview_settings) {
+            if !render_sample_camera(app) {
                 // restart bake
                 app.config.preview_settings.width = app.vk.swapchain.extent.width;
                 app.config.preview_settings.height = app.vk.swapchain.extent.height;
@@ -1846,7 +1754,7 @@ fn render_lightmaps3(app: &mut Stilb) {
 //     }
 // }
 
-fn render_sample_camera(app: &mut Stilb, settings: &LightmapSettings) -> bool {
+fn render_sample_camera(app: &mut Stilb) -> bool {
     let frame_index = app.vk.swapchain.frame_index;
 
     let frame = &app.vk.swapchain.frames[frame_index];

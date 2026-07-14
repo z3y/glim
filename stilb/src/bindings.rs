@@ -162,13 +162,6 @@ pub enum CoordinateSystem {
 
 #[repr(u32)]
 #[derive(Clone, Copy, PartialEq)]
-pub enum TextureSamplerFilter {
-    Nearest = 0,
-    Linear = 1,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, PartialEq)]
 pub enum LightFalloffType {
     InverseSquare = 0,
     UnityBuiltIn = 1,

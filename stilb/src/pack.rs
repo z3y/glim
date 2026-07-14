@@ -95,6 +95,7 @@ impl Chart {
         (width * height).abs()
     }
 
+    #[cfg(test)]
     pub fn bitmap(&self) -> &Bitmap {
         &self.bitmap
     }
@@ -350,6 +351,7 @@ impl UVPacker {
         Some(placements)
     }
 
+    #[cfg(test)]
     pub fn charts(&self) -> &[Chart] {
         &self.charts
     }

@@ -1,7 +1,5 @@
 // https://jack.wrenn.fyi/blog/include-transmute/
 
-use std::path::PathBuf;
-
 macro_rules! include_transmute {
     ($file:expr, $type:ty) => {
         unsafe { core::mem::transmute(*include_bytes!($file)) }
