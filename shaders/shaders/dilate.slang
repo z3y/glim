@@ -83,7 +83,7 @@ int2 ClampToRes(int2 c)
     float bestDist = sqrt(bestDist2);
     float band = bestDist + 1.5;
 
-    float3 accumColor = float3(0, 0, 0);
+    float4 accumColor = float4(0, 0, 0, 0);
     float accumWeight = 0.0;
 
     [loop] for (int dy2 = -RADIUS; dy2 <= RADIUS; dy2++)
@@ -106,11 +106,11 @@ int2 ClampToRes(int2 c)
                 continue;
 
             float w = 1.0 / (dist * dist + 0.25);
-            accumColor += s.rgb * w;
+            accumColor += s.rgba * w;
             accumWeight += w;
         }
     }
 
-    float3 result = accumWeight > 0.0 ? accumColor / accumWeight : float3(0, 0, 0);
-    Tex[IndexFromCoords(coords)] = float4(result, 1.0);
+    float4 result = accumWeight > 0.0 ? accumColor / accumWeight : float4(0, 0, 0, 0);
+    Tex[IndexFromCoords(coords)] = result;
 }

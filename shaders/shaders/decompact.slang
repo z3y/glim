@@ -35,16 +35,10 @@ struct PushConstants
 
     uint linearIndex = coords.y * Push.resolution.x + coords.x;
 
-    if ((entry.x & (1u << bit)) == 0)
+    bool visible = (entry.x & (1u << bit)) == 0;
+
+    if (visible)
     {
-        // if (Push.lightmapType == 1)
-        // {
-        //     DecompactTarget[linearIndex] = 0.5;
-        // }
-        // else
-        // {
-        //     DecompactTarget[linearIndex] = 0.0;
-        // }
         DecompactTarget[linearIndex] = 0.0;
         return;
     }
@@ -57,11 +51,18 @@ struct PushConstants
         CompactedLightmap[compactIndex * 3 + 1],
         CompactedLightmap[compactIndex * 3 + 2]);
 
-    if (Push.lightmapType == 1)
-    {
-        float4 visibility = CompactedVisibility[compactIndex];
-        float3 normalWS = UnpackNormalOctahedron(visibility.w);
+    float4 visibility = CompactedVisibility[compactIndex];
+    float3 normalWS = normalize(UnpackNormalOctahedron(visibility.w));
 
+    [forcecase] switch (Push.lightmapType)
+    {
+    case 0:
+    {
+        DecompactTarget[linearIndex] = float4(diffuse, 1.0);
+        break;
+    }
+    case 1:
+    {
         uint compactIndex = compactIndex + Push.compactedCount;
         float luminance = Luminance(diffuse);
 
@@ -70,17 +71,23 @@ struct PushConstants
             CompactedLightmap[compactIndex * 3 + 1],
             CompactedLightmap[compactIndex * 3 + 2]);
 
-        // todo figure out what unity stores when luminance is 0
-        float3 normalizedDirection = normalize(directional / (luminance + 0.0001));
+        float3 normalizedDirection = normalize(directional / luminance);
 
-        float alpha = saturate(dot(normalizedDirection, normalWS));
+        DecompactTarget[linearIndex] = float4(normalizedDirection, 1.0);
+        break;
+    }
+    case 2:
+    {
+        uint compactIndex = compactIndex + Push.compactedCount;
+
+        float4 directionalLightmap = DecompactTarget[linearIndex];
+        float3 normalizedDirection = directionalLightmap.rgb;
+
+        float NoL = saturate(dot(normalizedDirection, normalWS));
 
         normalizedDirection.z = -normalizedDirection.z; // unity convention
-
-        DecompactTarget[linearIndex] = mad(float4(normalizedDirection, alpha), 0.5, 0.5);
+        DecompactTarget[linearIndex] = mad(float4(normalizedDirection, NoL), 0.5, 0.5);
+        break;
     }
-    else
-    {
-        DecompactTarget[linearIndex] = float4(diffuse, 1.0);
     }
 }

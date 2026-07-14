@@ -1907,7 +1907,7 @@ fn render_lightmaps3(app: &mut Stilb) {
     let process_lightmap = |group_index: usize, lightmap_type: u32| {
         let group = &app.groups[group_index].settings;
 
-        let compaction_push = CompactionPushConstants {
+        let mut compaction_push = CompactionPushConstants {
             width: group.width,
             height: group.height,
             offset: expanded_groups_start[group_index] as u32,
@@ -2020,6 +2020,35 @@ fn render_lightmaps3(app: &mut Stilb) {
 
                 let message = format!("Denoise Complete {}s", elapsed);
                 (log)(LogMessage::message(&message));
+            }
+
+            if lightmap_type == 1 {
+                compaction_push.lightmap_type = 2;
+                let decompact_push_bytes = as_bytes(&compaction_push);
+
+                let cmd = app.vk.begin_single_use_cmd();
+                let vk = &app.vk.device;
+                let shader = &decompact_shader;
+                vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+                vk.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    shader.pipeline_layout,
+                    0,
+                    &[shader.descriptor_set],
+                    &[],
+                );
+                vk.cmd_push_constants(
+                    cmd,
+                    shader.pipeline_layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &decompact_push_bytes,
+                );
+                let groups_x = (group.width + 7) / 8;
+                let groups_y = (group.height + 7) / 8;
+                vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
+                app.vk.end_single_use_cmd(cmd);
             }
 
             if group.fix_seams {
