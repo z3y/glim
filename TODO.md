@@ -5,7 +5,6 @@
 - [ ] Fix directional lightmap import settings
 
 ## Features
-- [ ] Directional lightmaps
 - [ ] Higher resolution alpha
 - [ ] Terrain Support
 - [ ] Sky light
@@ -39,7 +38,6 @@
 - [ ] Preview crashes when closing the window on linux
 - [ ] Preview window doesnt work on KDE Wayland (Fedora) in certain cases
 - [ ] Bake reflection probes button starts the built-in baker if the lighting is not baked which could cause confusion
-- [ ] Bakery is removing directional lightmaps
 - [ ] Fill blank texture space with lower mip levels like unity does
 - [ ] Double sided global illumination doesnt work?
 - [ ] Dilate or Denoise first? Dilation interferes with the denoiser, but seam sitching looks better when dilated first then denoised
