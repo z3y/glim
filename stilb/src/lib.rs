@@ -1419,6 +1419,36 @@ fn render_lightmaps3(app: &mut Stilb) {
     }
     bake_direct_shader.destroy(&app.vk);
 
+    let mut group_info_buffer = {
+        let mut infos = Vec::with_capacity(app.groups.len());
+        for group_index in 0..app.groups.len() {
+            let group = &app.groups[group_index].settings;
+            infos.push(LightmapInfo {
+                resolution: [group.width, group.height],
+                compaction_offset: expanded_groups_start[group_index] as u32,
+                pad: 0,
+            });
+        }
+
+        let group_info_buffer = Buffer::empty(
+            &app.vk,
+            "Lightmap Info".into(),
+            128 * std::mem::size_of::<LightmapInfo>() as u64,
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                infos.as_ptr() as *const u8,
+                group_info_buffer.ptr as *mut u8,
+                infos.len() * std::mem::size_of::<LightmapInfo>(),
+            );
+        }
+        group_info_buffer
+    };
+
+    // todo bake bounces
+
     let mut decompact_shader = load_shader_decompact(&app.vk, &app.constants);
 
     let mut staging_buffer_lightmap = Buffer::empty(
@@ -1614,6 +1644,7 @@ fn render_lightmaps3(app: &mut Stilb) {
             app.gpu_mesh.vertex_buffer.buffer,
             app.gpu_lights.buffer,
             compaction_buffer.buffer,
+            group_info_buffer.buffer,
         );
 
         let mut push = BakeSHPushConstants {
@@ -1703,6 +1734,7 @@ fn render_lightmaps3(app: &mut Stilb) {
 
     compacted_diffuse.destroy(&app.vk);
     compaction_buffer.destroy(&app.vk);
+    group_info_buffer.destroy(&app.vk);
 }
 
 // fn deinterleave_with_zero(mut word: u32) -> u32 {

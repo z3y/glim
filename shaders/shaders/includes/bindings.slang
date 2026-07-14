@@ -70,6 +70,18 @@ RWStructuredBuffer<float4> DecompactTarget;
 [[vk::binding(18, 0)]]
 RWStructuredBuffer<float> CompactedDiffuse;
 
+struct LightmapInfo
+{
+    uint2 resolution;
+    uint compactionOffset;
+    uint pad;
+};
+
+[[vk::binding(19, 0)]] cbuffer LightmapInfoBuffer
+{
+    LightmapInfo LightmapGroups[128];
+};
+
 [vk::constant_id(0)] const uint USE_CAMERA;
 [vk::constant_id(1)] const uint LIGHT_FALLOFF_TYPE;
 [vk::constant_id(2)] const uint TRANSPARENT_PRIMITIVE_ID_OFFSET;

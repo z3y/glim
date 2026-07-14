@@ -325,7 +325,8 @@ uint GetCompactedIndex(float2 uv, uint lightmapGroup)
     uint word = index >> 5;
     uint bit = index & 31;
 
-    uint2 entry = CompactionBuffer[word]; // todo offset
+    LightmapInfo info = LightmapGroups[lightmapGroup];
+    uint2 entry = CompactionBuffer[info.compactionOffset + word];
 
     if ((entry.x & (1u << bit)) == 0)
     {

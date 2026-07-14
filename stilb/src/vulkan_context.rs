@@ -277,10 +277,15 @@ impl VulkanContext {
             descriptor_count: 1,
             ty: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
         };
+        let uniform_buffer_pool = vk::DescriptorPoolSize {
+            descriptor_count: 1,
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+        };
 
         pool_sizes.push(storage_image_pool);
         pool_sizes.push(sampled_image_pool);
         pool_sizes.push(storage_buffer_pool);
+        pool_sizes.push(uniform_buffer_pool);
         if has_ray_query {
             pool_sizes.push(as_structure_pool);
         }

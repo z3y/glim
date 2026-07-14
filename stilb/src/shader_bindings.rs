@@ -178,3 +178,13 @@ pub fn bind_compacted_diffuse(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<
         ..Default::default()
     });
 }
+
+pub fn bind_lightmap_info(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 19,
+        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+}

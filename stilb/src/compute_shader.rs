@@ -196,6 +196,14 @@ pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 6] {
     ]
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct LightmapInfo {
+    pub resolution: [u32; 2],
+    pub compaction_offset: u32,
+    pub pad: u32,
+}
+
 pub struct SpecializationConstants {
     pub use_camera: u32, // unused
     pub light_falloff_type: u32,
@@ -482,6 +490,7 @@ pub fn load_bake_light_probes_shader(
     bind_lights(&mut bindings);
     bind_compacted_diffuse(&mut bindings);
     bind_compaction_buffer(&mut bindings);
+    bind_lightmap_info(&mut bindings);
 
     let push_constant_ranges = [vk::PushConstantRange {
         stage_flags: vk::ShaderStageFlags::COMPUTE,
@@ -516,6 +525,7 @@ pub fn update_bake_light_probes_shader(
     vertices: vk::Buffer,
     lights: vk::Buffer,
     compaction: vk::Buffer,
+    lightmap_info: vk::Buffer,
 ) {
     let mut descriptor_writes = Vec::new();
 
@@ -654,6 +664,21 @@ pub fn update_bake_light_probes_shader(
         dst_set: shader.descriptor_set,
         dst_binding: 15,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // CompactionBuffer
+    let info = [vk::DescriptorBufferInfo {
+        buffer: lightmap_info,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 19,
+        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
         ..Default::default()
     };
     write = write.buffer_info(&info);
