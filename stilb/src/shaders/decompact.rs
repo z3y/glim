@@ -3,7 +3,7 @@ use shaders::load_shader_bytes;
 
 use crate::{
     as_bytes, compute_shader::*, shader_bindings::*,
-    shaders::compact_visibility::CompactPushConstants, vulkan_context::VulkanContext,
+    shaders::compaction_mask::CompactionPushConstants, vulkan_context::VulkanContext,
 };
 
 pub fn load_shader_decompact(
@@ -25,7 +25,7 @@ pub fn load_shader_decompact(
     let push_constant_ranges = [vk::PushConstantRange {
         stage_flags: vk::ShaderStageFlags::COMPUTE,
         offset: 0,
-        size: std::mem::size_of::<CompactPushConstants>() as u32,
+        size: std::mem::size_of::<CompactionPushConstants>() as u32,
     }];
 
     let bytes = load_shader_bytes(shaders::ShaderName::Decompact);

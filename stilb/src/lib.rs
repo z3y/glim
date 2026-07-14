@@ -19,7 +19,7 @@ use crate::shaders::bake_direct::{
     BakeDirectPushConstants, load_bake_direct_shader, update_bake_direct_shader,
 };
 use crate::shaders::compact_visibility::{
-    CompactPushConstants, load_shader_compact_visibility, update_shader_compact_visibility,
+    load_shader_compact_visibility, update_shader_compact_visibility,
 };
 use crate::shaders::compaction_mask::{
     CompactionPushConstants, load_shader_compaction_mask, update_shader_compaction_mask,
@@ -937,7 +937,7 @@ fn render_lightmaps3(app: &mut Stilb) {
             width: group.width,
             height: group.height,
             offset: expanded_group_offset,
-            pad1: 0,
+            pad0: 0,
         };
         let compaction_push_bytes = as_bytes(&compaction_push);
 
@@ -1040,26 +1040,23 @@ fn render_lightmaps3(app: &mut Stilb) {
     };
 
     let mut compacted_pixels_count = 0;
-    let mut compacted_groups_start = vec![0u32; app.groups.len()];
-
     for group_index in 0..app.groups.len() {
         let group_start = expanded_groups_start[group_index] * 2;
 
         let group = &app.groups[group_index].settings;
         let pixel_count = (group.width * group.height) as usize;
 
-        let mut prefix_sum = 0;
         for i in 0..pixel_count / 32 {
             let i = group_start + i * 2 + 1;
 
             let bits = compaction_buffer_cpu[i];
-            compaction_buffer_cpu[i] = prefix_sum;
-            prefix_sum += bits;
+            compaction_buffer_cpu[i] = compacted_pixels_count;
+            compacted_pixels_count += bits;
         }
 
-        compacted_groups_start[group_index] = compacted_pixels_count;
+        // compacted_groups_start[group_index] = compacted_pixels_count;
 
-        compacted_pixels_count += prefix_sum;
+        // compacted_pixels_count += prefix_sum;
 
         const DEBUG_COMPACTION: bool = false;
         if DEBUG_COMPACTION {
@@ -1191,11 +1188,11 @@ fn render_lightmaps3(app: &mut Stilb) {
         };
         let visibility_push_bytes = as_bytes(&visibility_push);
 
-        let compaction_push = CompactPushConstants {
+        let compaction_push = CompactionPushConstants {
             width: group.width,
             height: group.height,
-            offset: compacted_groups_start[group_index] as u32,
-            pad1: 0,
+            offset: expanded_groups_start[group_index] as u32,
+            pad0: 0,
         };
         let compaction_push_bytes = as_bytes(&compaction_push);
 
@@ -1376,11 +1373,11 @@ fn render_lightmaps3(app: &mut Stilb) {
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index].settings;
 
-        let compaction_push = CompactPushConstants {
+        let compaction_push = CompactionPushConstants {
             width: group.width,
             height: group.height,
-            offset: compacted_groups_start[group_index] as u32,
-            pad1: 0,
+            offset: expanded_groups_start[group_index] as u32,
+            pad0: 0,
         };
         let decompact_push_bytes = as_bytes(&compaction_push);
 

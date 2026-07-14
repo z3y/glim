@@ -8,7 +8,7 @@ pub struct CompactionPushConstants {
     pub width: u32,
     pub height: u32,
     pub offset: u32,
-    pub pad1: u32,
+    pub pad0: u32,
 }
 
 pub fn load_shader_compaction_mask(

@@ -8,7 +8,7 @@ struct PushConstants
 {
     uint2 resolution;
     uint offset;
-    uint pad1;
+    uint pad0;
 };
 
 [numthreads(8, 8, 1)] void

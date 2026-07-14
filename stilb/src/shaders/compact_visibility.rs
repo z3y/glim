@@ -1,15 +1,10 @@
 use ash::vk;
 use shaders::load_shader_bytes;
 
-use crate::{as_bytes, compute_shader::*, shader_bindings::*, vulkan_context::VulkanContext};
-
-#[repr(C)]
-pub struct CompactPushConstants {
-    pub width: u32,
-    pub height: u32,
-    pub offset: u32,
-    pub pad1: u32,
-}
+use crate::{
+    as_bytes, compute_shader::*, shader_bindings::*,
+    shaders::compaction_mask::CompactionPushConstants, vulkan_context::VulkanContext,
+};
 
 pub fn load_shader_compact_visibility(
     vk: &VulkanContext,
@@ -30,7 +25,7 @@ pub fn load_shader_compact_visibility(
     let push_constant_ranges = [vk::PushConstantRange {
         stage_flags: vk::ShaderStageFlags::COMPUTE,
         offset: 0,
-        size: std::mem::size_of::<CompactPushConstants>() as u32,
+        size: std::mem::size_of::<CompactionPushConstants>() as u32,
     }];
 
     let bytes = load_shader_bytes(shaders::ShaderName::CompactVisibility);
