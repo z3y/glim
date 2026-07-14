@@ -277,9 +277,9 @@ fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, gro
             group_index,
             rt_width: visibility.width(),
             rt_height: visibility.height(),
-            pad0: 0,
             pad1: 0,
             pad2: 0,
+            conservative: 1,
         };
         let constants_bytes = as_bytes(&push);
         vk.device.cmd_push_constants(
@@ -290,7 +290,7 @@ fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, gro
             &constants_bytes,
         );
 
-        vk.device.cmd_draw(cmd, mesh.index_len, 1, 0, 0);
+        vk.device.cmd_draw(cmd, mesh.index_len * 3, 1, 0, 0);
 
         // vk.device.cmd_end_render_pass(cmd);
 
@@ -316,9 +316,9 @@ fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, gro
             group_index,
             rt_width: visibility.width(),
             rt_height: visibility.height(),
-            pad0: 0,
             pad1: 0,
             pad2: 0,
+            conservative: 0,
         };
         let constants_bytes = as_bytes(&push);
         vk.device.cmd_push_constants(
@@ -329,7 +329,7 @@ fn render_visibility_from_lightmap(app: &mut Stilb, width: u32, height: u32, gro
             &constants_bytes,
         );
 
-        vk.device.cmd_draw(cmd, mesh.index_len, 25, 0, 0);
+        vk.device.cmd_draw(cmd, mesh.index_len * 3, 25, 0, 0);
 
         vk.device.cmd_end_render_pass(cmd);
 
@@ -928,9 +928,9 @@ fn render_lightmaps3(app: &mut Stilb) {
             group_index: group_index as u32,
             rt_width: visibility_expanded.width(),
             rt_height: visibility_expanded.height(),
-            pad0: 0,
             pad1: 0,
             pad2: 0,
+            conservative: 1,
         };
         let visibility_push_bytes = as_bytes(&visibility_push);
 
@@ -1185,9 +1185,9 @@ fn render_lightmaps3(app: &mut Stilb) {
             group_index: group_index as u32,
             rt_width: visibility_expanded.width(),
             rt_height: visibility_expanded.height(),
-            pad0: 0,
             pad1: 0,
             pad2: 0,
+            conservative: 1,
         };
         let visibility_push_bytes = as_bytes(&visibility_push);
 
@@ -1228,6 +1228,17 @@ fn render_lightmaps3(app: &mut Stilb) {
             vk.cmd_draw(cmd, mesh.index_len * 3, 1, 0, 0);
 
             // non conservative
+            let visibility_push = VisibilityPushConstants {
+                width: group.width,
+                height: group.height,
+                group_index: group_index as u32,
+                rt_width: visibility_expanded.width(),
+                rt_height: visibility_expanded.height(),
+                pad1: 0,
+                pad2: 0,
+                conservative: 0,
+            };
+            let visibility_push_bytes = as_bytes(&visibility_push);
             vk.cmd_bind_pipeline(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -1248,7 +1259,7 @@ fn render_lightmaps3(app: &mut Stilb) {
                 0,
                 &visibility_push_bytes,
             );
-            vk.cmd_draw(cmd, mesh.index_len * 3, 1, 0, 0);
+            vk.cmd_draw(cmd, mesh.index_len * 3, 25, 0, 0);
 
             vk.cmd_end_render_pass(cmd);
             // AttachmentDescription final_layout: vk::ImageLayout::GENERAL
@@ -1492,23 +1503,6 @@ fn render_lightmaps3(app: &mut Stilb) {
                 (group.width * group.height * 4) as usize,
             );
 
-            if group.denoise {
-                let start_time = std::time::Instant::now();
-
-                match &oidn {
-                    Some(oidn) => {
-                        oidn.denoise(pixels, group.width as usize, group.height as usize, false);
-                    }
-                    None => {}
-                }
-
-                let now = std::time::Instant::now();
-                let elapsed = now.duration_since(start_time).as_secs_f32();
-
-                let message = format!("Denoise Complete {}s", elapsed);
-                (log)(LogMessage::message(&message));
-            }
-
             if group.dilate {
                 let start_time = std::time::Instant::now();
 
@@ -1553,6 +1547,23 @@ fn render_lightmaps3(app: &mut Stilb) {
                     "Dilation complete {}s",
                     elapsed
                 )));
+            }
+
+            if group.denoise {
+                let start_time = std::time::Instant::now();
+
+                match &oidn {
+                    Some(oidn) => {
+                        oidn.denoise(pixels, group.width as usize, group.height as usize, false);
+                    }
+                    None => {}
+                }
+
+                let now = std::time::Instant::now();
+                let elapsed = now.duration_since(start_time).as_secs_f32();
+
+                let message = format!("Denoise Complete {}s", elapsed);
+                (log)(LogMessage::message(&message));
             }
 
             if group.fix_seams {

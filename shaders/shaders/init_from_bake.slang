@@ -7,10 +7,43 @@ struct PushConstants
 {
     uint2 resolution;
     uint groupIndex;
-    uint pad0;
+    uint conservative;
 
     uint2 rtResolution;
     uint2 pad1;
+};
+
+// https://ndotl.wordpress.com/2018/08/29/baking-artifact-free-lightmaps/
+static const float2 kJitterOffsets[25] = {
+    float2(-2, -2),
+    float2(2, -2),
+    float2(-2, 2),
+    float2(2, 2),
+
+    float2(-1, -2),
+    float2(1, -2),
+    float2(-2, -1),
+    float2(2, -1),
+    float2(-2, 1),
+    float2(2, 1),
+    float2(-1, 2),
+    float2(1, 2),
+
+    float2(-2, 0),
+    float2(2, 0),
+    float2(0, -2),
+    float2(0, 2),
+
+    float2(-1, -1),
+    float2(1, -1),
+    float2(-1, 0),
+    float2(1, 0),
+    float2(-1, 1),
+    float2(1, 1),
+    float2(0, -1),
+    float2(0, 1),
+
+    float2(0, 0),
 };
 
 struct Varyings
@@ -20,7 +53,7 @@ struct Varyings
     float2 uv : UV;
 };
 
-[shader("vertex")] Varyings vertex(uint vertexID : SV_VulkanVertexID)
+[shader("vertex")] Varyings vertex(uint vertexID : SV_VulkanVertexID, uint instanceID : SV_VulkanInstanceID)
 {
     Varyings o;
 
@@ -29,6 +62,16 @@ struct Varyings
 
     uint vIndex = Indices[primitiveID * 3 + index];
     Vertex v = Vertices[vIndex];
+
+    float2 resolution = float2(Push.resolution);
+    float2 texelSize = 1.0 / resolution;
+
+    float2 jitter = kJitterOffsets[instanceID] * (texelSize * 0.5);
+
+    if (Push.conservative > 0)
+    {
+        jitter = float2(0, 0);
+    }
 
     if (v.GetLightmapGroup() != Push.groupIndex)
     {
@@ -43,6 +86,7 @@ struct Varyings
 
         float2 scale = resolution / rtResolution;
         float2 uv = v.GetUV() / resolution;
+        uv += jitter;
 
         o.uv = uv;
 
