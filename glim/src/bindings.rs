@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    LightmapGroup, Stilb, initialize_render,
+    Glim, LightmapGroup, initialize_render,
     lights::Light,
     math::Vector3,
     mesh::{FfiMesh, Mesh},
@@ -15,7 +15,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(Clone)]
-pub struct StilbConfig {
+pub struct GlimConfig {
     pub coordinate_system: CoordinateSystem,
 
     pub is_preview: bool,
@@ -187,9 +187,9 @@ fn handle_unwind_error(log_callback: LogCallback, err: Box<dyn Any + Send>) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_new(config: StilbConfig) -> *mut Stilb {
+pub extern "C" fn app_new(config: GlimConfig) -> *mut Glim {
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let app = Stilb::new(config.clone());
+        let app = Glim::new(config.clone());
         Box::into_raw(Box::new(app))
     }));
 
@@ -197,13 +197,13 @@ pub extern "C" fn app_new(config: StilbConfig) -> *mut Stilb {
         Ok(val) => val,
         Err(err) => {
             handle_unwind_error(config.log_callback, err);
-            null_mut() as *mut Stilb
+            null_mut() as *mut Glim
         }
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_add_mesh(app: *mut Stilb, mesh: FfiMesh) {
+pub extern "C" fn app_add_mesh(app: *mut Glim, mesh: FfiMesh) {
     if app.is_null() {
         return;
     }
@@ -232,7 +232,7 @@ pub extern "C" fn app_add_mesh(app: *mut Stilb, mesh: FfiMesh) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_add_light(app: *mut Stilb, mut light: Light) {
+pub extern "C" fn app_add_light(app: *mut Glim, mut light: Light) {
     if app.is_null() {
         return;
     }
@@ -259,7 +259,7 @@ pub extern "C" fn app_add_light(app: *mut Stilb, mut light: Light) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn app_add_lightmap_group(
-    app: *mut Stilb,
+    app: *mut Glim,
     settings: LightmapSettings,
     albedo_pixels: *const u8,
     albedo_pixels_length: u32,
@@ -290,7 +290,7 @@ pub extern "C" fn app_add_lightmap_group(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_run(app: *mut Stilb) {
+pub extern "C" fn app_run(app: *mut Glim) {
     if app.is_null() {
         return;
     }
@@ -307,7 +307,7 @@ pub extern "C" fn app_run(app: *mut Stilb) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_add_probe(app: *mut Stilb, mut position: Vector3, radius: f32) {
+pub extern "C" fn app_add_probe(app: *mut Glim, mut position: Vector3, radius: f32) {
     if app.is_null() {
         return;
     }
@@ -350,7 +350,7 @@ pub extern "C" fn app_add_probe(app: *mut Stilb, mut position: Vector3, radius: 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_destroy(app: *mut Stilb) {
+pub extern "C" fn app_destroy(app: *mut Glim) {
     if app.is_null() {
         return;
     }

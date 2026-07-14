@@ -1,1 +1,1 @@
-copy "target\release\stilb.dll" "unity\Editor\stilb.dll"
+copy "target\release\glim.dll" "unity\Editor\glim.dll"

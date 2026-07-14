@@ -2,7 +2,7 @@
 using System;
 using UnityEngine;
 
-namespace stilb
+namespace glim
 {
     public enum LightmapSaveFormat : int
     {

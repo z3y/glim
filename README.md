@@ -1,4 +1,4 @@
-# Stilb Lightmap Baker
+# Glim Lightmap Baker
 
 A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
@@ -47,7 +47,7 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
 - Make sure to setup the denoiser first (otherwise denoising will be skipped)
 - Setup the scene (mark objects as static, generate lightmap uvs, add lights with baked mode or emissive materials etc.)
-- Menu Item `Stilb > Bake`
+- Menu Item `Glim > Bake`
 - Adjust settings on the created game object and press `Generate Lighting`
 
 #### Lightmap Groups

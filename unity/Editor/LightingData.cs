@@ -9,12 +9,12 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEditor.SceneManagement;
 
-namespace stilb
+namespace glim
 {
     public class LightingData
     {
-        public const string TempScenePath = "Packages/io.github.z3y.stilb/Editor/Scene/Temp.unity";
-        public const string TempLightingDataPath = "Packages/io.github.z3y.stilb/Editor/Scene/Temp/LightingData.asset";
+        public const string TempScenePath = "Packages/io.github.z3y.glim/Editor/Scene/Temp.unity";
+        public const string TempLightingDataPath = "Packages/io.github.z3y.glim/Editor/Scene/Temp/LightingData.asset";
 
         public static System.Reflection.PropertyInfo InspectorModeObject =
                     typeof(SerializedObject).GetProperty("inspectorMode", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);

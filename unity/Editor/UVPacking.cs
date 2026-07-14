@@ -2,11 +2,11 @@ using System;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace stilb
+namespace glim
 {
     public static class UVPacking
     {
-        const string DLL = "stilb";
+        const string DLL = "glim";
 
         [DllImport(DLL)]
         public static extern IntPtr uvpacker_create(uint width, uint height, uint iterations, [MarshalAs(UnmanagedType.I1)] bool bruteForce);

@@ -62,8 +62,8 @@ mod vulkan_context;
 mod vulkan_swapchain;
 mod window;
 
-pub struct Stilb {
-    pub config: StilbConfig,
+pub struct Glim {
+    pub config: GlimConfig,
     pub vk: VulkanContext,
     pub window: *mut GLFWwindow,
 
@@ -101,7 +101,7 @@ pub struct Stilb {
     pub constants: SpecializationConstants,
 }
 
-impl Drop for Stilb {
+impl Drop for Glim {
     fn drop(&mut self) {
         for group in &mut self.groups {
             group.destroy(&self.vk);
@@ -180,7 +180,7 @@ fn clamp_bounces(bounces: u32) -> u32 {
     bounces.clamp(0, MAX_BOUNCES)
 }
 
-fn update_visibility_from_camera(app: &mut Stilb, cmd: vk::CommandBuffer) {
+fn update_visibility_from_camera(app: &mut Glim, cmd: vk::CommandBuffer) {
     let width = app.config.preview_settings.width;
     let height = app.config.preview_settings.height;
 
@@ -240,7 +240,7 @@ fn update_visibility_from_camera(app: &mut Stilb, cmd: vk::CommandBuffer) {
 }
 
 // main render function
-fn initialize_render(app: &mut Stilb) {
+fn initialize_render(app: &mut Glim) {
     assert!(app.opaque_mesh.vertices.len() > 0 || app.transparent_mesh.vertices.len() > 0);
 
     let total_triangles = (app.opaque_mesh.indices.len() + app.transparent_mesh.indices.len()) / 3;
@@ -348,7 +348,7 @@ fn initialize_render(app: &mut Stilb) {
     }
 }
 
-fn render_preview(app: &mut Stilb) {
+fn render_preview(app: &mut Glim) {
     let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
     let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
 
@@ -570,7 +570,7 @@ fn render_preview(app: &mut Stilb) {
 //     }
 // }
 
-fn render_sample_camera(app: &mut Stilb) -> bool {
+fn render_sample_camera(app: &mut Glim) -> bool {
     let frame_index = app.vk.swapchain.frame_index;
 
     let frame = &app.vk.swapchain.frames[frame_index];
@@ -864,7 +864,7 @@ fn render_sample_camera(app: &mut Stilb) -> bool {
     true
 }
 
-fn update_render_target(app: &mut Stilb, settings: &LightmapSettings) {
+fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
     let (width, height) = if app.config.is_preview {
         (
             app.config.preview_settings.width,
@@ -949,7 +949,7 @@ fn edge_side(ax: f32, ay: f32, bx: f32, by: f32, px: f32, py: f32) -> f32 {
     (px - ax) * (by - ay) - (py - ay) * (bx - ax)
 }
 
-fn extract_emissive_triangles(app: &mut Stilb) {
+fn extract_emissive_triangles(app: &mut Glim) {
     // todo indices of both opaque and transparent
     let vertices = &app.opaque_mesh.vertices;
     let indices = &app.opaque_mesh.indices;
@@ -1055,7 +1055,7 @@ fn extract_emissive_triangles(app: &mut Stilb) {
 
 impl LightmapGroup {
     fn new(
-        app: &mut Stilb,
+        app: &mut Glim,
         settings: LightmapSettings,
         albedo_pixels: &[u8],
         emission_pixels: &[f32],
@@ -1115,8 +1115,8 @@ impl LightmapGroup {
     }
 }
 
-impl Stilb {
-    pub fn new(config: StilbConfig) -> Stilb {
+impl Glim {
+    pub fn new(config: GlimConfig) -> Glim {
         let mut vulkan_config = VulkanConfig {
             enable_validation_layers: config.vulkan_validation_layers,
             enable_window: config.is_preview,
@@ -1238,7 +1238,7 @@ impl Stilb {
     }
 }
 
-fn render_lightmaps3(app: &mut Stilb) {
+fn render_lightmaps3(app: &mut Glim) {
     let mut max_resolution = (1, 1);
     let mut total_pixel_count = 0;
     for group in &app.groups {

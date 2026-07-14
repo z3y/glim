@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 
-namespace stilb
+namespace glim
 {
     public class BakeContextGroup
     {
@@ -68,7 +68,7 @@ namespace stilb
     public class BakeContext
     {
         public List<Bindings.Light> sceneLights = new();
-        public List<Stilb.MeshData> sceneMesh = new();
+        public List<Glim.MeshData> sceneMesh = new();
         public List<BakeContextGroup> groups = new();
 
         public List<Vector4> probePositions = new();
@@ -88,7 +88,7 @@ namespace stilb
             return depth;
         }
 
-        public BakeContext(LightmapBaker baker, Bindings.StilbConfig config)
+        public BakeContext(LightmapBaker baker, Bindings.GlimConfig config)
         {
             this.reflectionProbesSuperSampling = baker.reflectionProbesSuperSampling;
             this.reflectionProbesSpecular = baker.reflectionProbesSpecular;
@@ -233,7 +233,7 @@ namespace stilb
                 if (selector.group == null) continue;
 
                 var renderers = selector.GetComponentsInChildren<MeshRenderer>(false)
-                    .Where(x => Stilb.IsLightmapStatic(x));
+                    .Where(x => Glim.IsLightmapStatic(x));
 
                 foreach (var r in renderers)
                 {
@@ -259,7 +259,7 @@ namespace stilb
                     continue;
                 }
 
-                if (Stilb.IsLightmapStatic(r))
+                if (Glim.IsLightmapStatic(r))
                 {
                     unclaimedRenderers.Add(r);
                 }
@@ -375,7 +375,7 @@ namespace stilb
                 }
 
                 groups.Add(new BakeContextGroup(lightmapGroup, rendererArray));
-                sceneMesh.AddRange(Stilb.ExtractMeshData(rendererArray, groupIndex));
+                sceneMesh.AddRange(Glim.ExtractMeshData(rendererArray, groupIndex));
                 groupIndex++;
             }
 
@@ -418,7 +418,7 @@ namespace stilb
         }
     }
 
-    public class Stilb
+    public class Glim
     {
         public static bool IsLightmapStatic(MeshRenderer renderer)
         {

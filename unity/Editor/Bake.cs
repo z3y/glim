@@ -9,7 +9,7 @@ using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace stilb
+namespace glim
 {
     public class Bake
     {
@@ -229,7 +229,7 @@ namespace stilb
                 lda.ApplyModifiedPropertiesWithoutUndo();
                 string ldaName = "LightingData";
 
-                // move 
+                // move
                 string destPath = Path.Combine(outputFolder, $"{ldaName}.asset").Replace("\\", "/");
                 if (AssetDatabase.LoadMainAssetAtPath(destPath) != null)
                 {
@@ -397,7 +397,7 @@ namespace stilb
         }
 #endif
 
-        public static void Start(LightmapBaker baker, Bindings.StilbConfig config)
+        public static void Start(LightmapBaker baker, Bindings.GlimConfig config)
         {
             if (_running)
             {
@@ -613,23 +613,23 @@ TextureImporter:
     serializedVersion: 2
     sprites: []
     outline: []
-    customData: 
+    customData:
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID:
     internalID: 0
     vertices: []
-    indices: 
+    indices:
     edges: []
     weights: []
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
     nameFileIdTable: {{}}
-  mipmapLimitGroupName: 
+  mipmapLimitGroupName:
   pSDRemoveMatte: 0
-  userData: 
-  assetBundleName: 
+  userData:
+  assetBundleName:
   assetBundleVariant:
 ";
             return yaml;

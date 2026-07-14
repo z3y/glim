@@ -5,7 +5,7 @@ use std::{
 
 use glfw_sys::*;
 
-use crate::{Stilb, StilbConfig, math::Vector3, vulkan_context::VulkanConfig};
+use crate::{Glim, GlimConfig, math::Vector3, vulkan_context::VulkanConfig};
 
 pub fn create_window(width: u32, height: u32) -> *mut GLFWwindow {
     const TITLE: &CStr = c"Lightmap Preview";
@@ -37,10 +37,7 @@ pub fn create_window(width: u32, height: u32) -> *mut GLFWwindow {
     window
 }
 
-pub fn initialize_window(
-    config: &StilbConfig,
-    vulkan_config: &mut VulkanConfig,
-) -> *mut GLFWwindow {
+pub fn initialize_window(config: &GlimConfig, vulkan_config: &mut VulkanConfig) -> *mut GLFWwindow {
     let mut window = ptr::null_mut();
     if vulkan_config.enable_window {
         window = create_window(
@@ -61,7 +58,7 @@ pub fn initialize_window(
     window
 }
 
-pub fn update_camera(app: &mut Stilb, delta_time: f32) {
+pub fn update_camera(app: &mut Glim, delta_time: f32) {
     let window = app.window;
     let camera = &mut app.camera;
 

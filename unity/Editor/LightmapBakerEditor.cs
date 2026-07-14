@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 
-namespace stilb
+namespace glim
 {
     [CustomEditor(typeof(LightmapBaker))]
     public class LightmapBakerEditor : Editor
@@ -76,7 +76,7 @@ namespace stilb
                     var previewSettings = new Bindings.LightmapSettings(
                         baker.previewWidth, baker.previewHeight, false, false, false);
 
-                    var config = new Bindings.StilbConfig(
+                    var config = new Bindings.GlimConfig(
                         Bindings.CoordinateSystem.Unity,
                         baker.previewSamples,
                         baker.previewSamples,
@@ -155,7 +155,7 @@ namespace stilb
                 {
                     var previewSettings = new Bindings.LightmapSettings();
 
-                    var config = new Bindings.StilbConfig(
+                    var config = new Bindings.GlimConfig(
                         Bindings.CoordinateSystem.Unity,
                         baker.directSamples,
                         baker.indirectSamples,
@@ -201,7 +201,7 @@ namespace stilb
                     .Distinct()
                     .ToArray();
 
-                var lightMeshMat = AssetDatabase.LoadAssetAtPath<Material>("Packages/io.github.z3y.stilb/Editor/LightMesh.mat");
+                var lightMeshMat = AssetDatabase.LoadAssetAtPath<Material>("Packages/io.github.z3y.glim/Editor/LightMesh.mat");
 
                 foreach (var l in lights)
                 {

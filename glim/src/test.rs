@@ -28,7 +28,7 @@ mod tests {
         test_render(config, true);
     }
 
-    fn make_config() -> StilbConfig {
+    fn make_config() -> GlimConfig {
         let preview_settings = LightmapSettings {
             width: 1024,
             height: 1024,
@@ -37,7 +37,7 @@ mod tests {
             fix_seams: false,
         };
 
-        let config = StilbConfig {
+        let config = GlimConfig {
             coordinate_system: CoordinateSystem::Default,
             is_preview: true,
             camera_position: Vector3::new(0.0, 0.0, 5.0),
@@ -61,7 +61,7 @@ mod tests {
         config
     }
 
-    fn test_render(mut config: StilbConfig, test_probes: bool) {
+    fn test_render(mut config: GlimConfig, test_probes: bool) {
         // config.camera_forward = Vector3 {
         //     x: -0.42446527,
         //     y: -0.4595601,
@@ -355,7 +355,7 @@ mod tests {
     }
 
     pub fn add_mesh(
-        app: *mut Stilb,
+        app: *mut Glim,
         path: &str,
         flip_uv: bool,
         transparent: bool,

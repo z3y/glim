@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace stilb
+namespace glim
 {
     public class MetaTexture : IDisposable
     {
@@ -31,7 +31,7 @@ namespace stilb
                 dimension = TextureDimension.Tex2D
             };
 
-            _metaAlphaMat = AssetDatabase.LoadAssetAtPath<Material>("Packages/io.github.z3y.stilb/Editor/AlphaMeta.mat");
+            _metaAlphaMat = AssetDatabase.LoadAssetAtPath<Material>("Packages/io.github.z3y.glim/Editor/AlphaMeta.mat");
             _rt = new RenderTexture(desc);
             _rt.filterMode = FilterMode.Point;
         }

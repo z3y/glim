@@ -4,7 +4,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace stilb
+namespace glim
 {
     public static class Bindings
     {
@@ -15,7 +15,7 @@ namespace stilb
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct StilbConfig
+        public struct GlimConfig
         {
             public readonly CoordinateSystem coordinate_system;
 
@@ -43,7 +43,7 @@ namespace stilb
             public readonly uint bounce_count;
             public readonly LightmapMode lightmap_mode;
 
-            public StilbConfig(CoordinateSystem coordinate_system,
+            public GlimConfig(CoordinateSystem coordinate_system,
                                uint direct_samples,
                                uint indirect_samples,
                                uint bounce_count,
@@ -120,10 +120,10 @@ namespace stilb
 
         }
 
-        const string DLL_NAME = "stilb";
+        const string DLL_NAME = "glim";
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr app_new(StilbConfig config);
+        public static extern IntPtr app_new(GlimConfig config);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_run(IntPtr app);

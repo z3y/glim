@@ -6,7 +6,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace stilb
+namespace glim
 {
     public enum LightFalloffType : uint
     {
@@ -52,7 +52,7 @@ namespace stilb
         [Header("Default Group")]
         public LightmapGroup group;
 
-        [MenuItem("Stilb/Bake")]
+        [MenuItem("Glim/Bake")]
         public static void CreateLightmapBaker()
         {
             var scene = SceneManager.GetActiveScene();
@@ -61,7 +61,7 @@ namespace stilb
             var baker = roots.SelectMany(x => x.GetComponentsInChildren<LightmapBaker>()).FirstOrDefault();
             if (!baker)
             {
-                var go = new GameObject("Stilb Lightmap Baker")
+                var go = new GameObject("Glim Baker")
                 {
                     tag = "EditorOnly"
                 };

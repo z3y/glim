@@ -1,9 +1,9 @@
 {
-  "name": "io.github.z3y.stilb",
+  "name": "io.github.z3y.glim",
   "description": "Lightmap Baker",
   "version": "0.1.0",
   "unity": "2022.3",
-  "displayName": "Stilb Lightmap Baker",
+  "displayName": "Glim Baker",
   "hideInEditor": false,
   "gitDependencies": {},
   "vpmDependencies": {},
