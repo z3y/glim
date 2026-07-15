@@ -39,7 +39,8 @@ namespace glim
         [Range(5, 25)] public uint packingIterations = 5;
         public bool bruteForce = false;
 
-        public bool dilate = true;
+        // public bool dilate = true;
+        [NonSerialized] public bool dilate = false; // disabled for now
         public bool denoise = true;
         public bool fixSeams = true;
 
