@@ -2008,26 +2008,6 @@ fn render_lightmaps3(app: &mut Glim) {
                 (log)(LogMessage::message(&message));
             }
 
-            // todo this doesnt handle directional alpha
-            if group.fix_seams {
-                let start_time = std::time::Instant::now();
-
-                fix_seams(
-                    pixels,
-                    group.width,
-                    group.height,
-                    &app.seams,
-                    app.config.seams_debug,
-                    group_index as u32,
-                );
-
-                let now = std::time::Instant::now();
-                let elapsed = now.duration_since(start_time).as_secs_f32();
-
-                let message = format!("Seam Fix Complete {}s", elapsed);
-                (log)(LogMessage::message(&message));
-            }
-
             // encode directional
             if lightmap_type == 1 {
                 compaction_push.lightmap_type = 2;
@@ -2056,6 +2036,26 @@ fn render_lightmaps3(app: &mut Glim) {
                 let groups_y = (group.height + 7) / 8;
                 vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
                 app.vk.end_single_use_cmd(cmd);
+            }
+
+            // todo this doesnt handle directional alpha
+            if group.fix_seams {
+                let start_time = std::time::Instant::now();
+
+                fix_seams(
+                    pixels,
+                    group.width,
+                    group.height,
+                    &app.seams,
+                    app.config.seams_debug,
+                    group_index as u32,
+                );
+
+                let now = std::time::Instant::now();
+                let elapsed = now.duration_since(start_time).as_secs_f32();
+
+                let message = format!("Seam Fix Complete {}s", elapsed);
+                (log)(LogMessage::message(&message));
             }
 
             let readback_data = LightmapReadbackData {

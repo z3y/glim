@@ -162,6 +162,11 @@ float4 DilateLightmap(int2 coords, uint compactedOffset)
 
         float3 normalizedDirection = normalize(directional / luminance);
 
+        if (luminance == 0)
+        {
+            normalizedDirection = 0.0;
+        }
+
         DecompactTarget[linearIndex] = float4(normalizedDirection, 1.0);
     }
     else if (Push.lightmapType == 2)
