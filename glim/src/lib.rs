@@ -12,7 +12,7 @@ use crate::buffer::Buffer;
 use crate::compute_shader::*;
 use crate::graphics_shader::update_visibility_shader;
 use crate::lights::light_buffer_flags;
-use crate::seams::{Seam, fix_seams, inpaint};
+use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
 use crate::shaders::bake_direct::{
     BakeDirectPushConstants, load_bake_direct_shader, update_bake_direct_shader,
@@ -24,7 +24,7 @@ use crate::shaders::compaction_mask::{
     CompactionPushConstants, load_shader_compaction_mask, update_shader_compaction_mask,
 };
 use crate::shaders::decompact::{load_shader_decompact, update_shader_decompact};
-use crate::shaders::dilate::{DilatePushConstants, load_shader_dilate, update_shader_dilate};
+use crate::shaders::dilate::load_shader_dilate;
 use crate::{
     camera::Camera,
     compute_shader::{

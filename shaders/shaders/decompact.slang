@@ -35,8 +35,7 @@ float4 DilateLightmap(int2 coords, uint compactedOffset)
 
             uint2 newCoords = coords + int2(dx, dy);
 
-            uint compactIndex =
-                GetCompactedIndex(float2(newCoords), Push.groupIndex, false);
+            uint compactIndex = GetCompactedIndex(float2(newCoords), Push.groupIndex, false);
 
             if (compactIndex == uint::maxValue)
             {
@@ -107,7 +106,7 @@ float3 DilateNormal(int2 coords)
         return colorSum / weightSum;
     }
 
-    return float3(0.0, 1.0, 0.0);
+    return 0.0;
 }
 
 [numthreads(8, 8, 1)] void main(uint3 threadID : SV_DispatchThreadID)
@@ -126,7 +125,7 @@ float3 DilateNormal(int2 coords)
     [branch] if (Push.lightmapType == 2)
     {
         float4 directionalLightmap = DecompactTarget[linearIndex];
-        float3 normalWS = DilateNormal(coords);
+        float3 normalWS = normalize(DilateNormal(coords));
 
         float3 normalizedDirection = directionalLightmap.rgb;
         float NoL = saturate(dot(normalizedDirection, normalWS));
@@ -141,6 +140,16 @@ float3 DilateNormal(int2 coords)
         if (Push.dilate > 0)
         {
             float4 dilated = DilateLightmap(coords, 0);
+
+            if (Push.lightmapType == 1)
+            {
+                float4 dilatedDirectional = DilateLightmap(coords, Push.compactedCount);
+                float luminance = Luminance(dilated.rgb);
+                float3 normalizedDirection = normalize(dilatedDirectional.xyz / luminance);
+                dilated.rgb = normalizedDirection;
+                dilated.a = 1.0;
+            }
+
             DecompactTarget[linearIndex] = dilated;
         }
         else
@@ -173,39 +182,4 @@ float3 DilateNormal(int2 coords)
 
         DecompactTarget[linearIndex] = float4(normalizedDirection, 1.0);
     }
-
-    // [forcecase] switch (Push.lightmapType)
-    // {
-    // case 0:
-    // {
-    //     DecompactTarget[linearIndex] = float4(diffuse, 1.0);
-    //     break;
-    // }
-    // case 1:
-    // {
-    //     uint compactIndex = compactIndex + Push.compactedCount;
-    //     float luminance = Luminance(diffuse);
-
-    //     float3 directional = float3(
-    //         CompactedLightmap[compactIndex * 3 + 0],
-    //         CompactedLightmap[compactIndex * 3 + 1],
-    //         CompactedLightmap[compactIndex * 3 + 2]);
-
-    //     float3 normalizedDirection = normalize(directional / luminance);
-
-    //     DecompactTarget[linearIndex] = float4(normalizedDirection, 1.0);
-    //     break;
-    // }
-    // case 2:
-    // {
-    //     float4 directionalLightmap = DecompactTarget[linearIndex];
-    //     float3 normalizedDirection = directionalLightmap.rgb;
-
-    //     float NoL = saturate(dot(normalizedDirection, normalWS));
-
-    //     normalizedDirection.z = -normalizedDirection.z; // unity convention
-    //     DecompactTarget[linearIndex] = mad(float4(normalizedDirection, NoL), 0.5, 0.5);
-    //     break;
-    // }
-    // }
 }
