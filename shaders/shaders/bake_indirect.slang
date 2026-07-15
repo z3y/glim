@@ -100,10 +100,10 @@ struct PushConstants
             color.rgb += current;
             dominantDirection.xyz += ray.D * Luminance(current);
         }
-        else
-        {
-            color.rgb += float3(1, 0, 1);
-        }
+        // else
+        // {
+        //     color.rgb += float3(1, 0, 1);
+        // }
     }
 
     float4 previous = float4(

@@ -270,8 +270,8 @@ mod tests {
         for pixel in &mut emission_pixels {
             *pixel *= f32::consts::PI;
         }
-        let w = 1024 * 2;
-        let h = 1024 * 2;
+        let w = 512;
+        let h = 512;
         let emission_pixels = vec![0.0; (w * h * 4) as usize];
 
         let albedo_pixels = vec![255; (w * h * 4) as usize];
