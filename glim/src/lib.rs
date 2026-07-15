@@ -1378,6 +1378,40 @@ fn render_lightmaps3(app: &mut Glim) {
             );
             vk.cmd_draw(cmd, mesh.index_len * 3, 1, 0, 0);
 
+            // non conservative
+            let visibility_push = VisibilityPushConstants {
+                width: group.width,
+                height: group.height,
+                group_index: group_index as u32,
+                rt_width: visibility_expanded.width(),
+                rt_height: visibility_expanded.height(),
+                pad1: 0,
+                pad2: 0,
+                conservative: 0,
+            };
+            let visibility_push_bytes = as_bytes(&visibility_push);
+            vk.cmd_bind_pipeline(
+                cmd,
+                vk::PipelineBindPoint::GRAPHICS,
+                visibility_shader_non_conservative.pipeline,
+            );
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::GRAPHICS,
+                visibility_shader_non_conservative.pipeline_layout,
+                0,
+                &[visibility_shader_non_conservative.descriptor_set],
+                &[],
+            );
+            vk.cmd_push_constants(
+                cmd,
+                visibility_shader_non_conservative.pipeline_layout,
+                vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::VERTEX,
+                0,
+                &visibility_push_bytes,
+            );
+            vk.cmd_draw(cmd, mesh.index_len * 3, 25, 0, 0);
+
             vk.cmd_end_render_pass(cmd);
             // AttachmentDescription final_layout: vk::ImageLayout::GENERAL
             visibility_expanded.set_layout(vk::ImageLayout::GENERAL);
@@ -2081,7 +2115,8 @@ fn render_lightmaps3(app: &mut Glim) {
                 // }
             }
 
-            if group.fix_seams {
+            // todo this doesnt handle directional alpha
+            if group.fix_seams && lightmap_type == 0 {
                 let start_time = std::time::Instant::now();
 
                 fix_seams(
