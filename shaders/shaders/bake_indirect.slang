@@ -48,7 +48,8 @@ struct PushConstants
     ray.tMin = 0;
     ray.tMax = RAY_MAX;
 
-    float4 color = 0.0;
+    float4 color = float4(0.0, 0.0, 0.0, 1.0);
+    float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
 
     uint bounceAOffset = Push.compactedCount;
@@ -83,7 +84,7 @@ struct PushConstants
         {
             if (!surface.backfaceGI)
             {
-                return;
+                color.a = 0;
             }
         }
 
@@ -95,9 +96,13 @@ struct PushConstants
                                             CompactedLightmap[(previousOffset + compactIndex) * 3 + 1],
                                             CompactedLightmap[(previousOffset + compactIndex) * 3 + 2]);
 
-            float3 current = previousDiffuse * bounceAlbedo;
+            float3 current = previousDiffuse * bounceAlbedo * color.a;
             color.rgb += current;
             dominantDirection.xyz += ray.D * Luminance(current);
+        }
+        else
+        {
+            color.rgb += float3(1, 0, 1);
         }
     }
 
