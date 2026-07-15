@@ -240,6 +240,7 @@ pub fn dilate(pixels: &mut [f32], width: u32, height: u32, alpha_threshold: f32)
     let w = width as usize;
     let h = height as usize;
 
+    // todo skip this copy here
     let mut mips = vec![Mip {
         pixels: pixels.to_vec(),
         w,
