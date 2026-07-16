@@ -12,7 +12,7 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 - UV Packing with hole filling
 - Open Image Denoise 2.0
 - Light Probe baking (L2 Spherical Harmonics)
-- Light Volumes
+- VRCLightVolumes baking
 - Physically correct
 - Lightmap Groups
 - Directional Lightmaps
