@@ -1,7 +1,6 @@
-# Glim Lightmap Baker
+# GPU Lightmapper
 
 A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
-
 
 ## Features
 
@@ -68,3 +67,5 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
 - Add the [slang](https://github.com/shader-slang/slang) shader compiler at PATH
 - `cargo build --release`
+- Copy the compiled dll into the `/Editor` folder
+- Alternatively you can run the `test_preview` or `test_bake` tests without Unity

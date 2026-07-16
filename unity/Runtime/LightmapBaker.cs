@@ -26,7 +26,7 @@ namespace glim
         [Header("Bake Settings")]
         public LightmapMode lightmapMode = LightmapMode.NonDirectioal;
         public uint directSamples = 512;
-        public uint indirectSamples = 512;
+        public uint indirectSamples = 256;
         public uint bounces = 5;
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
 
