@@ -40,6 +40,7 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
    - Name: `OpenImageDenoise_DIR`
    - Value: the path to the extracted folder (e.g. `C:\oidn`)
    - Click **OK** on all windows
+4. Restart Unity and Unity Hub
 
 #### Linux
 - Fedora Linux: `sudo dnf install oidn`
