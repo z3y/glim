@@ -21,6 +21,7 @@
 - [ ] Meta fallback shader for mats without meta
 - [ ] Light Probes/Volumes are noisy with direct light from small emissives
   - [ ] Maybe denoise light probes or do MIS
+- [ ] MIS for area lights
 
 ## Optimization
 - [ ] Manually build the LightingData asset

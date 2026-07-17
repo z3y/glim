@@ -12,6 +12,12 @@ namespace glim
 
         int _resolution;
         Material _metaAlphaMat;
+
+        // CommandBuffer.DrawRenderer only records a material reference, so the shared
+        // AlphaMeta asset cannot be re-configured per draw - every draw would resolve to
+        // whatever was set last. Keep one configured variant per source material instead.
+        readonly Dictionary<Material, Material> _alphaMatVariants = new();
+
         public MetaTexture(int resolution, AtlasType type)
         {
             _resolution = resolution;
@@ -55,14 +61,47 @@ namespace glim
                 RenderMeta(renderers, AtlasType.Alpha, cmd);
             }
 
+            // Executed once here rather than at the end of each RenderMeta: the buffer is
+            // cumulative, so executing per pass replayed the clear and every albedo draw a
+            // second time and threw the first pass's output away.
+            Graphics.ExecuteCommandBuffer(cmd);
+
             var format = type == AtlasType.Albedo ? TextureFormat.RGBA32 : TextureFormat.RGBAFloat;
 
-            var request = AsyncGPUReadback.Request(_rt, 0, format);
-            request.WaitForCompletion();
-            return request;
+            return AsyncGPUReadback.Request(_rt, 0, format);
         }
 
         static int _Cutoff = Shader.PropertyToID("_Cutoff");
+        static int _MainTex = Shader.PropertyToID("_MainTex");
+        static int _Color = Shader.PropertyToID("_Color");
+
+        Material GetAlphaMaterial(Material source)
+        {
+            if (_alphaMatVariants.TryGetValue(source, out var variant))
+            {
+                return variant;
+            }
+
+            variant = new Material(_metaAlphaMat) { hideFlags = HideFlags.HideAndDontSave };
+            variant.SetTexture(_MainTex, source.mainTexture);
+            variant.SetColor(_Color, source.color);
+
+            string renderType = source.GetTag("RenderType", false, "");
+            if (variant.HasProperty(_Cutoff) && renderType == "TransparentCutout")
+            {
+                variant.SetFloat(_Cutoff, source.GetFloat(_Cutoff));
+            }
+            else
+            {
+                variant.SetFloat(_Cutoff, 0.5f);
+            }
+
+            variant.SetTextureOffset(_MainTex, source.mainTextureOffset);
+            variant.SetTextureScale(_MainTex, source.mainTextureScale);
+
+            _alphaMatVariants.Add(source, variant);
+            return variant;
+        }
 
         void RenderMeta(IList<Renderer> renderers, AtlasType type, CommandBuffer cmd)
         {
@@ -134,33 +173,39 @@ namespace glim
                 uvOffset[i].w *= halfTexelSize;
             }
 
-            var _MainTex = Shader.PropertyToID("_MainTex");
-            var _Color = Shader.PropertyToID("_Color");
             var unity_LightmapST = Shader.PropertyToID("unity_LightmapST");
 
             bool flipY = !SystemInfo.graphicsUVStartsAtTop;
 
 
-            for (int offsetIndex = 0; offsetIndex < uvOffset.Length; offsetIndex++)
+            // Renderers are the outer loop so the per-renderer lookups below happen once
+            // instead of once per jitter offset. Each renderer owns a distinct atlas region
+            // via lightmapScaleOffset and its own offsets still run in order, so the draw
+            // results are unchanged.
+            for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
             {
-                for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
+                var renderer = renderers[rendererIndex];
+                var mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
+
+                if (!mesh)
                 {
-                    var renderer = renderers[rendererIndex];
-                    var mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
+                    continue;
+                }
 
-                    if (!mesh)
-                    {
-                        continue;
-                    }
+                // Each access to .sharedMaterials allocates a new array.
+                var sharedMaterials = renderer.sharedMaterials;
 
-                    var so = renderer.lightmapScaleOffset;
+                var baseSo = renderer.lightmapScaleOffset;
 
-                    if (flipY)
-                    {
-                        so.y = -so.y;
-                        so.w = 1.0f - so.w;
-                    }
+                if (flipY)
+                {
+                    baseSo.y = -baseSo.y;
+                    baseSo.w = 1.0f - baseSo.w;
+                }
 
+                for (int offsetIndex = 0; offsetIndex < uvOffset.Length; offsetIndex++)
+                {
+                    var so = baseSo;
                     so.z += uvOffset[offsetIndex].z;
                     so.w += uvOffset[offsetIndex].w;
 
@@ -168,7 +213,7 @@ namespace glim
 
                     for (int submeshIndex = 0; submeshIndex < mesh.subMeshCount; submeshIndex++)
                     {
-                        var mat = renderer.sharedMaterials[submeshIndex];
+                        var mat = sharedMaterials[submeshIndex];
 
                         if (type == AtlasType.Alpha)
                         {
@@ -177,20 +222,7 @@ namespace glim
                                 continue;
                             }
 
-                            _metaAlphaMat.SetTexture(_MainTex, mat.mainTexture);
-                            _metaAlphaMat.SetColor(_Color, mat.color);
-                            string renderType = mat.GetTag("RenderType", false, "");
-                            if (_metaAlphaMat.HasProperty(_Cutoff) && renderType == "TransparentCutout")
-                            {
-                                _metaAlphaMat.SetFloat(_Cutoff, mat.GetFloat(_Cutoff));
-                            }
-                            else
-                            {
-                                _metaAlphaMat.SetFloat(_Cutoff, 0.5f);
-                            }
-                            _metaAlphaMat.SetTextureOffset(_MainTex, mat.mainTextureOffset);
-                            _metaAlphaMat.SetTextureScale(_MainTex, mat.mainTextureScale);
-                            cmd.DrawRenderer(renderer, _metaAlphaMat, submeshIndex, 0);
+                            cmd.DrawRenderer(renderer, GetAlphaMaterial(mat), submeshIndex, 0);
                         }
                         else
                         {
@@ -209,8 +241,6 @@ namespace glim
                     }
                 }
             }
-
-            Graphics.ExecuteCommandBuffer(cmd);
         }
 
         public static bool IsMaterialTransparent(Material mat)
@@ -239,6 +269,14 @@ namespace glim
                 Editor.DestroyImmediate(_rt);
             }
 
+            foreach (var variant in _alphaMatVariants.Values)
+            {
+                if (variant)
+                {
+                    Editor.DestroyImmediate(variant);
+                }
+            }
+            _alphaMatVariants.Clear();
         }
     }
 }

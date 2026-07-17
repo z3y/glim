@@ -24,16 +24,18 @@ namespace glim
             settings = new Bindings.LightmapSettings(group);
 
             using var metaAlbedo = new MetaTexture((int)settings.width, MetaTexture.AtlasType.Albedo);
-
-            albedo = metaAlbedo
-                .CreateAtlas(renderers, MetaTexture.AtlasType.Albedo)
-                .GetData<Color32>().ToArray();
-
             using var metaEmission = new MetaTexture((int)settings.width, MetaTexture.AtlasType.Emission);
 
-            emission = metaEmission
-                .CreateAtlas(renderers, MetaTexture.AtlasType.Emission)
-                .GetData<Color>().ToArray();
+            // The two atlases are independent, so issue both readbacks before blocking on
+            // either and let them overlap rather than stalling on each in turn.
+            var albedoRequest = metaAlbedo.CreateAtlas(renderers, MetaTexture.AtlasType.Albedo);
+            var emissionRequest = metaEmission.CreateAtlas(renderers, MetaTexture.AtlasType.Emission);
+
+            albedoRequest.WaitForCompletion();
+            emissionRequest.WaitForCompletion();
+
+            albedo = albedoRequest.GetData<Color32>().ToArray();
+            emission = emissionRequest.GetData<Color>().ToArray();
 
 
             // var albedoAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.ARGB32, 1, true);
