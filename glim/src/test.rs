@@ -162,19 +162,41 @@ mod tests {
         //     },
         // );
 
+        // app_add_light(
+        //     app,
+        //     Light {
+        //         ty: LightType::Point,
+        //         position: Vector3 {
+        //             x: 1.5,
+        //             y: 0.3,
+        //             z: -1.5,
+        //         },
+        //         direction: Vector3::ZERO,
+        //         range: 5.0,
+        //         color: Vector3::new(1.0, 1.0, 1.0),
+        //         shadow_radius_or_angle: 0.1,
+        //         ..Default::default()
+        //     },
+        // );
+
         app_add_light(
             app,
             Light {
-                ty: LightType::Point,
+                ty: LightType::Area,
                 position: Vector3 {
-                    x: 1.5,
+                    x: 0.5,
                     y: 0.3,
-                    z: -1.5,
+                    z: -0.5,
                 },
-                direction: Vector3::ZERO,
+                direction: Vector3::new(1.0, 0.0, -1.0).normalize(),
                 range: 5.0,
                 color: Vector3::new(1.0, 1.0, 1.0),
-                shadow_radius_or_angle: 0.1,
+                shadow_radius_or_angle: 0.01,
+                spot_inner_percent: 80.0,
+                spot_outer: 50.0,
+                area_height: 0.2,
+                area_width: 0.2,
+                up: Vector3::UP,
                 ..Default::default()
             },
         );

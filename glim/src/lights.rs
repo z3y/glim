@@ -23,8 +23,8 @@ pub struct Light {
 
     pub spot_inner_percent: f32,
     pub spot_outer: f32,
-    pub area_width: u32,
-    pub area_height: u32,
+    pub area_width: f32,
+    pub area_height: f32,
 
     pub up: Vector3,
     pub pad: u32,
@@ -50,8 +50,8 @@ impl Default for Light {
 
             spot_inner_percent: 0.0,
             spot_outer: 0.0,
-            area_width: 0,
-            area_height: 0,
+            area_width: 0.0,
+            area_height: 0.0,
 
             up: Vector3::UP,
             pad: 0,

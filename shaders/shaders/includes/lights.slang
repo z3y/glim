@@ -7,6 +7,7 @@ enum LightType : uint32_t
     Directional = 0,
     Point = 1,
     Spot = 2,
+    Area = 3,
 }
 
 struct Light
