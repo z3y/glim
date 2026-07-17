@@ -194,8 +194,7 @@ mod tests {
                 shadow_radius_or_angle: 0.01,
                 spot_inner_percent: 80.0,
                 spot_outer: 50.0,
-                area_height: 0.2,
-                area_width: 0.2,
+                area_size: Vector2::new(0.5, 0.5),
                 up: Vector3::UP,
                 ..Default::default()
             },
