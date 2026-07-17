@@ -76,13 +76,35 @@ namespace glim
 
         static double _bakeStartTime = 0.0;
 
+        const string BakingTitle = "Baking Lightmaps";
+        const string DenoisingTitle = "Denoising & Fixing Seams";
+
+        static string _progressTitle = "";
+
+        static void ReportProgress()
+        {
+            var message = _progressMessage;
+
+            // redraw since we can't edit titles for progress
+            var title = message.StartsWith(DenoisingTitle) ? DenoisingTitle : BakingTitle;
+
+            if (title != _progressTitle)
+            {
+                Progress.Finish(_progressID, Progress.Status.Succeeded);
+                _progressID = Progress.Start(title, null, Progress.Options.None);
+                _progressTitle = title;
+            }
+
+            Progress.Report(_progressID, _progress, message);
+        }
+
         static void PollBakeComplete()
         {
             if (!_isComplete)
             {
                 if (_progressID != -1)
                 {
-                    Progress.Report(_progressID, _progress, _progressMessage);
+                    ReportProgress();
                 }
                 return;
             }
@@ -283,6 +305,7 @@ namespace glim
             _context = null;
             _progress = 0f;
             _progressMessage = "";
+            _progressTitle = "";
             _isPreview = false;
             if (_progressID != -1)
             {
@@ -449,7 +472,8 @@ namespace glim
 
             if (!config.is_preview)
             {
-                _progressID = Progress.Start("Baking Lightmaps", null, Progress.Options.None);
+                _progressID = Progress.Start(BakingTitle, null, Progress.Options.None);
+                _progressTitle = BakingTitle;
                 RestoreSelection();
             }
 
