@@ -18,6 +18,7 @@
 - [ ] Bake sky reflection probe
 - [ ] Per chart UV Packing
 - [ ] Cancel bake button
+- [ ] Meta fallback shader for mats without meta
 - [ ] Light Probes/Volumes are noisy with direct light from small emissives
   - [ ] Maybe denoise light probes or do MIS
 

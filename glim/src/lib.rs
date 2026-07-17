@@ -35,7 +35,6 @@ use crate::{
     },
     graphics_shader::{VisibilityPushConstants, load_visibility_shader},
     lights::Light,
-    math::Vector3,
     mesh::{GpuMesh, Mesh, VulkanAs, create_tlas},
     oidn::Oidn,
     texture2d::Texture2D,
@@ -298,22 +297,10 @@ fn initialize_render(app: &mut Glim) {
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
     } else {
-        let dummy_buffer = [Light {
-            position: Vector3::ZERO,
-            ty: lights::LightType::Directional,
-            direction: Vector3::ZERO,
-            range: 0.0,
-            color: Vector3::ZERO,
-            shadow_radius_or_angle: 0.0,
-            spot_inner_percent: 0.0,
-            spot_outer: 0.0,
-            pad0: 0,
-            pad1: 0,
-        }];
-        app.gpu_lights = Buffer::new(
+        app.gpu_lights = Buffer::empty(
             &app.vk,
             String::from("Lights"),
-            &dummy_buffer,
+            std::mem::size_of::<Light>() as vk::DeviceSize,
             light_buffer_flags(),
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );

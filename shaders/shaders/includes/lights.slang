@@ -22,8 +22,11 @@ struct Light
 
     float SpotInnerPercent;
     float SpotOuter;
-    float pad0;
-    float pad1;
+    float AreaWidth;
+    float AreaHeight;
+
+    float3 up;
+    uint pad;
 };
 
 void CreateOrthoBasis(float3 n, out float3 b1, out float3 b2)

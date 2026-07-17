@@ -175,10 +175,7 @@ mod tests {
                 range: 5.0,
                 color: Vector3::new(1.0, 1.0, 1.0),
                 shadow_radius_or_angle: 0.1,
-                spot_inner_percent: 0.0,
-                spot_outer: 0.0,
-                pad0: 0,
-                pad1: 0,
+                ..Default::default()
             },
         );
 

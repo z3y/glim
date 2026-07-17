@@ -7,6 +7,7 @@ pub enum LightType {
     Directional = 0,
     Point = 1,
     Spot = 2,
+    Area = 3,
 }
 
 #[repr(C)]
@@ -22,12 +23,38 @@ pub struct Light {
 
     pub spot_inner_percent: f32,
     pub spot_outer: f32,
-    pub pad0: u32,
-    pub pad1: u32,
+    pub area_width: u32,
+    pub area_height: u32,
+
+    pub up: Vector3,
+    pub pad: u32,
 }
 
 pub fn light_buffer_flags() -> vk::BufferUsageFlags {
     vk::BufferUsageFlags::TRANSFER_DST
         | vk::BufferUsageFlags::STORAGE_BUFFER
         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+}
+
+impl Default for Light {
+    fn default() -> Self {
+        Self {
+            position: Vector3::ZERO,
+            ty: LightType::Directional,
+
+            direction: Vector3::FORWARD,
+            range: 0.0,
+
+            color: Vector3::ONE,
+            shadow_radius_or_angle: 0.0,
+
+            spot_inner_percent: 0.0,
+            spot_outer: 0.0,
+            area_width: 0,
+            area_height: 0,
+
+            up: Vector3::UP,
+            pad: 0,
+        }
+    }
 }
