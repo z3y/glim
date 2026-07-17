@@ -82,10 +82,11 @@ struct PushConstants
 
         if (!bounceHit.frontFace)
         {
-            if (!surface.backfaceGI)
-            {
-                color.a = 0;
-            }
+            // this is incorrect, the cached bounce doesnt store lighting on the other side
+            // if (!surface.backfaceGI)
+            // {
+            color.a = 0;
+            // }
         }
 
         float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
