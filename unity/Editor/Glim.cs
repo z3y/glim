@@ -153,6 +153,10 @@ namespace glim
                 {
                     lightType = Bindings.LightType.Point;
                 }
+                else if (light.type == LightType.Rectangle)
+                {
+                    lightType = Bindings.LightType.Area;
+                }
 
                 float radiusOrAngle = light.type == LightType.Directional ?
                     Mathf.Deg2Rad * light.shadowAngle : light.shadowRadius;
@@ -162,6 +166,7 @@ namespace glim
                     ty = lightType,
                     position = light.transform.position,
                     direction = light.transform.forward,
+                    up = light.transform.up,
                     range = light.range,
                     color = color,
                     shadow_radius_or_angle = radiusOrAngle,
@@ -179,6 +184,11 @@ namespace glim
                     {
                         l.spot_inner_percent = 80; // todo this doesnt match built in spot lights exactly
                     }
+                }
+                if (light.type == LightType.Rectangle)
+                {
+                    l.direction = -light.transform.forward;
+                    l.area_size = light.areaSize;
                 }
 
                 addedLights.Add(light);

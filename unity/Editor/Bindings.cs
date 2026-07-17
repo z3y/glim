@@ -164,6 +164,7 @@ namespace glim
             Directional = 0,
             Point = 1,
             Spot = 2,
+            Area = 3,
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -180,8 +181,10 @@ namespace glim
 
             public float spot_inner_percent;
             public float spot_outer;
-            public uint pad0;
-            public uint pad1;
+            public Vector2 area_size;
+
+            public Vector3 up;
+            public uint pad;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 16)]

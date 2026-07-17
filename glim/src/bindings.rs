@@ -243,6 +243,7 @@ pub extern "C" fn app_add_light(app: *mut Glim, mut light: Light) {
         let system = app.config.coordinate_system;
         light.position.transform_space(system);
         light.direction.transform_space(system);
+        light.up.transform_space(system);
 
         light.direction = Vector3::ZERO - light.direction;
 

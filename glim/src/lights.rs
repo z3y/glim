@@ -1,6 +1,6 @@
 use ash::vk::{self};
 
-use crate::math::Vector3;
+use crate::math::{Vector2, Vector3};
 
 #[repr(u32)]
 pub enum LightType {
@@ -23,8 +23,7 @@ pub struct Light {
 
     pub spot_inner_percent: f32,
     pub spot_outer: f32,
-    pub area_width: f32,
-    pub area_height: f32,
+    pub area_size: Vector2,
 
     pub up: Vector3,
     pub pad: u32,
@@ -50,8 +49,7 @@ impl Default for Light {
 
             spot_inner_percent: 0.0,
             spot_outer: 0.0,
-            area_width: 0.0,
-            area_height: 0.0,
+            area_size: Vector2::ZERO,
 
             up: Vector3::UP,
             pad: 0,

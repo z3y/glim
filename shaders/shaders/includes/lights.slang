@@ -23,8 +23,7 @@ struct Light
 
     float SpotInnerPercent;
     float SpotOuter;
-    float AreaWidth;
-    float AreaHeight;
+    float2 AreaSize;
 
     float3 up;
     uint pad;

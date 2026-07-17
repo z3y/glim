@@ -447,7 +447,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
         {
             float2 offset = xi - 0.5;
             float3 right = normalize(cross(light.up, light.direction));
-            L = light.position + right * offset.x * (light.AreaWidth * 0.5) + light.up * offset.y * (light.AreaHeight * 0.5);
+            L = light.position + right * offset.x * light.AreaSize.x + light.up * offset.y * light.AreaSize.y;
         }
         else
         {
@@ -517,9 +517,18 @@ float3 ShadeLightDirectSH(Light light, float3 positionWS, float2 xi, float3 thro
     }
     else
     {
-        if (light.ShadowRangeOrAngle > 0.0)
+        if (light.type == LightType::Area)
         {
-            L = RandomPointOnOrientedDisk(light.position, light.ShadowRangeOrAngle, positionWS, xi);
+            float2 offset = xi - 0.5;
+            float3 right = normalize(cross(light.up, light.direction));
+            L = light.position + right * offset.x * light.AreaSize.x + light.up * offset.y * light.AreaSize.y;
+        }
+        else
+        {
+            if (light.ShadowRangeOrAngle > 0.0)
+            {
+                L = RandomPointOnOrientedDisk(light.position, light.ShadowRangeOrAngle, positionWS, xi);
+            }
         }
 
         float3 positionToLight = L - positionWS;
@@ -539,6 +548,11 @@ float3 ShadeLightDirectSH(Light light, float3 positionWS, float2 xi, float3 thro
             float spotAttenuation = GetSpotAngleAttenuation(light.direction, L, spotScale, spotOffset);
 
             falloff *= spotAttenuation;
+        }
+
+        if (light.type == LightType::Area)
+        {
+            falloff *= saturate(dot(-L, light.direction));
         }
 
         shadowRay.tMax = sqrt(distanceSquare);
