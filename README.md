@@ -40,6 +40,7 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
    - Name: `OpenImageDenoise_DIR`
    - Value: the path to the extracted folder (e.g. `C:\oidn`)
    - Click **OK** on all windows
+4. Restart Unity and Unity Hub
 
 #### Linux
 - Fedora Linux: `sudo dnf install oidn`
@@ -49,15 +50,17 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 - Make sure to setup the denoiser first (otherwise denoising will be skipped)
 - Setup the scene (mark objects as static, generate lightmap uvs, add lights with baked mode or emissive materials etc.)
 - Menu Item `Glim > Bake`
-- Adjust settings on the created GameObjects and press `Generate Lighting`
+- Adjust settings on the created GameObject and press `Generate Lighting`
 
 #### Lightmap Groups
 
  - By default one lightmap texture is baked containing the entire scene
  - To create multiple lightmaps add a `Lightmap Group Selector` component to a game object
  - Right click, `Create > Lightmap Group (Glim)` asset and assign it to the selector component
- - All the child game objects will be packed into that group
+ - All the child GameObjects will be packed into that group
 
+## [Discord](https://discord.gg/bw46tKgRFT)
+ 
 ## Stack
 
 - Written in Rust, using the lightweight Ash Vulkan crate, with minimal dependencies

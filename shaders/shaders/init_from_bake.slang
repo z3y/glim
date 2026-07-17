@@ -86,8 +86,8 @@ struct Varyings
 
         float2 scale = resolution / rtResolution;
         float2 uv = v.GetUV() / resolution;
-        uv += jitter;
 
+        uv += jitter;
         o.uv = uv;
 
         uv.y = 1.0 - uv.y;
