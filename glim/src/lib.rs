@@ -1899,8 +1899,13 @@ fn render_lightmaps3(app: &mut Glim) {
         Some(oidn.unwrap())
     };
 
-    let process_lightmap = |group_index: usize, lightmap_type: u32| {
+    let process_lightmap = |group_index: usize, lightmap_type: u32, post_step: u32, post_total: u32| {
         let group = &app.groups[group_index].settings;
+
+        (log)(LogMessage::progress(
+            &format!("Denoising & Fixing Seams ({}/{})", post_step, post_total),
+            post_step as f32 / post_total as f32,
+        ));
 
         let mut compaction_push = CompactionPushConstants {
             width: group.width,
@@ -2035,14 +2040,24 @@ fn render_lightmaps3(app: &mut Glim) {
         };
     };
 
+    let lightmaps_per_group = match app.config.lightmap_mode {
+        LightmapMode::NonDirectional => 1,
+        LightmapMode::Directional => 2,
+    };
+    let post_total = (app.groups.len() * lightmaps_per_group).max(1) as u32;
+    let mut post_step = 0;
+
     for group_index in 0..app.groups.len() {
         match app.config.lightmap_mode {
             LightmapMode::NonDirectional => {
-                process_lightmap(group_index, 0);
+                post_step += 1;
+                process_lightmap(group_index, 0, post_step, post_total);
             }
             LightmapMode::Directional => {
-                process_lightmap(group_index, 0);
-                process_lightmap(group_index, 1);
+                post_step += 1;
+                process_lightmap(group_index, 0, post_step, post_total);
+                post_step += 1;
+                process_lightmap(group_index, 1, post_step, post_total);
             }
         }
     }

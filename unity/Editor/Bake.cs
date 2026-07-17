@@ -25,6 +25,14 @@ namespace glim
         static volatile bool _running = false;
         static int _progressID = -1;
         static BakeContext _context = null;
+        
+        static volatile float _progress = 0f;
+        static volatile string _progressMessage = "";
+        static volatile bool _isPreview = false;
+        
+        public static bool IsBaking => _running && !_isPreview;
+        public static float BakeProgress => _progress;
+        public static string BakeMessage => _progressMessage;
 
         [AOT.MonoPInvokeCallback(typeof(Bindings.LightmapReadCallback))]
         public static void OnReadbackLightmap(Bindings.LightmapReadbackData data)
@@ -61,7 +69,8 @@ namespace glim
             }
             if (data.ty == 2) // progress
             {
-                Progress.Report(_progressID, data.progress, data.message.ToString());
+                _progress = data.progress;
+                _progressMessage = data.message.ToString();
             }
         }
 
@@ -71,6 +80,10 @@ namespace glim
         {
             if (!_isComplete)
             {
+                if (_progressID != -1)
+                {
+                    Progress.Report(_progressID, _progress, _progressMessage);
+                }
                 return;
             }
 
@@ -268,6 +281,9 @@ namespace glim
             _isComplete = false;
             _running = false;
             _context = null;
+            _progress = 0f;
+            _progressMessage = "";
+            _isPreview = false;
             if (_progressID != -1)
             {
                 Progress.Finish(_progressID, Progress.Status.Succeeded);
@@ -397,6 +413,17 @@ namespace glim
         }
 #endif
 
+        // Refocus the window for QoL
+        static void RestoreSelection()
+        {
+            var baker = UnityEngine.Object.FindAnyObjectByType<LightmapBaker>();
+
+            if (baker != null)
+            {
+                Selection.activeGameObject = baker.gameObject;
+            }
+        }
+
         public static void Start(LightmapBaker baker, Bindings.GlimConfig config)
         {
             if (_running)
@@ -418,10 +445,12 @@ namespace glim
             _context = ctx;
 
             _running = true;
+            _isPreview = config.is_preview;
 
             if (!config.is_preview)
             {
                 _progressID = Progress.Start("Baking Lightmaps", null, Progress.Options.None);
+                RestoreSelection();
             }
 
 

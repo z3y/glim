@@ -173,6 +173,29 @@ namespace glim
                     Bake.Start(baker, config);
                 };
                 root.Add(button);
+
+                ProgressBar progressBar = new()
+                {
+                    style =
+                    {
+                        height = 20,
+                        display = DisplayStyle.None
+                    }
+                };
+                root.Add(progressBar);
+
+                progressBar.schedule.Execute(() =>
+                {
+                    bool running = Bake.IsBaking;
+                    progressBar.style.display = running ? DisplayStyle.Flex : DisplayStyle.None;
+                    button.SetEnabled(!running);
+
+                    if (running)
+                    {
+                        progressBar.value = Mathf.Clamp01(Bake.BakeProgress) * 100f;
+                        progressBar.title = Bake.BakeMessage;
+                    }
+                }).Every(100);
             }
 
             return root;
