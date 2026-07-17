@@ -1,0 +1,53 @@
+name: Build glim
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake mingw-w64 libwayland-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev libxcursor-dev
+
+      - name: Install Slang
+        run: |
+          curl -sSL -o slang.tar.gz https://github.com/shader-slang/slang/releases/download/v2026.13.1/slang-2026.13.1-linux-x86_64.tar.gz
+          sudo tar --no-same-owner -xzf slang.tar.gz -C /usr/local
+          rm slang.tar.gz
+
+      - name: Set up toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: |
+            x86_64-unknown-linux-gnu
+            x86_64-pc-windows-gnu
+
+      - name: Build SO
+        run: cargo build --target x86_64-unknown-linux-gnu --release
+
+      - name: Build DLL
+        run: cargo build --target x86_64-pc-windows-gnu --release
+
+      - name: Upload artifact (Linux)
+        uses: actions/upload-artifact@v7
+        with:
+          name: glim.so
+          path: target/x86_64-unknown-linux-gnu/release/*.so
+          if-no-files-found: error
+
+      - name: Upload artifact (Windows)
+        uses: actions/upload-artifact@v7
+        with:
+          name: glim.dll
+          path: target/x86_64-pc-windows-gnu/release/*.dll
+          if-no-files-found: error
