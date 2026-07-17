@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -11,6 +12,18 @@ using UnityEngine.Rendering;
 
 namespace glim
 {
+    [Serializable]
+    public class BakeReport
+    {
+        public double bakeTime;
+        public string finishedAt;
+        public int lightmapCount;
+        public long lightmapBytes;
+        public long lightmapMemoryBytes;
+        public long lightingDataBytes;
+        public int probeCount;
+    }
+
     public class Bake
     {
         class ReadbackResult
@@ -25,6 +38,14 @@ namespace glim
         static volatile bool _running = false;
         static int _progressID = -1;
         static BakeContext _context = null;
+        
+        static volatile float _progress = 0f;
+        static volatile string _progressMessage = "";
+        static volatile bool _isPreview = false;
+        
+        public static bool IsBaking => _running && !_isPreview;
+        public static float BakeProgress => _progress;
+        public static string BakeMessage => _progressMessage;
 
         [AOT.MonoPInvokeCallback(typeof(Bindings.LightmapReadCallback))]
         public static void OnReadbackLightmap(Bindings.LightmapReadbackData data)
@@ -61,16 +82,98 @@ namespace glim
             }
             if (data.ty == 2) // progress
             {
-                Progress.Report(_progressID, data.progress, data.message.ToString());
+                _progress = data.progress;
+                _progressMessage = data.message.ToString();
             }
         }
 
         static double _bakeStartTime = 0.0;
+        
+        static readonly MethodInfo StorageMemorySize = ResolveStorageMemorySize();
+
+        static MethodInfo ResolveStorageMemorySize()
+        {
+            var type = AppDomain.CurrentDomain.GetAssemblies()
+                .Select(a => a.GetType("UnityEditor.TextureUtil", false))
+                .FirstOrDefault(t => t != null);
+
+            return type?.GetMethod("GetStorageMemorySizeLong",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+        }
+
+        static long GetCompressedTextureBytes(Texture2D texture)
+        {
+            if (texture == null || StorageMemorySize == null)
+            {
+                return 0;
+            }
+
+            return (long)StorageMemorySize.Invoke(null, new object[] { texture });
+        }
+
+        static string BakeReportPath(string scenePath)
+        {
+            var dir = Path.GetDirectoryName(scenePath);
+            var sceneName = Path.GetFileNameWithoutExtension(scenePath);
+            return Path.Combine(dir, sceneName, "bakeReport.json");
+        }
+
+        public static BakeReport LoadReport(string scenePath)
+        {
+            if (string.IsNullOrEmpty(scenePath))
+            {
+                return null;
+            }
+
+            var path = BakeReportPath(scenePath);
+            return File.Exists(path) ? JsonUtility.FromJson<BakeReport>(File.ReadAllText(path)) : null;
+        }
+
+        public static int ReportVersion { get; private set; }
+
+        static void SaveReport(string scenePath, BakeReport report)
+        {
+            if (string.IsNullOrEmpty(scenePath))
+            {
+                return;
+            }
+
+            var path = BakeReportPath(scenePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllText(path, JsonUtility.ToJson(report));
+            ReportVersion++;
+        }
+
+        const string BakingTitle = "Baking Lightmaps";
+        const string DenoisingTitle = "Denoising & Fixing Seams";
+
+        static string _progressTitle = "";
+
+        static void ReportProgress()
+        {
+            var message = _progressMessage;
+
+            // redraw since we can't edit titles for progress
+            var title = message.StartsWith(DenoisingTitle) ? DenoisingTitle : BakingTitle;
+
+            if (title != _progressTitle)
+            {
+                Progress.Finish(_progressID, Progress.Status.Succeeded);
+                _progressID = Progress.Start(title, null, Progress.Options.None);
+                _progressTitle = title;
+            }
+
+            Progress.Report(_progressID, _progress, message);
+        }
 
         static void PollBakeComplete()
         {
             if (!_isComplete)
             {
+                if (_progressID != -1)
+                {
+                    ReportProgress();
+                }
                 return;
             }
 
@@ -106,6 +209,8 @@ namespace glim
                 }
 
                 bool hasDirectional = false;
+                long lightmapBytes = 0;
+                long lightmapMemoryBytes = 0;
                 foreach (var result in _bakeResults)
                 {
                     var data = result.data;
@@ -162,8 +267,12 @@ namespace glim
 
 
 
+                    lightmapBytes += new FileInfo(path).Length;
+
                     AssetDatabase.ImportAsset(path);
                     var loadedAsset = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+
+                    lightmapMemoryBytes += GetCompressedTextureBytes(loadedAsset);
 
                     if (directional)
                     {
@@ -252,6 +361,17 @@ namespace glim
                 LightmapSettings.lightmaps = lightmapDatas.ToArray();
                 LightmapSettings.lightmapsMode = hasDirectional ? LightmapsMode.CombinedDirectional : LightmapsMode.NonDirectional;
 
+                SaveReport(scenePath, new BakeReport
+                {
+                    bakeTime = now - _bakeStartTime,
+                    finishedAt = DateTime.Now.ToString("o"),
+                    lightmapCount = _bakeResults.Count,
+                    lightmapBytes = lightmapBytes,
+                    lightmapMemoryBytes = lightmapMemoryBytes,
+                    lightingDataBytes = new FileInfo(destPath).Length,
+                    probeCount = _bakeProbesResults.Count,
+                });
+
                 LightmapBakerEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1, _context.reflectionProbesSpecular);
             }
             finally
@@ -268,6 +388,10 @@ namespace glim
             _isComplete = false;
             _running = false;
             _context = null;
+            _progress = 0f;
+            _progressMessage = "";
+            _progressTitle = "";
+            _isPreview = false;
             if (_progressID != -1)
             {
                 Progress.Finish(_progressID, Progress.Status.Succeeded);
@@ -397,6 +521,17 @@ namespace glim
         }
 #endif
 
+        // Refocus the window for QoL
+        static void RestoreSelection()
+        {
+            var baker = UnityEngine.Object.FindAnyObjectByType<LightmapBaker>();
+
+            if (baker != null)
+            {
+                Selection.activeGameObject = baker.gameObject;
+            }
+        }
+
         public static void Start(LightmapBaker baker, Bindings.GlimConfig config)
         {
             if (_running)
@@ -418,10 +553,13 @@ namespace glim
             _context = ctx;
 
             _running = true;
+            _isPreview = config.is_preview;
 
             if (!config.is_preview)
             {
-                _progressID = Progress.Start("Baking Lightmaps", null, Progress.Options.None);
+                _progressID = Progress.Start(BakingTitle, null, Progress.Options.None);
+                _progressTitle = BakingTitle;
+                RestoreSelection();
             }
 
 
