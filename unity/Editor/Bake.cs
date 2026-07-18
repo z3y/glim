@@ -34,10 +34,22 @@ namespace Glim
         static volatile float _progress = 0f;
         static volatile string _progressMessage = "";
         static volatile bool _isPreview = false;
+        static volatile bool _cancelRequested = false;
 
         public static bool IsBaking => _running && !_isPreview;
+        public static bool IsCancelling => _cancelRequested && _running;
         public static float BakeProgress => _progress;
         public static string BakeMessage => _progressMessage;
+
+        public static void Cancel()
+        {
+            if (!_running || _isPreview || _cancelRequested)
+            {
+                return;
+            }
+            _cancelRequested = true;
+            Bindings.app_request_cancel();
+        }
 
         [AOT.MonoPInvokeCallback(typeof(Bindings.ReadbackProbesCallback))]
         public static void OnReadbackLightprobes(Bindings.LightprobesReadbackData data)
@@ -139,6 +151,7 @@ namespace Glim
             {
                 Progress.Finish(_progressID, Progress.Status.Succeeded);
                 _progressID = Progress.Start(title, null, Progress.Options.None);
+                Progress.RegisterCancelCallback(_progressID, () => { Cancel(); return true; });
                 _progressTitle = title;
             }
 
@@ -158,6 +171,18 @@ namespace Glim
 
             if (_context.isPreview)
             {
+                ResetBake();
+                return;
+            }
+
+            if (_cancelRequested)
+            {
+                Debug.Log("Bake cancelled");
+                if (_progressID != -1)
+                {
+                    Progress.Finish(_progressID, Progress.Status.Canceled);
+                    _progressID = -1;
+                }
                 ResetBake();
                 return;
             }
@@ -346,6 +371,7 @@ namespace Glim
             _progressMessage = "";
             _progressTitle = "";
             _isPreview = false;
+            _cancelRequested = false;
             if (_progressID != -1)
             {
                 Progress.Finish(_progressID, Progress.Status.Succeeded);
@@ -512,6 +538,7 @@ namespace Glim
             if (!config.is_preview)
             {
                 _progressID = Progress.Start(BakingTitle, null, Progress.Options.None);
+                Progress.RegisterCancelCallback(_progressID, () => { Cancel(); return true; });
                 _progressTitle = BakingTitle;
                 RestoreSelection();
             }

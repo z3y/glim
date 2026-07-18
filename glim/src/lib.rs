@@ -1802,6 +1802,9 @@ fn render_lightmaps3(app: &mut Glim) {
     let progress_scale = 1.0 / progress_max as f32;
 
     for sample_index in 0..app.config.direct_samples {
+        if is_cancelled() {
+            break;
+        }
         bake_direct_push.sample_index = sample_index;
         (log)(LogMessage::progress(&message, progress * progress_scale));
         progress += 1.0;
@@ -1886,12 +1889,15 @@ fn render_lightmaps3(app: &mut Glim) {
             group_info_buffer.buffer,
         );
 
-        for bounce_index in 0..app.config.bounce_count {
+        'bounces: for bounce_index in 0..app.config.bounce_count {
             push.bounce_index = bounce_index;
 
             let message = format!("Baking Bounce {}", bounce_index + 1);
 
             for sample_index in 0..app.config.indirect_samples {
+                if is_cancelled() {
+                    break 'bounces;
+                }
                 push.sample_index = sample_index;
                 (log)(LogMessage::progress(&message, progress * progress_scale));
                 progress += 1.0;
@@ -2165,6 +2171,9 @@ fn render_lightmaps3(app: &mut Glim) {
     let mut post_step = 0;
 
     for group_index in 0..app.groups.len() {
+        if is_cancelled() {
+            break;
+        }
         match app.config.lightmap_mode {
             LightmapMode::NonDirectional => {
                 post_step += 1;
@@ -2187,7 +2196,7 @@ fn render_lightmaps3(app: &mut Glim) {
     drop(staging_buffer_lightmap);
 
     // light probes
-    if app.probes.len() > 0 {
+    if app.probes.len() > 0 && !is_cancelled() {
         let mut shader = load_bake_light_probes_shader(&app.vk, &app.constants);
 
         update_bake_light_probes_shader(
@@ -2288,4 +2297,8 @@ fn render_lightmaps3(app: &mut Glim) {
     drop(compacted_lightmap);
     drop(compaction_buffer);
     drop(group_info_buffer);
+
+    if is_cancelled() {
+        (log)(LogMessage::message("Bake cancelled by user."));
+    }
 }

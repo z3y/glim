@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
     ptr::{null, null_mut},
     slice,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use crate::{
@@ -188,8 +189,21 @@ fn handle_unwind_error(log_callback: LogCallback, err: Box<dyn Any + Send>) {
     (log_callback)(data);
 }
 
+// Atomic bool so compiler can be happy
+static CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+pub fn is_cancelled() -> bool {
+    CANCEL_REQUESTED.load(Ordering::Relaxed)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn app_request_cancel() {
+    CANCEL_REQUESTED.store(true, Ordering::Relaxed);
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn app_new(config: GlimConfig, output_dir: FfiString) -> *mut Glim {
+    CANCEL_REQUESTED.store(false, Ordering::Relaxed);
     let result = catch_unwind(AssertUnwindSafe(|| {
         let output_dir = PathBuf::from(output_dir.to_string());
         let app = Glim::new(config.clone(), output_dir);
