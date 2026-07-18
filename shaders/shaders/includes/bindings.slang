@@ -64,7 +64,7 @@ RWStructuredBuffer<float4> DecompactTarget;
 [[vk::binding(18, 0)]]
 RWStructuredBuffer<float> CompactedLightmap;
 
-[[vk::binding(19, 0)]]
+[[vk::binding(19, 0)]] [[vk::image_format("rgba32f")]]
 TextureCube<float4> Background;
 
 [[vk::binding(20, 0)]]

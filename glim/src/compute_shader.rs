@@ -787,7 +787,7 @@ pub fn update_preview_shader(
     // Background
     let info = [vk::DescriptorImageInfo {
         image_view: background,
-        image_layout: vk::ImageLayout::GENERAL,
+        image_layout: vk::ImageLayout::READ_ONLY_OPTIMAL,
         ..Default::default()
     }];
     let mut write = vk::WriteDescriptorSet {
