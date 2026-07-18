@@ -1120,6 +1120,57 @@ impl Glim {
     }
 }
 
+fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32]) -> io::Result<()> {
+    use std::fs::File;
+    use std::io::BufWriter;
+
+    let mut file = BufWriter::new(File::create(path)?);
+
+    // TGA header (18 bytes)
+    let header: [u8; 18] = [
+        0, // ID length
+        0, // Color map type
+        2, // Image type: uncompressed true-color
+        0,
+        0,
+        0,
+        0,
+        0, // Color map spec (unused)
+        0,
+        0, // X origin
+        0,
+        0, // Y origin
+        (w & 0xFF) as u8,
+        ((w >> 8) & 0xFF) as u8, // Width
+        (h & 0xFF) as u8,
+        ((h >> 8) & 0xFF) as u8, // Height
+        32,                      // Bits per pixel (32 = RGBA)
+        0x28,                    // Descriptor: 8 alpha bits, top-left origin (bit 5 set)
+    ];
+    file.write_all(&header)?;
+
+    let mut row = vec![0u8; w * 4];
+    for y in 0..h {
+        for x in 0..w {
+            let flipped_y = h - 1 - y;
+            let index = (x + flipped_y * w) * 4;
+            let r = (pixels[index + 0].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+            let g = (pixels[index + 1].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+            let b = (pixels[index + 2].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+            let a = (pixels[index + 3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+
+            let out = x * 4;
+            row[out + 0] = b;
+            row[out + 1] = g;
+            row[out + 2] = r;
+            row[out + 3] = a;
+        }
+        file.write_all(&row)?;
+    }
+
+    Ok(())
+}
+
 fn render_lightmaps3(app: &mut Glim) {
     let mut max_resolution = (1, 1);
     let mut total_pixel_count = 0;
@@ -2053,23 +2104,26 @@ fn render_lightmaps3(app: &mut Glim) {
                 })
                 .unwrap();
             } else if lightmap_type == 1 {
-                use exr::image::write::write_rgba_file;
-                use half::f16;
-
                 let full_path =
-                    output_dir.join(format!("Lightmap-{}_Directional.exr", group_index));
+                    output_dir.join(format!("Lightmap-{}_Directional.tga", group_index));
 
-                write_rgba_file(full_path, w, h, |x, y| {
-                    let flipped_y = h - 1 - y;
-                    let index = x + flipped_y * w;
-                    (
-                        f16::from_f32(pixels[index * 4 + 0]),
-                        f16::from_f32(pixels[index * 4 + 1]),
-                        f16::from_f32(pixels[index * 4 + 2]),
-                        f16::from_f32(pixels[index * 4 + 3]),
-                    )
-                })
-                .unwrap();
+                // unity doesnt seem to like rgba .exr files
+                // use exr::image::write::write_rgba_file;
+                // use half::f16;
+
+                // write_rgba_file(full_path, w, h, |x, y| {
+                //     let flipped_y = h - 1 - y;
+                //     let index = x + flipped_y * w;
+                //     (
+                //         pixels[index * 4 + 0],
+                //         pixels[index * 4 + 1],
+                //         pixels[index * 4 + 2],
+                //         pixels[index * 4 + 3],
+                //     )
+                // })
+                // .unwrap();
+
+                save_tga(full_path, w, h, pixels).unwrap();
             }
         };
     };

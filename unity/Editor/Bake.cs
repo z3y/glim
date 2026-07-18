@@ -192,7 +192,7 @@ namespace glim
                     BakeContextGroup group = _context.groups[groupIndex];
 
                     var diffuseName = $"Lightmap-{groupIndex}_Diffuse.exr";
-                    var directionalName = $"Lightmap-{groupIndex}_Directional.exr";
+                    var directionalName = $"Lightmap-{groupIndex}_Directional.tga";
 
                     {
                         string metaPath = Path.Combine(_context.outputDir, $"{diffuseName}.meta");
@@ -224,7 +224,7 @@ namespace glim
 
                     var groupAsset = _context.groups[groupIndex].groupAsset;
                     var diffuseName = $"Lightmap-{groupIndex}_Diffuse.exr";
-                    var directionalName = $"Lightmap-{groupIndex}_Directional.exr";
+                    var directionalName = $"Lightmap-{groupIndex}_Directional.tga";
 
                     {
                         var path = Path.Combine(_context.outputDir, diffuseName);
