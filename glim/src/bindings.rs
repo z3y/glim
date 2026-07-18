@@ -12,6 +12,7 @@ use crate::{
     math::Vector3,
     mesh::{FfiMesh, Mesh},
     sh::SHProbeL2,
+    skybox::Skybox,
 };
 
 #[repr(C)]
@@ -345,6 +346,30 @@ pub extern "C" fn app_add_probe(app: *mut Glim, mut position: Vector3, radius: f
         };
 
         app.probes.push(probe);
+    }));
+
+    if let Err(err) = result {
+        handle_unwind_error(app.config.log_callback, err);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn app_set_skybox(
+    app: *mut Glim,
+    pixels: *const f32,
+    pixels_length: u32,
+    width: u32,
+    height: u32,
+) {
+    if app.is_null() {
+        return;
+    }
+
+    let app = unsafe { &mut *app };
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let pixels = unsafe { slice::from_raw_parts(pixels, pixels_length as usize) };
+        app.skybox = Skybox::new(&app.vk, width, height, pixels);
     }));
 
     if let Err(err) = result {

@@ -16,9 +16,9 @@ struct PushConstants
     uint bounceCount;
 };
 
-float3 SampleBackground(float3 dir)
+float3 SampleSkybox(float3 dir)
 {
-    return Background.SampleLevel(BackgroundSampler, dir, 0.0).rgb;
+    return Skybox.SampleLevel(SkyboxSampler, dir, 0.0).rgb;
 }
 
 [shader("compute")]
@@ -43,7 +43,7 @@ float3 SampleBackground(float3 dir)
     if (!visible)
     {
         float3 viewDirectionWS = visibility.xyz;
-        LightmapDiffuse[coords] = float4(SampleBackground(viewDirectionWS), 1.0);
+        LightmapDiffuse[coords] = float4(SampleSkybox(viewDirectionWS), 1.0);
         return;
     }
 
@@ -87,14 +87,14 @@ float3 SampleBackground(float3 dir)
 
         float2 xiBounce = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
 
-        Ray bounceRay;
-        bounceRay.tMin = 0;
-        bounceRay.tMax = RAY_MAX;
-        bounceRay.P = positionWS;
-        bounceRay.D = RandomDirectionInHemisphere(normalWS, xiBounce);
+        Ray ray;
+        ray.tMin = 0;
+        ray.tMax = RAY_MAX;
+        ray.P = positionWS;
+        ray.D = RandomDirectionInHemisphere(normalWS, xiBounce);
 
         Hit bounceHit;
-        if (TraceRay(bounceRay, bounceHit))
+        if (TraceRay(ray, bounceHit))
         {
             Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
             positionWS = RayOffset(surface.P, surface.Ng);
@@ -117,6 +117,7 @@ float3 SampleBackground(float3 dir)
         }
         else
         {
+            color.rgb += throughput * SampleSkybox(ray.D);
             break;
         }
     }

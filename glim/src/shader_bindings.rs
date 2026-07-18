@@ -33,7 +33,7 @@ pub fn bind_albedos(
     });
 }
 
-pub fn bind_background(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
+pub fn bind_skybox(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
     bindings.push(vk::DescriptorSetLayoutBinding {
         binding: 19,
         descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,

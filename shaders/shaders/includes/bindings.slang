@@ -65,10 +65,10 @@ RWStructuredBuffer<float4> DecompactTarget;
 RWStructuredBuffer<float> CompactedLightmap;
 
 [[vk::binding(19, 0)]] [[vk::image_format("rgba32f")]]
-TextureCube<float4> Background;
+TextureCube<float4> Skybox;
 
 [[vk::binding(20, 0)]]
-SamplerState BackgroundSampler;
+SamplerState SkyboxSampler;
 
 struct LightmapInfo
 {

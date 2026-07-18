@@ -2,7 +2,7 @@ use ash::vk;
 
 use crate::{buffer::Buffer, math::Vector3, vulkan_context::VulkanContext};
 
-pub struct Background {
+pub struct Skybox {
     width: u32,
     height: u32,
     layout: vk::ImageLayout,
@@ -13,8 +13,8 @@ pub struct Background {
     bytes: u64,
 }
 
-impl Background {
-    pub fn new(ctx: &VulkanContext, width: u32, height: u32, pixels: &[f32]) -> Background {
+impl Skybox {
+    pub fn new(ctx: &VulkanContext, width: u32, height: u32, pixels: &[f32]) -> Skybox {
         let vk = &ctx.device;
         let format = vk::Format::R32G32B32A32_SFLOAT;
 
@@ -59,7 +59,7 @@ impl Background {
 
             let mut staging = Buffer::empty(
                 &ctx,
-                "Background Staging".to_owned(),
+                "Skybox Staging".to_owned(),
                 total_bytes,
                 vk::BufferUsageFlags::TRANSFER_SRC,
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
@@ -170,7 +170,7 @@ impl Background {
                 .mip_lod_bias(0.0);
             let sampler = vk.create_sampler(&sampler_info, None).unwrap();
 
-            Background {
+            Skybox {
                 width,
                 height,
                 layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -193,7 +193,7 @@ impl Background {
         };
     }
 
-    pub fn solid(ctx: &VulkanContext, width: u32, height: u32, color: Vector3) -> Background {
+    pub fn solid(ctx: &VulkanContext, width: u32, height: u32, color: Vector3) -> Skybox {
         let texels_per_face = (width * height) as usize;
         let mut pixels = Vec::with_capacity(texels_per_face * 4 * 6);
         for _ in 0..(texels_per_face * 6) {
@@ -202,11 +202,11 @@ impl Background {
             pixels.push(color.z);
             pixels.push(1.0);
         }
-        Background::new(ctx, width, height, &pixels)
+        Skybox::new(ctx, width, height, &pixels)
     }
 
-    pub fn null() -> Background {
-        Background {
+    pub fn null() -> Skybox {
+        Skybox {
             width: 0,
             height: 0,
             layout: vk::ImageLayout::UNDEFINED,

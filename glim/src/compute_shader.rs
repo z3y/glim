@@ -359,7 +359,7 @@ pub fn load_preview_shader(
     bind_vertices(&mut bindings);
     bind_lights(&mut bindings);
     bind_emissive_triangles(&mut bindings);
-    bind_background(&mut bindings);
+    bind_skybox(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
@@ -639,8 +639,8 @@ pub fn update_preview_shader(
     vertices: vk::Buffer,
     lights: vk::Buffer,
     emissive_triangles: vk::Buffer,
-    background: vk::ImageView,
-    background_sampler: vk::Sampler,
+    skybox: vk::ImageView,
+    skybox_sampler: vk::Sampler,
 ) {
     let mut descriptor_writes = Vec::new();
 
@@ -784,9 +784,9 @@ pub fn update_preview_shader(
     write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
-    // Background
+    // Skybox
     let info = [vk::DescriptorImageInfo {
-        image_view: background,
+        image_view: skybox,
         image_layout: vk::ImageLayout::READ_ONLY_OPTIMAL,
         ..Default::default()
     }];
@@ -798,9 +798,9 @@ pub fn update_preview_shader(
     };
     write = write.image_info(&info);
     descriptor_writes.push(write);
-    // BackgroundSampler
+    // SkyboxSampler
     let info = [vk::DescriptorImageInfo {
-        sampler: background_sampler,
+        sampler: skybox_sampler,
         ..Default::default()
     }];
     let mut write = vk::WriteDescriptorSet {

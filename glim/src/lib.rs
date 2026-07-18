@@ -8,7 +8,6 @@ use glfw_sys::{
     glfwSetWindowShouldClose, glfwWindowShouldClose,
 };
 
-use crate::background::Background;
 use crate::bindings::*;
 use crate::buffer::Buffer;
 use crate::compute_shader::*;
@@ -30,6 +29,7 @@ use crate::shaders::compaction_mask::{
     CompactionPushConstants, load_shader_compaction_mask, update_shader_compaction_mask,
 };
 use crate::shaders::decompact::{load_shader_decompact, update_shader_decompact};
+use crate::skybox::Skybox;
 use crate::{
     camera::Camera,
     compute_shader::{
@@ -45,7 +45,6 @@ use crate::{
     window::{initialize_window, update_camera},
 };
 
-mod background;
 mod bindings;
 mod buffer;
 mod camera;
@@ -60,6 +59,7 @@ mod seams;
 mod sh;
 mod shader_bindings;
 mod shaders;
+mod skybox;
 mod test;
 mod texture2d;
 mod vulkan_cmd;
@@ -107,7 +107,7 @@ pub struct Glim {
 
     pub output_dir: PathBuf,
 
-    pub background: Background,
+    pub skybox: Skybox,
 }
 
 impl Drop for Glim {
@@ -152,8 +152,8 @@ impl Drop for Glim {
             self.emissive_triangles_buffer.destroy(&self.vk);
         }
 
-        if !self.background.view().is_null() {
-            self.background.destroy(&self.vk);
+        if !self.skybox.view().is_null() {
+            self.skybox.destroy(&self.vk);
         }
     }
 }
@@ -339,8 +339,8 @@ fn initialize_render(app: &mut Glim) {
 
     app.tlas = create_tlas(&app.vk, blas);
 
-    if app.background.view().is_null() {
-        app.background = Background::solid(&app.vk, 4, 4, Vector3::new(1.0, 0.0, 1.0));
+    if app.skybox.view().is_null() {
+        app.skybox = Skybox::solid(&app.vk, 4, 4, Vector3::new(0.0, 0.0, 0.0));
     }
 
     if app.config.is_preview {
@@ -380,8 +380,8 @@ fn render_preview(app: &mut Glim) {
         app.gpu_mesh.vertex_buffer.buffer,
         app.gpu_lights.buffer,
         app.emissive_triangles_buffer.buffer,
-        app.background.view(),
-        app.background.sampler(),
+        app.skybox.view(),
+        app.skybox.sampler(),
     );
 
     let mut previous_time = std::time::Instant::now();
@@ -448,8 +448,8 @@ fn render_preview(app: &mut Glim) {
                     app.gpu_mesh.vertex_buffer.buffer,
                     app.gpu_lights.buffer,
                     app.emissive_triangles_buffer.buffer,
-                    app.background.view(),
-                    app.background.sampler(),
+                    app.skybox.view(),
+                    app.skybox.sampler(),
                 );
 
                 continue;
@@ -1106,7 +1106,7 @@ impl Glim {
             lightmap_mode: 0,
         };
 
-        let background = Background::null();
+        let skybox = Skybox::null();
 
         Self {
             vk,
@@ -1135,7 +1135,7 @@ impl Glim {
             adjust_samples_shader: ComputeShader::null(),
             constants,
             output_dir,
-            background,
+            skybox,
         }
     }
 }
