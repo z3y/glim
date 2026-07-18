@@ -9,7 +9,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 
-namespace glim
+namespace Glim
 {
     [CustomEditor(typeof(LightmapBaker))]
     public class LightmapBakerEditor : Editor

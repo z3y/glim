@@ -1,7 +1,7 @@
 #if UNITY_EDITOR
 using UnityEngine;
 
-namespace glim
+namespace Glim
 {
     public class LightmapGroupSelector : MonoBehaviour
     {

@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 
-namespace glim
+namespace Glim
 {
     public class BakeContextGroup
     {
@@ -88,6 +88,8 @@ namespace glim
         public LightmapMode lightmapMode;
         public bool isPreview;
 
+        public Color[] skyboxPixels;
+
         private static int GetDepth(Transform t)
         {
             int depth = 0;
@@ -101,6 +103,8 @@ namespace glim
             this.reflectionProbesSuperSampling = baker.reflectionProbesSuperSampling;
             this.reflectionProbesSpecular = baker.reflectionProbesSpecular;
             this.isPreview = config.is_preview;
+
+            this.skyboxPixels = SkyboxCapture.Capture(SceneManager.GetActiveScene());
 
             SerializedObject lda;
             if (!config.is_preview)

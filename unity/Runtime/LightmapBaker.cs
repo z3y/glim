@@ -6,7 +6,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace glim
+namespace Glim
 {
     public enum LightFalloffType : uint
     {

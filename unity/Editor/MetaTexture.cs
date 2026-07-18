@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace glim
+namespace Glim
 {
     public class MetaTexture : IDisposable
     {

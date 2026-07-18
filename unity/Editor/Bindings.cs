@@ -5,7 +5,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace glim
+namespace Glim
 {
     public static class Bindings
     {
@@ -138,6 +138,9 @@ namespace glim
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_add_light(IntPtr app, Light light);
+
+        [DllImport("glim", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void app_set_skybox(IntPtr app, Color[] pixels, uint pixels_length, uint width, uint height);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static unsafe extern void app_add_lightmap_group(IntPtr app, LightmapSettings settings, byte* albedoPixels, uint albedoPixelsLength, float* emissionPixels, uint emissionPixelsLength);
