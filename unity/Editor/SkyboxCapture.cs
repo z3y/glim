@@ -6,7 +6,7 @@ namespace Glim
 {
     public static class SkyboxCapture
     {
-        public const int RESOLUTION = 256;
+        public const int RESOLUTION = 128;
         const GraphicsFormat FORMAT = GraphicsFormat.R16G16B16A16_SFloat;
 
         public static Color[] Capture(Scene scene)

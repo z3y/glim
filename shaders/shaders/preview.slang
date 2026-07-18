@@ -37,6 +37,13 @@ struct PushConstants
     bool visible = encoded != 0;
     if (!visible)
     {
+        LightmapDiffuse[coords] = 0.0;
+        return;
+    }
+
+    bool hitSkybox = (encoded & (1 << 2)) != 0;
+    if (hitSkybox)
+    {
         float3 viewDirectionWS = visibility.xyz;
         LightmapDiffuse[coords] = float4(SampleSkybox(viewDirectionWS), 1.0);
         return;

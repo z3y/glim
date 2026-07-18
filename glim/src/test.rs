@@ -318,6 +318,11 @@ mod tests {
             }
         }
 
+        // {
+        //     let app = unsafe { &mut *app };
+        //     app.skybox = Skybox::solid(&app.vk, 8, 8, Vector3::new(0.05, 0.05, 0.05));
+        // }
+
         app_run(app);
 
         app_destroy(app);

@@ -24,7 +24,7 @@ struct PushConstants
 
     if (coords.x >= resolution.x || coords.y >= resolution.y)
     {
-        VisibilityBuffer[coords] = EncodeVisibilityBuffer(float2(0, 0), 0, false, false);
+        VisibilityBuffer[coords] = EncodeVisibilityBuffer(float2(0, 0), 0, false, false, false);
         return;
     }
 
@@ -55,11 +55,11 @@ struct PushConstants
         bool backfaceGI = surface.backfaceGI;
         bool smooth = UseSmoothPosition(surface);
         bool visible = backfaceGI || hit.frontFace;
-        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, visible, smooth);
+        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, visible, smooth, false);
     }
     else
     {
-        float4 encoded = EncodeVisibilityBuffer(float2(0, 0), 0, false, false);
+        float4 encoded = EncodeVisibilityBuffer(float2(0, 0), 0, false, false, true);
         encoded.xyz = ray.D;
         result = encoded;
     }

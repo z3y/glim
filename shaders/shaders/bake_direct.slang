@@ -79,7 +79,9 @@ struct PushConstants
     }
     else
     {
-        color.rgb += SampleSkybox(ray.D);
+        float3 current = SampleSkybox(ray.D);
+        color.rgb += current;
+        dominantDirection.xyz += ray.D * Luminance(current);
     }
 
     float4 previous = float4(

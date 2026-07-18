@@ -22,7 +22,7 @@ struct Hit
 }
 
 float4
-EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP)
+EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP, bool hitSkybox)
 {
     uint encoded = 0;
     if (isVisible)
@@ -32,6 +32,10 @@ EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSm
     if (useSmoothP)
     {
         encoded |= 0x1 << 1;
+    }
+    if (hitSkybox)
+    {
+        encoded |= 0x1 << 2;
     }
 
     return float4(bary, asfloat(primitiveID), asfloat(encoded));
