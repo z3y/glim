@@ -4,10 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
-using PlasticPipe.PlasticProtocol.Messages;
 using UnityEditor;
 using UnityEditor.SceneManagement;
-using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.Rendering;
 

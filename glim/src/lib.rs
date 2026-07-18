@@ -2088,21 +2088,31 @@ fn render_lightmaps3(app: &mut Glim) {
             let h = group.height as usize;
 
             if lightmap_type == 0 {
-                use exr::image::write::write_rgb_file;
+                use exr::prelude::*;
                 use half::f16;
 
                 let full_path = output_dir.join(format!("Lightmap-{}_Diffuse.exr", group_index));
 
-                write_rgb_file(full_path, w, h, |x, y| {
-                    let flipped_y = h - 1 - y;
+                let channels = SpecificChannels::rgb(|pos: Vec2<usize>| {
+                    let x = pos.x();
+                    let flipped_y = h - 1 - pos.y();
                     let index = x + flipped_y * w;
+
                     (
                         f16::from_f32(pixels[index * 4 + 0]),
                         f16::from_f32(pixels[index * 4 + 1]),
                         f16::from_f32(pixels[index * 4 + 2]),
                     )
-                })
-                .unwrap();
+                });
+
+                let layer = Layer::new(
+                    (w, h),
+                    LayerAttributes::named("diffuse"),
+                    Encoding::SMALL_LOSSLESS,
+                    channels,
+                );
+
+                Image::from_layer(layer).write().to_file(full_path).unwrap();
             } else if lightmap_type == 1 {
                 let full_path =
                     output_dir.join(format!("Lightmap-{}_Directional.tga", group_index));
