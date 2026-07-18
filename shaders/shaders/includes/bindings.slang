@@ -118,5 +118,7 @@ float3 SampleSkybox(float3 dir)
     {
         dir.z = -dir.z;
     }
-    return Skybox.SampleLevel(SkyboxSampler, dir, 0.0).rgb;
+    const float SKYBOX_MAX = 10.0;
+
+    return min(Skybox.SampleLevel(SkyboxSampler, dir, 0.0).rgb, SKYBOX_MAX);
 }
