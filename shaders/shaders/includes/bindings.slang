@@ -64,6 +64,12 @@ RWStructuredBuffer<float4> DecompactTarget;
 [[vk::binding(18, 0)]]
 RWStructuredBuffer<float> CompactedLightmap;
 
+[[vk::binding(19, 0)]]
+TextureCube<float4> Background;
+
+[[vk::binding(20, 0)]]
+SamplerState BackgroundSampler;
+
 struct LightmapInfo
 {
     uint2 resolution;

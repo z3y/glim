@@ -59,7 +59,9 @@ struct PushConstants
     }
     else
     {
-        result = EncodeVisibilityBuffer(float2(0, 0), 0, false, false);
+        float4 encoded = EncodeVisibilityBuffer(float2(0, 0), 0, false, false);
+        encoded.xyz = ray.D;
+        result = encoded;
     }
 
     VisibilityBuffer[coords] = result;

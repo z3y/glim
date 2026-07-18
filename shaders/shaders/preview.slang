@@ -16,6 +16,11 @@ struct PushConstants
     uint bounceCount;
 };
 
+float3 SampleBackground(float3 dir)
+{
+    return Background.SampleLevel(BackgroundSampler, dir, 0.0).rgb;
+}
+
 [shader("compute")]
     [numthreads(8, 8, 1)] void
     main(uint3 threadID : SV_DispatchThreadID)
@@ -34,8 +39,11 @@ struct PushConstants
     float4 visibility = VisibilityBuffer[coords];
 
     uint encoded = asuint(visibility.a);
-    if (encoded == 0)
+    bool visible = encoded != 0;
+    if (!visible)
     {
+        float3 viewDirectionWS = visibility.xyz;
+        LightmapDiffuse[coords] = float4(SampleBackground(viewDirectionWS), 1.0);
         return;
     }
 

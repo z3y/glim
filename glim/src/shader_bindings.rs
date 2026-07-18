@@ -33,6 +33,23 @@ pub fn bind_albedos(
     });
 }
 
+pub fn bind_background(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 19,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+    bindings.push(vk::DescriptorSetLayoutBinding {
+        binding: 20,
+        descriptor_type: vk::DescriptorType::SAMPLER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        ..Default::default()
+    });
+}
+
 pub fn bind_lightmap_diffuse(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
     bindings.push(vk::DescriptorSetLayoutBinding {
         binding: 4,

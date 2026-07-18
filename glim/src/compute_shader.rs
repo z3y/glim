@@ -359,6 +359,7 @@ pub fn load_preview_shader(
     bind_vertices(&mut bindings);
     bind_lights(&mut bindings);
     bind_emissive_triangles(&mut bindings);
+    bind_background(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
@@ -638,6 +639,8 @@ pub fn update_preview_shader(
     vertices: vk::Buffer,
     lights: vk::Buffer,
     emissive_triangles: vk::Buffer,
+    background: vk::ImageView,
+    background_sampler: vk::Sampler,
 ) {
     let mut descriptor_writes = Vec::new();
 
@@ -779,6 +782,34 @@ pub fn update_preview_shader(
         ..Default::default()
     };
     write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // Background
+    let info = [vk::DescriptorImageInfo {
+        image_view: background,
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 19,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
+    // BackgroundSampler
+    let info = [vk::DescriptorImageInfo {
+        sampler: background_sampler,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 20,
+        descriptor_type: vk::DescriptorType::SAMPLER,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
     descriptor_writes.push(write);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
