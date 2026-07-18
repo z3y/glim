@@ -194,7 +194,15 @@ namespace Glim
                         display = DisplayStyle.None
                     }
                 };
-                cancelButton.clicked += Bake.Cancel;
+                cancelButton.clicked += () =>
+                {
+                    if (EditorUtility.DisplayDialog("Cancel Bake",
+                            "Are you sure you want to cancel the current bake?",
+                            "Cancel Bake", "Keep Baking"))
+                    {
+                        Bake.Cancel();
+                    }
+                };
                 root.Add(cancelButton);
 
                 Label report = new()
