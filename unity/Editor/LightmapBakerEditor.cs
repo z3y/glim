@@ -185,6 +185,26 @@ namespace Glim
                 };
                 root.Add(progressBar);
 
+                Button cancelButton = new()
+                {
+                    text = "Cancel Bake",
+                    style =
+                    {
+                        height = 25,
+                        display = DisplayStyle.None
+                    }
+                };
+                cancelButton.clicked += () =>
+                {
+                    if (EditorUtility.DisplayDialog("Cancel Bake",
+                            "Are you sure you want to cancel the current bake?",
+                            "Cancel Bake", "Keep Baking"))
+                    {
+                        Bake.Cancel();
+                    }
+                };
+                root.Add(cancelButton);
+
                 Label report = new()
                 {
                     style =
@@ -223,12 +243,17 @@ namespace Glim
                 {
                     bool running = Bake.IsBaking;
                     progressBar.style.display = running ? DisplayStyle.Flex : DisplayStyle.None;
+                    cancelButton.style.display = running ? DisplayStyle.Flex : DisplayStyle.None;
                     button.SetEnabled(!running);
 
                     if (running)
                     {
                         progressBar.value = Mathf.Clamp01(Bake.BakeProgress) * 100f;
                         progressBar.title = Bake.BakeMessage;
+
+                        bool cancelling = Bake.IsCancelling;
+                        cancelButton.SetEnabled(!cancelling);
+                        cancelButton.text = cancelling ? "Cancelling…" : "Cancel Bake";
                     }
 
                     if (seenReport != Bake.ReportVersion)

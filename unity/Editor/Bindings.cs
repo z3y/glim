@@ -128,6 +128,9 @@ namespace Glim
         public static extern void app_run(IntPtr app);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_request_cancel();
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_destroy(IntPtr app);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
