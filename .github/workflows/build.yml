@@ -1,8 +1,6 @@
 name: Build glim
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
 
 jobs:
