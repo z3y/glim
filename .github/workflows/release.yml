@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Slang
+        run: |
+          curl.exe -L -o slang.zip https://github.com/shader-slang/slang/releases/download/v2026.13.1/slang-2026.13.1-windows-x86_64.zip
+
+          $expected = "fa1c9bcab2cdcd3626f7a1e250dd35d606c1b84745b64627f1dd63fca3746a70"
+          $actual = (Get-FileHash slang.zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) {
+            Write-Error "Checksum mismatch! Expected $expected, but got $actual"
+            exit 1
+          }
+
+          Expand-Archive slang.zip -DestinationPath "$env:RUNNER_TEMP\slang"
+          "$env:RUNNER_TEMP\slang\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Remove-Item slang.zip
+
+      - name: Build
+        working-directory: glim
+        run: cargo build --release
+
+      - name: Upload DLL
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: target/release/glim.dll
+
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev libxcursor-dev
+
+      - name: Install Slang
+        run: |
+          curl -sSL -o slang.tar.gz https://github.com/shader-slang/slang/releases/download/v2026.13.1/slang-2026.13.1-linux-x86_64.tar.gz
+
+          EXPECTED="c1ed948af94c6fd2034cc0f82f6892b8b287d5362939758cb4955676f26d893e"
+          echo "$EXPECTED  slang.tar.gz" | sha256sum -c -
+
+          sudo tar --no-same-owner -xzf slang.tar.gz -C /usr/local
+          rm slang.tar.gz
+
+      - name: Build
+        working-directory: glim
+        run: cargo build --release
+
+      - name: Upload SO
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: target/release/libglim.so
+
+  release:
+    needs:
+      - build-windows
+      - build-linux
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: windows
+          path: build/windows
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: linux
+          path: build/linux
+
+      - name: Read package.json
+        id: package
+        run: |
+          NAME=$(jq -r '.name' unity/package.json)
+          VERSION=$(jq -r '.version' unity/package.json)
+
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Copy libraries
+        run: |
+          cp build/windows/glim.dll unity/Editor/glim.dll
+          cp build/linux/libglim.so unity/Editor/glim.so
+
+      - name: Create zip
+        run: |
+          ZIP_NAME="${{ steps.package.outputs.name }}-${{ steps.package.outputs.version }}.zip"
+
+          cd unity
+          zip -r "../$ZIP_NAME" .
+
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create \
+            --draft \
+            "v${{ steps.package.outputs.version }}" \
+            "${{ env.ZIP_NAME }}" \
+            --title "v${{ steps.package.outputs.version }}"
