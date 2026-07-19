@@ -3,11 +3,10 @@ name: Release
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build-windows:
+    permissions:
+      contents: read
     runs-on: windows-latest
 
     steps:
@@ -39,6 +38,8 @@ jobs:
           path: target/release/glim.dll
 
   build-linux:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
 
     steps:
@@ -70,6 +71,8 @@ jobs:
           path: target/release/libglim.so
 
   release:
+    permissions:
+      contents: write
     needs:
       - build-windows
       - build-linux
