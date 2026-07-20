@@ -262,7 +262,7 @@ namespace Glim
                         seenReport = Bake.ReportVersion;
                         RefreshReport();
                     }
-                }).Every(100);
+                }).Every(200);
             }
 
             return root;

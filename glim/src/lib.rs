@@ -1788,12 +1788,15 @@ fn render_lightmaps(app: &mut Glim) {
         app.config.direct_samples + app.config.indirect_samples * app.config.bounce_count;
     let progress_scale = 1.0 / progress_max as f32;
 
+    let last_sample = app.config.direct_samples - 1;
     for sample_index in 0..app.config.direct_samples {
         if is_cancelled() {
             break;
         }
         bake_direct_push.sample_index = sample_index;
-        (log)(LogMessage::progress(progress * progress_scale));
+        if sample_index % 4 == 0 || sample_index == last_sample {
+            (log)(LogMessage::progress(progress * progress_scale));
+        }
         progress += 1.0;
 
         let vk = &app.vk.device;
@@ -1882,12 +1885,15 @@ fn render_lightmaps(app: &mut Glim) {
             let message = format!("Baking Bounce {}", bounce_index + 1);
             (log)(LogMessage::message(&message));
 
+            let last_sample = app.config.indirect_samples - 1;
             for sample_index in 0..app.config.indirect_samples {
                 if is_cancelled() {
                     break 'bounces;
                 }
                 push.sample_index = sample_index;
-                (log)(LogMessage::progress(progress * progress_scale));
+                if sample_index % 4 == 0 || sample_index == last_sample {
+                    (log)(LogMessage::progress(progress * progress_scale));
+                }
                 progress += 1.0;
 
                 let vk = &app.vk.device;
