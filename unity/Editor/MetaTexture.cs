@@ -226,21 +226,30 @@ namespace Glim
                         }
                         else
                         {
-
-
                             if (type == AtlasType.Emission)
                             {
-                                if (!mat.globalIlluminationFlags.HasFlag(MaterialGlobalIlluminationFlags.BakedEmissive))
+                                if (!IsMaterialEmissive(mat))
                                 {
                                     continue;
                                 }
                             }
                             int meta = mat.FindPass("META");
-                            cmd.DrawRenderer(renderer, mat, submeshIndex, meta);
+                            if (meta >= 0)
+                            {
+                                cmd.DrawRenderer(renderer, mat, submeshIndex, meta);
+                            }
                         }
                     }
                 }
             }
+        }
+
+        public static bool IsMaterialEmissive(Material mat)
+        {
+            if (!mat) return false;
+            if (!mat.shader) return false;
+
+            return mat.globalIlluminationFlags.HasFlag(MaterialGlobalIlluminationFlags.BakedEmissive);
         }
 
         public static bool IsMaterialTransparent(Material mat)

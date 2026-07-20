@@ -76,12 +76,12 @@ struct PushConstants
         dominantDirection.xyz += L * Luminance(emissive);
     }
 
-    Hit bounceHit;
-    if (TraceRay(ray, bounceHit))
+    Hit hit;
+    if (TraceRay(ray, hit))
     {
-        Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
+        Surface surface = Surface::Get(hit.primitiveID, hit.bary, hit.frontFace);
 
-        if (!bounceHit.frontFace)
+        if (!hit.frontFace)
         {
             if (!surface.backfaceGI)
             {
@@ -92,24 +92,29 @@ struct PushConstants
         float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
         float3 emission = bounceEmission * color.a;
 
-        if (EMISSIVE_TRIANGLES_COUNT > 0)
+        if (any(emission > 0.0))
         {
-            float triangleArea = CalculateTriangleArea(bounceHit.primitiveID);
-            float3 positionToLight = surface.P - positionWS;
-            float distSq = dot(positionToLight, positionToLight);
-            float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
-            float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
+            if (EMISSIVE_TRIANGLES_COUNT > 0)
+            {
+                float triangleArea = CalculateTriangleArea(hit.primitiveID);
+                float3 positionToLight = surface.P - positionWS;
+                float distSq = dot(positionToLight, positionToLight);
+                float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
 
-            emission *= MISWeight(bsdfPdf, lightPdf);
+                if (cosThetaLight > 0.0)
+                {
+                    float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
+                    emission *= MISWeight(bsdfPdf, lightPdf);
+                    color.rgb += emission;
+                    dominantDirection.xyz += ray.D * Luminance(emission);
+                }
+            }
+            else
+            {
 
-            color.rgb += emission;
-            dominantDirection.xyz += ray.D * Luminance(emission);
-        }
-        else
-        {
-
-            color.rgb += emission;
-            dominantDirection.xyz += ray.D * Luminance(emission);
+                color.rgb += emission;
+                dominantDirection.xyz += ray.D * Luminance(emission);
+            }
         }
     }
     else

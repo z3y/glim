@@ -279,7 +279,6 @@ namespace Glim
                 }
             }
 
-            // todo move to ui
             var allRenderers = rootObjects.SelectMany(x => x.GetComponentsInChildren<MeshRenderer>(false));
             var unclaimedRenderers = new List<MeshRenderer>();
             foreach (var r in allRenderers)
@@ -533,6 +532,7 @@ namespace Glim
             public uint groupIndex;
             public bool backfaceGI;
             public bool transparent;
+            public bool emissive;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -555,8 +555,10 @@ namespace Glim
                 var triangles = mesh.triangles;
 
                 var uvs = mesh.HasVertexAttribute(VertexAttribute.TexCoord1) ? mesh.uv2 : mesh.uv;
+                // todo backfacegi, emissive and transparent per submesh instead of entire mesh
                 bool backfaceGI = false;
                 bool transparent = false;
+                bool emissive = false;
                 if (renderers[i] is MeshRenderer mr)
                 {
                     var evs = mr.enlightenVertexStream;
@@ -572,7 +574,6 @@ namespace Glim
                     }
 
                     var mats = mr.sharedMaterials;
-                    // todo backfacegi and transparent per submesh instead of entire mesh
                     foreach (var mat in mats)
                     {
                         if (mat == null)
@@ -588,6 +589,11 @@ namespace Glim
                         if (MetaTexture.IsMaterialTransparent(mat))
                         {
                             transparent = true;
+                        }
+
+                        if (MetaTexture.IsMaterialEmissive(mat))
+                        {
+                            emissive = true;
                         }
                     }
                 }
@@ -630,7 +636,8 @@ namespace Glim
                     triangles = triangles,
                     groupIndex = groupIndex,
                     backfaceGI = backfaceGI,
-                    transparent = transparent
+                    transparent = transparent,
+                    emissive = emissive,
                 };
 
                 datas.Add(data);
