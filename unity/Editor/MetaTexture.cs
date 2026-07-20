@@ -13,9 +13,6 @@ namespace Glim
         int _resolution;
         Material _metaAlphaMat;
 
-        // CommandBuffer.DrawRenderer only records a material reference, so the shared
-        // AlphaMeta asset cannot be re-configured per draw - every draw would resolve to
-        // whatever was set last. Keep one configured variant per source material instead.
         readonly Dictionary<Material, Material> _alphaMatVariants = new();
 
         public MetaTexture(int resolution, AtlasType type)
@@ -54,16 +51,21 @@ namespace Glim
             using var cmd = new CommandBuffer();
             cmd.SetRenderTarget(_rt);
 
-            cmd.ClearRenderTarget(true, true, Color.black);
+            if (type == AtlasType.Albedo)
+            {
+                cmd.ClearRenderTarget(true, true, Color.white);
+            }
+            else
+            {
+                cmd.ClearRenderTarget(true, true, Color.black);
+            }
+
             RenderMeta(renderers, type, cmd);
             if (type == AtlasType.Albedo)
             {
                 RenderMeta(renderers, AtlasType.Alpha, cmd);
             }
 
-            // Executed once here rather than at the end of each RenderMeta: the buffer is
-            // cumulative, so executing per pass replayed the clear and every albedo draw a
-            // second time and threw the first pass's output away.
             Graphics.ExecuteCommandBuffer(cmd);
 
             var format = type == AtlasType.Albedo ? TextureFormat.RGBA32 : TextureFormat.RGBAFloat;
@@ -73,7 +75,62 @@ namespace Glim
 
         static int _Cutoff = Shader.PropertyToID("_Cutoff");
         static int _MainTex = Shader.PropertyToID("_MainTex");
+        static int _BaseMap = Shader.PropertyToID("_BaseMap");
         static int _Color = Shader.PropertyToID("_Color");
+        static int _BaseColor = Shader.PropertyToID("_BaseColor");
+
+        Color GetMaterialColor(Material mat)
+        {
+            if (mat.HasProperty(_Color))
+            {
+                return mat.GetColor(_Color);
+            }
+            if (mat.HasProperty(_BaseColor))
+            {
+                return mat.GetColor(_BaseColor);
+            }
+            return Color.white;
+        }
+
+        Texture GetMaterialAlbedo(Material mat)
+        {
+            if (mat.HasProperty(_MainTex))
+            {
+                return mat.GetTexture(_MainTex);
+            }
+            if (mat.HasProperty(_BaseMap))
+            {
+                return mat.GetTexture(_BaseMap);
+            }
+            return Texture2D.whiteTexture;
+        }
+
+        Vector2 GetMaterialAlbedoScale(Material mat)
+        {
+            if (mat.HasProperty(_MainTex))
+            {
+                return mat.GetTextureScale(_MainTex);
+            }
+            if (mat.HasProperty(_BaseMap))
+            {
+                return mat.GetTextureScale(_BaseMap);
+            }
+            return Vector2.one;
+        }
+
+        Vector2 GetMaterialAlbedoOffset(Material mat)
+        {
+            if (mat.HasProperty(_MainTex))
+            {
+                return mat.GetTextureOffset(_MainTex);
+            }
+            if (mat.HasProperty(_BaseMap))
+            {
+                return mat.GetTextureOffset(_BaseMap);
+            }
+            return Vector2.zero;
+        }
+
 
         Material GetAlphaMaterial(Material source)
         {
@@ -83,8 +140,9 @@ namespace Glim
             }
 
             variant = new Material(_metaAlphaMat) { hideFlags = HideFlags.HideAndDontSave };
-            variant.SetTexture(_MainTex, source.mainTexture);
-            variant.SetColor(_Color, source.color);
+
+            variant.SetTexture(_MainTex, GetMaterialAlbedo(source));
+            variant.SetColor(_Color, GetMaterialColor(source));
 
             string renderType = source.GetTag("RenderType", false, "");
             if (variant.HasProperty(_Cutoff) && renderType == "TransparentCutout")
@@ -96,8 +154,8 @@ namespace Glim
                 variant.SetFloat(_Cutoff, 0.5f);
             }
 
-            variant.SetTextureOffset(_MainTex, source.mainTextureOffset);
-            variant.SetTextureScale(_MainTex, source.mainTextureScale);
+            variant.SetTextureScale(_MainTex, GetMaterialAlbedoScale(source));
+            variant.SetTextureOffset(_MainTex, GetMaterialAlbedoOffset(source));
 
             _alphaMatVariants.Add(source, variant);
             return variant;

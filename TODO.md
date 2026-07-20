@@ -22,6 +22,7 @@
   - [ ] Maybe denoise light probes or do MIS
 - [ ] MIS for area lights
 - [ ] The manual denoiser setup is not ideal
+- [ ] There is no weight for MIS
 
 ## Optimization
 - [ ] Manually build the LightingData asset. This is one of the slowest things that happens before the bake starts becuse it has to start the built in baker (in an empty scene) for light probes tetrahedralization
