@@ -13,7 +13,7 @@ use crate::buffer::Buffer;
 use crate::compute_shader::*;
 use crate::graphics_shader::update_visibility_shader;
 use crate::lights::light_buffer_flags;
-use crate::math::Vector3;
+use crate::math::{Vector2, Vector3};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 use crate::shaders::bake_direct::{
@@ -843,16 +843,19 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
     app.preview_initialized = false;
 }
 
-#[inline]
-fn edge_side(ax: f32, ay: f32, bx: f32, by: f32, px: f32, py: f32) -> f32 {
-    (px - ax) * (by - ay) - (py - ay) * (bx - ax)
-}
-
 fn extract_emissive_triangles(app: &mut Glim) {
     // todo indices of both opaque and transparent
     let vertices = &app.opaque_mesh.vertices;
     let indices = &app.opaque_mesh.indices;
     let mut emissive_triangles: Vec<u32> = Vec::new();
+
+    fn sample_emissive(uv: Vector2, w: u32, h: u32, pixels: &Vec<f32>) -> bool {
+        let x = (uv.x * w as f32).clamp(0.0, (w - 1) as f32) as usize;
+        let y = (uv.y * h as f32).clamp(0.0, (h - 1) as f32) as usize;
+        let index = (y * w as usize + x) * 4;
+        let emission = &pixels[index..index + 4];
+        emission[0] > 0.0 || emission[1] > 0.0 || emission[2] > 0.0
+    }
 
     if app.config.mis {
         for primitive_id in 0..(indices.len() / 3) {
@@ -883,17 +886,21 @@ fn extract_emissive_triangles(app: &mut Glim) {
 
             let center_uv = (uv0 + uv1 + uv2) / 3.0;
 
-            let x = (center_uv.x * w as f32).clamp(0.0, (w - 1) as f32) as usize;
-            let y = (center_uv.y * h as f32).clamp(0.0, (h - 1) as f32) as usize;
-
-            let index = (y * w as usize + x) * 4;
-
-            let emission = &pixels[index..index + 4];
-
-            let is_emissive = emission[0] > 0.0 || emission[1] > 0.0 || emission[2] > 0.0;
-
-            if is_emissive {
+            if sample_emissive(center_uv, w, h, pixels) {
                 emissive_triangles.push(primitive_id as u32);
+                continue;
+            }
+            if sample_emissive(uv0, w, h, pixels) {
+                emissive_triangles.push(primitive_id as u32);
+                continue;
+            }
+            if sample_emissive(uv1, w, h, pixels) {
+                emissive_triangles.push(primitive_id as u32);
+                continue;
+            }
+            if sample_emissive(uv2, w, h, pixels) {
+                emissive_triangles.push(primitive_id as u32);
+                continue;
             }
         }
     }
