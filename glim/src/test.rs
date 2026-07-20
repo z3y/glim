@@ -459,15 +459,11 @@ mod tests {
     #[unsafe(no_mangle)]
     pub extern "C" fn log_callback(data: LogMessage) {
         match data.ty {
-            LogMessageType::Success => println!("Message: {}", data.message.from()),
+            LogMessageType::Info => println!("Message: {}", data.message.from()),
             LogMessageType::Error => panic!("Error: {}", data.message.from()),
             LogMessageType::Progress => {
                 use std::io::{self, Write};
-                print!(
-                    "\r{}: {:.1}%\x1B[K",
-                    data.message.from(),
-                    data.progress * 100.0
-                );
+                print!("\rProgress: {:.1}%\x1B[K", data.progress * 100.0);
                 let _ = io::stdout().flush();
             }
         }

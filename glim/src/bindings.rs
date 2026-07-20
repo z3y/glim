@@ -54,7 +54,7 @@ pub enum LightmapMode {
 
 #[repr(u32)]
 pub enum LogMessageType {
-    Success = 0,
+    Info = 0,
     Error = 1,
     Progress = 2,
 }
@@ -91,6 +91,11 @@ impl FfiString {
         }
     }
 
+    pub const EMPTY: FfiString = FfiString {
+        raw: "".as_ptr(),
+        length: 0,
+    };
+
     pub fn to_string(self) -> String {
         if self.raw.is_null() {
             return String::new();
@@ -113,17 +118,17 @@ pub struct LogMessage {
 impl LogMessage {
     pub fn message(message: &str) -> Self {
         Self {
-            ty: LogMessageType::Success,
+            ty: LogMessageType::Info,
             progress: -1.0,
             message: FfiString::new(message),
         }
     }
 
-    pub fn progress(message: &str, progress: f32) -> Self {
+    pub fn progress(progress: f32) -> Self {
         Self {
             ty: LogMessageType::Progress,
             progress,
-            message: FfiString::new(message),
+            message: FfiString::EMPTY,
         }
     }
 

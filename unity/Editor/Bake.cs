@@ -32,14 +32,14 @@ namespace Glim
         static BakeContext _context = null;
 
         static volatile float _progress = 0f;
-        static volatile string _progressMessage = "";
+        static volatile string _bakeMessage = "";
         static volatile bool _isPreview = false;
         static volatile bool _cancelRequested = false;
 
         public static bool IsBaking => _running && !_isPreview;
         public static bool IsCancelling => _cancelRequested && _running;
         public static float BakeProgress => _progress;
-        public static string BakeMessage => _progressMessage;
+        public static string BakeMessage => _bakeMessage;
 
         public static void Cancel()
         {
@@ -63,18 +63,20 @@ namespace Glim
         [AOT.MonoPInvokeCallback(typeof(Bindings.LogCallback))]
         public static void OnLogCalback(Bindings.LogData data)
         {
-            if (data.ty == 0) // success
+            if (data.ty == 2) // progress
             {
-                Debug.Log(data.message.ToString());
+                _progress = data.progress;
+            }
+
+            if (data.ty == 0) // info
+            {
+                _bakeMessage = data.message.ToString();
+                Debug.Log(_bakeMessage);
+                ChangeProgressMessage(_bakeMessage);
             }
             if (data.ty == 1) // error
             {
                 throw new Exception(data.message.ToString());
-            }
-            if (data.ty == 2) // progress
-            {
-                _progress = data.progress;
-                _progressMessage = data.message.ToString();
             }
         }
 
@@ -135,27 +137,16 @@ namespace Glim
             ReportVersion++;
         }
 
-        const string BakingTitle = "Baking Lightmaps";
-        const string DenoisingTitle = "Denoising & Fixing Seams";
-
-        static string _progressTitle = "";
-
-        static void ReportProgress()
+        static void ChangeProgressMessage(string title)
         {
-            var message = _progressMessage;
-
-            // redraw since we can't edit titles for progress
-            var title = message.StartsWith(DenoisingTitle) ? DenoisingTitle : BakingTitle;
-
-            if (title != _progressTitle)
+            if (_progressID != -1)
             {
                 Progress.Finish(_progressID, Progress.Status.Succeeded);
                 _progressID = Progress.Start(title, null, Progress.Options.None);
                 Progress.RegisterCancelCallback(_progressID, () => { Cancel(); return true; });
-                _progressTitle = title;
             }
 
-            Progress.Report(_progressID, _progress, message);
+            Progress.Report(_progressID, _progress, _bakeMessage);
         }
 
         static void PollBakeComplete()
@@ -164,7 +155,7 @@ namespace Glim
             {
                 if (_progressID != -1)
                 {
-                    ReportProgress();
+                    Progress.Report(_progressID, _progress, _bakeMessage);
                 }
                 return;
             }
@@ -177,7 +168,6 @@ namespace Glim
 
             if (_cancelRequested)
             {
-                Debug.Log("Bake cancelled");
                 if (_progressID != -1)
                 {
                     Progress.Finish(_progressID, Progress.Status.Canceled);
@@ -368,8 +358,7 @@ namespace Glim
             _running = false;
             _context = null;
             _progress = 0f;
-            _progressMessage = "";
-            _progressTitle = "";
+            _bakeMessage = "";
             _isPreview = false;
             _cancelRequested = false;
             if (_progressID != -1)
@@ -537,9 +526,8 @@ namespace Glim
 
             if (!config.is_preview)
             {
-                _progressID = Progress.Start(BakingTitle, null, Progress.Options.None);
+                _progressID = Progress.Start("", null, Progress.Options.None);
                 Progress.RegisterCancelCallback(_progressID, () => { Cancel(); return true; });
-                _progressTitle = BakingTitle;
                 RestoreSelection();
             }
 

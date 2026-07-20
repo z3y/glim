@@ -1781,6 +1781,7 @@ fn render_lightmaps(app: &mut Glim) {
     let compacted_groups_x = (compacted_pixels_count + 63) / 64;
 
     let message = format!("Baking Direct");
+    (log)(LogMessage::message(&message));
 
     let mut progress = 0.0;
     let progress_max =
@@ -1792,7 +1793,7 @@ fn render_lightmaps(app: &mut Glim) {
             break;
         }
         bake_direct_push.sample_index = sample_index;
-        (log)(LogMessage::progress(&message, progress * progress_scale));
+        (log)(LogMessage::progress(progress * progress_scale));
         progress += 1.0;
 
         let vk = &app.vk.device;
@@ -1879,13 +1880,14 @@ fn render_lightmaps(app: &mut Glim) {
             push.bounce_index = bounce_index;
 
             let message = format!("Baking Bounce {}", bounce_index + 1);
+            (log)(LogMessage::message(&message));
 
             for sample_index in 0..app.config.indirect_samples {
                 if is_cancelled() {
                     break 'bounces;
                 }
                 push.sample_index = sample_index;
-                (log)(LogMessage::progress(&message, progress * progress_scale));
+                (log)(LogMessage::progress(progress * progress_scale));
                 progress += 1.0;
 
                 let vk = &app.vk.device;
@@ -1920,6 +1922,9 @@ fn render_lightmaps(app: &mut Glim) {
         indirect_shader.destroy(&app.vk);
         drop(indirect_shader);
     }
+
+    let message = format!("Decompacting");
+    (log)(LogMessage::message(&message));
 
     let mut decompact_shader = load_shader_decompact(&app.vk, &app.constants);
 
@@ -1968,10 +1973,10 @@ fn render_lightmaps(app: &mut Glim) {
     let process_lightmap = |group_index: usize, lightmap_type: u32, post_step: u32| {
         let group = &app.groups[group_index].settings;
 
-        (log)(LogMessage::progress(
-            &format!("Denoising & Fixing Seams ({}/{})", post_step, post_total),
-            post_step as f32 / post_total as f32,
-        ));
+        (log)(LogMessage::message(&format!(
+            "Processing Lightmap ({}/{})",
+            post_step, post_total
+        )));
 
         let mut compaction_push = CompactionPushConstants {
             width: group.width,
@@ -2024,6 +2029,11 @@ fn render_lightmaps(app: &mut Glim) {
                         let start_time = std::time::Instant::now();
 
                         let directional = lightmap_type == 1;
+
+                        (log)(LogMessage::message(&format!(
+                            "Denoising Lightmap ({}/{})",
+                            post_step, post_total
+                        )));
 
                         oidn.denoise(
                             pixels,
@@ -2181,6 +2191,8 @@ fn render_lightmaps(app: &mut Glim) {
     drop(compacted_visibility);
     drop(staging_buffer_lightmap);
 
+    (log)(LogMessage::message(&format!("Baking Light Probes")));
+
     // light probes
     if app.probes.len() > 0 && !is_cancelled() {
         let mut shader = load_bake_light_probes_shader(&app.vk, &app.constants);
@@ -2285,6 +2297,6 @@ fn render_lightmaps(app: &mut Glim) {
     drop(group_info_buffer);
 
     if is_cancelled() {
-        (log)(LogMessage::message("Bake cancelled by user."));
+        (log)(LogMessage::message("Bake cancelled by user"));
     }
 }

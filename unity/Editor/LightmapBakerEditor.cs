@@ -177,6 +177,7 @@ namespace Glim
 
                 ProgressBar progressBar = new()
                 {
+                    title = "Baking Lightmaps",
                     style =
                     {
                         height = 20,
