@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use std::f32;
     use std::fs::File;
     use std::io::BufWriter;
+    use std::{f32, panic};
 
     use image::codecs::openexr::OpenExrEncoder;
     use image::{ExtendedColorType, ImageEncoder};
@@ -481,7 +481,7 @@ mod tests {
         let path = "../meshes/packuv.glb";
         // let path = "../meshes/plane.glb";
 
-        let mut packer = UVPacker::new(512, 512, 5, true);
+        let mut packer = UVPacker::new(1024, 1024, 25, true, true);
 
         let (document, buffers, _) =
             gltf::import(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -548,7 +548,9 @@ mod tests {
                 let file_name = "../temp/atlas.bmp";
                 bm.save_bmp(&file_name);
             }
-            None => {}
+            None => {
+                panic!("Packing Failed");
+            }
         }
 
         Ok(())

@@ -13,6 +13,7 @@ use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::math::{Vector2, Vector3};
 use core::slice;
+use std::println;
 
 pub struct Chart {
     pub uvs: Vec<Vector2>,
@@ -28,8 +29,9 @@ pub struct Chart {
     pub chart_uv_min: Vector2,
 
     pub placed_offset: (u32, u32),
-    pub scale: f32,
-    pub world_scale: f32,
+    pub final_scale: f32,
+    pub world_scale_multiplier: f32,
+    user_scale_multiplier: f32,
 }
 
 impl Chart {
@@ -60,9 +62,16 @@ impl Chart {
     fn calculate_uv_area(&self) -> f64 {
         let mut area = 0.0f64;
 
+        let scale = self.user_scale_multiplier * self.world_scale_multiplier;
+
         for chunk in self.indices.chunks_exact(3) {
             let (ia, ib, ic) = (chunk[0] as usize, chunk[1] as usize, chunk[2] as usize);
-            area += determinant(self.uvs[ia], self.uvs[ib], self.uvs[ic]).abs() as f64;
+            area += determinant(
+                self.uvs[ia] * scale,
+                self.uvs[ib] * scale,
+                self.uvs[ic] * scale,
+            )
+            .abs() as f64;
         }
 
         area * 0.5
@@ -74,7 +83,10 @@ impl Chart {
         let mut min_y = f32::INFINITY;
         let mut max_y = f32::NEG_INFINITY;
 
+        let scale = self.user_scale_multiplier * self.world_scale_multiplier;
+
         for uv in &self.uvs {
+            let uv = *uv * scale;
             if uv.x < min_x {
                 min_x = uv.x;
             }
@@ -114,10 +126,29 @@ impl Chart {
         self.uvs.iter_mut().for_each(|uv| *uv -= offset);
     }
 
-    fn scale_uvs_from_base(&mut self, scale: f32) {
-        self.scale = scale;
-        for (uv, &base) in self.uvs.iter_mut().zip(self.base_uvs.iter()) {
-            *uv = base * scale;
+    #[inline]
+    fn validate_padding(&mut self, packing_scale: &mut f32) {
+        let max_padding = 16.0;
+        let min_scale = 1024.0 / (max_padding - 2.0);
+
+        if *packing_scale < min_scale {
+            *packing_scale = min_scale;
+        }
+    }
+
+    fn scale_uvs_from_base(&mut self, scale_attempt: f32, enforce_min_scale: bool) {
+        let mut packing_scale =
+            scale_attempt * self.user_scale_multiplier * self.world_scale_multiplier;
+
+        if enforce_min_scale {
+            self.validate_padding(&mut packing_scale);
+        }
+
+        self.final_scale = packing_scale;
+        let source_uv = &self.base_uvs;
+        let scaled_uv = &mut self.uvs;
+        for i in 0..source_uv.len() {
+            scaled_uv[i] = source_uv[i] * packing_scale;
         }
     }
 }
@@ -137,10 +168,17 @@ pub struct UVPacker {
     brute_force: bool,
     pub target: Option<Bitmap>,
     iterations: u32,
+    pub enforce_min_scale: bool,
 }
 
 impl UVPacker {
-    pub fn new(width: u32, height: u32, iterations: u32, brute_force: bool) -> Self {
+    pub fn new(
+        width: u32,
+        height: u32,
+        iterations: u32,
+        brute_force: bool,
+        enforce_min_scale: bool,
+    ) -> Self {
         Self {
             charts: Vec::new(),
             width,
@@ -149,6 +187,7 @@ impl UVPacker {
             brute_force,
             target: None,
             iterations,
+            enforce_min_scale,
         }
     }
 
@@ -157,7 +196,7 @@ impl UVPacker {
         positions: &[Vector3],
         uvs: &[Vector2],
         indices: &[u32],
-        scale_multiplier: f32,
+        user_scale_multiplier: f32,
         mesh_id: usize,
     ) {
         if indices.len() % 3 != 0 {
@@ -180,21 +219,23 @@ impl UVPacker {
             uv_bounds_area: 0.0,
             bitmap: Bitmap::empty(),
             placed_offset: (0, 0),
-            scale: 1.0,
-            world_scale: 1.0,
+            final_scale: 1.0,
+            world_scale_multiplier: 1.0,
+            user_scale_multiplier: 1.0,
             chart_uv_min: Vector2::ZERO,
         };
 
         chart.offset_uvs();
 
-        let mut scale = chart.calculate_area_multiplier();
-        scale *= scale_multiplier;
-        chart.uvs.iter_mut().for_each(|x| *x *= scale);
+        // let mut scale = chart.calculate_area_multiplier();
+        // scale *= scale_multiplier;
+        // chart.uvs.iter_mut().for_each(|x| *x *= scale);
 
+        chart.user_scale_multiplier = user_scale_multiplier;
         chart.base_uvs = chart.uvs.clone();
+        chart.world_scale_multiplier = chart.calculate_area_multiplier();
         chart.uv_area = chart.calculate_uv_area();
         chart.uv_bounds_area = chart.calculate_uv_bounds_area();
-        chart.world_scale = scale;
 
         self.charts.push(chart);
     }
@@ -210,6 +251,7 @@ impl UVPacker {
         //         .unwrap_or(std::cmp::Ordering::Equal)
         // });
 
+        // todo
         self.charts.sort_by(|a, b| {
             b.uv_bounds_area
                 .partial_cmp(&a.uv_bounds_area)
@@ -258,7 +300,7 @@ impl UVPacker {
         for (chart, &(ox, oy)) in self.charts.iter_mut().zip(placements.iter()) {
             chart.placed_offset = (ox, oy);
 
-            chart.scale_uvs_from_base(best_scale);
+            chart.scale_uvs_from_base(best_scale, self.enforce_min_scale);
             let bm = Bitmap::rasterize(chart);
             chart.bitmap = bm;
 
@@ -272,13 +314,13 @@ impl UVPacker {
     }
 
     pub fn get_scale_offset(&self, chart: usize) -> (Vector2, Vector2) {
-        let chart = self.charts.iter().find(|c| c.mesh_id == chart);
+        let chart = self.charts.iter().find(|c| c.mesh_id == chart); // todo hash
 
         match chart {
             Some(chart) => {
                 let scale = Vector2::new(
-                    chart.scale * chart.world_scale / self.width as f32,
-                    chart.scale * chart.world_scale / self.height as f32,
+                    chart.final_scale / self.width as f32,
+                    chart.final_scale / self.height as f32,
                 );
 
                 let atlas_offset = Vector2::new(
@@ -297,13 +339,8 @@ impl UVPacker {
     fn try_pack_at_scale(&mut self, scale: f32) -> Option<Vec<(u32, u32)>> {
         let brute_force = self.brute_force;
 
-        // for chart in &mut self.charts {
-        //     chart.scale_uvs_from_base(scale);
-        //     chart.bitmap = Bitmap::rasterize(chart);
-        // }
-
         self.charts.par_iter_mut().for_each(|chart| {
-            chart.scale_uvs_from_base(scale);
+            chart.scale_uvs_from_base(scale, self.enforce_min_scale);
             chart.bitmap = Bitmap::rasterize(chart);
         });
 
@@ -658,12 +695,14 @@ pub unsafe extern "C" fn uvpacker_create(
     height: u32,
     iterations: u32,
     brute_force: bool,
+    enforce_min_scale: bool,
 ) -> *mut UVPacker {
     Box::into_raw(Box::new(UVPacker::new(
         width,
         height,
         iterations,
         brute_force,
+        enforce_min_scale,
     ))) as *mut UVPacker
 }
 

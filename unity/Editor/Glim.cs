@@ -308,7 +308,8 @@ namespace Glim
                 if (lightmapGroup.packingType == UVPackingType.ScaleOffset)
                 {
                     bool bruteForce = lightmapGroup.bruteForce;
-                    var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce);
+                    bool ensurePadding = lightmapGroup.ensurePadding;
+                    var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, ensurePadding);
                     for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                     {
                         Renderer r = renderers[rendererIndex];
@@ -345,7 +346,7 @@ namespace Glim
 
                     if (!success)
                     {
-                        throw new Exception("UV Packing failed, try increasing resolution or packing iteration count");
+                        throw new Exception("UV Packing failed, try increasing lightmap resolution, packing iteration count or brute force mode or disable ensure padding");
                     }
 
                     for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)

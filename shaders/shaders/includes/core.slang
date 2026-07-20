@@ -426,7 +426,7 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     Ray shadowRay;
     shadowRay.P = positionWS;
     shadowRay.tMin = 0;
-    shadowRay.tMax = sqrt(distanceSquare) - 0.001f;
+    shadowRay.tMax = max(sqrt(distanceSquare) - 0.001f, 0.0001);
     shadowRay.D = L;
     [branch] if (any(color > 0.0))
     {

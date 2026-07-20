@@ -37,6 +37,10 @@ namespace Glim
 
         public UVPackingType packingType = UVPackingType.ScaleOffset;
         public bool bruteForce = false;
+
+        [Tooltip("Scales up smaller charts to ensure there is enough padding, however the lightmap packing will fail if there is not enough resolution to satify all constraints, and resolution of other objects will decrease")]
+        public bool ensurePadding = false;
+
         [Range(5, 25)] public uint packingIterations = 5;
 
         // public bool dilate = true;
