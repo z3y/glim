@@ -355,11 +355,14 @@ uint GetCompactedIndex(float2 uv, uint lightmapGroup, bool flipY = true)
 
 float MISWeight(float pdf1, float pdf2)
 {
-    float p1 = pdf1 * pdf1;
-    float p2 = pdf2 * pdf2;
-    return p1 / (p1 + p2);
+    if (pdf1 <= 0.0)
+    {
+        return 0.0;
+    }
+    float ratio = pdf2 / pdf1;
+    float denom = 1.0 + ratio * ratio;
+    return 1.0 / denom;
 }
-
 float Luminance(float3 rgb)
 {
     return dot(rgb, float3(0.2126, 0.7152, 0.0722));
@@ -375,19 +378,27 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
 
     float3 lightColor = SampleEmission(emissiveSurface.uv, emissiveSurface.lightmapGroup).rgb / float.getPi();
 
-    if (!any(lightColor > 0.0))
+    float triangleArea = CalculateTriangleArea(primitiveID);
+
+    if (!any(lightColor > 0.0) || triangleArea <= 0.001)
     {
         pdf = 0.0;
         return 0.0;
     }
 
-    float triangleArea = CalculateTriangleArea(primitiveID);
     float pdfArea = randomEmissiveTrianglePdf / triangleArea;
 
     L = emissiveSurface.P;
     float3 positionToLight = L - positionWS;
     L = normalize(positionToLight);
     float distanceSquare = dot(positionToLight, positionToLight);
+
+    if (distanceSquare <= 1e-8)
+    {
+        pdf = 0.0;
+        L = 0.0;
+        return 0.0;
+    }
 
     float cosTheta = saturate(dot(normalWS, L));
 
@@ -402,7 +413,7 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
         cosThetaLight = saturate(cosThetaLight);
     }
 
-    if (cosThetaLight <= 0.0001f)
+    if (cosThetaLight <= 0.001)
     {
         pdf = 0.0;
         return 0.0;
@@ -426,6 +437,7 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     }
 
     pdf = pdfArea * distanceSquare / cosThetaLight;
+    pdf = min(pdf, 1e16f);
 
     return color;
 }

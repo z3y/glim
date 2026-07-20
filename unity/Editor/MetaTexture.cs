@@ -53,7 +53,7 @@ namespace Glim
 
             if (type == AtlasType.Albedo)
             {
-                cmd.ClearRenderTarget(true, true, Color.white);
+                cmd.ClearRenderTarget(true, true, Color.gray);
             }
             else
             {

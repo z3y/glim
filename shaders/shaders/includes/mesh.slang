@@ -99,6 +99,11 @@ struct Vertex
     {
         return (GetFlags() & (0x1u << 0u)) != 0u;
     }
+
+    bool Emissive()
+    {
+        return (GetFlags() & (0x1u << 1u)) != 0u;
+    }
 };
 
 struct Surface
@@ -111,6 +116,7 @@ struct Surface
 
     uint lightmapGroup;
     bool backfaceGI;
+    bool emissive;
 
     static Surface Get(uint primitiveID, float2 bary, bool frontFace = true)
     {
@@ -164,6 +170,7 @@ struct Surface
         surface.uv = uv;
         surface.lightmapGroup = v0.GetLightmapGroup();
         surface.backfaceGI = v0.BackfaceGI();
+        surface.emissive = v0.Emissive();
         return surface;
     };
 };

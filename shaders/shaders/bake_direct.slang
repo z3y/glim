@@ -94,7 +94,8 @@ struct PushConstants
 
         if (any(emission > 0.0))
         {
-            if (EMISSIVE_TRIANGLES_COUNT > 0)
+            bool isEmissiveTriange = surface.emissive;
+            if (EMISSIVE_TRIANGLES_COUNT > 0 && isEmissiveTriange)
             {
                 float triangleArea = CalculateTriangleArea(hit.primitiveID);
                 float3 positionToLight = surface.P - positionWS;

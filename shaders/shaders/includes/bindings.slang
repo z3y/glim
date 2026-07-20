@@ -102,14 +102,14 @@ SampleAlbedo(float2 uv, uint lightmapGroup)
 {
     uint index = LIGHTMAP_GROUP_COUNT <= 1 ? 0 : NonUniformResourceIndex(lightmapGroup);
     Texture2D tex = Albedo[index];
-    return tex[(uint2)uv];
+    return saturate(tex[(uint2)uv]);
 }
 
 float4 SampleEmission(float2 uv, uint lightmapGroup)
 {
     uint index = LIGHTMAP_GROUP_COUNT <= 1 ? 0 : NonUniformResourceIndex(lightmapGroup);
     Texture2D tex = Emission[index];
-    return tex[(uint2)uv];
+    return max(0.0, tex[(uint2)uv]);
 }
 
 float3 SampleSkybox(float3 dir)
@@ -120,5 +120,5 @@ float3 SampleSkybox(float3 dir)
     }
     const float SKYBOX_MAX = 10.0;
 
-    return min(Skybox.SampleLevel(SkyboxSampler, dir, 0.0).rgb, SKYBOX_MAX);
+    return clamp(Skybox.SampleLevel(SkyboxSampler, dir, 0.0).rgb, 0.0, SKYBOX_MAX);
 }
