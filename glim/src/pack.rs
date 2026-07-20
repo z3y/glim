@@ -13,6 +13,7 @@ use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::math::{Vector2, Vector3};
 use core::slice;
+use std::collections::HashMap;
 
 pub struct Chart {
     pub uvs: Vec<Vector2>,
@@ -166,6 +167,7 @@ fn determinant(c: Vector2, c2: Vector2, c3: Vector2) -> f32 {
 
 pub struct UVPacker {
     charts: Vec<Chart>,
+    pub charts_lookup: Option<HashMap<usize, usize>>,
     width: u32,
     height: u32,
     area: f64,
@@ -185,6 +187,7 @@ impl UVPacker {
     ) -> Self {
         Self {
             charts: Vec::new(),
+            charts_lookup: None,
             width,
             height,
             area: width as f64 * height as f64,
@@ -314,11 +317,23 @@ impl UVPacker {
             }
         }
 
+        let mut lookup = HashMap::with_capacity(self.charts.len());
+        for (i, chart) in self.charts.iter().enumerate() {
+            lookup.insert(chart.mesh_id, i);
+        }
+        self.charts_lookup = Some(lookup);
+
         true
     }
 
-    pub fn get_scale_offset(&self, chart: usize) -> (Vector2, Vector2) {
-        let chart = self.charts.iter().find(|c| c.mesh_id == chart); // todo hash
+    pub fn get_scale_offset(&self, mesh_id: usize) -> (Vector2, Vector2) {
+        // let chart = self.charts.iter().find(|c| c.mesh_id == mesh_id); // todo hash
+
+        let Some(lookup) = &self.charts_lookup else {
+            return (Vector2::ONE, Vector2::ZERO);
+        };
+
+        let chart = lookup.get(&mesh_id).map(|&i| &self.charts[i]);
 
         match chart {
             Some(chart) => {
