@@ -59,6 +59,23 @@ struct PushConstants
     ray.tMin = 0;
     ray.tMax = RAY_MAX;
 
+    float randomEmissiveTrianglePdf = 1.0 / float(EMISSIVE_TRIANGLES_COUNT);
+    float bsdfPdf = 1.0 / float.getPi();
+    float triangleLightPdf = 0.0;
+    float3 triangleLight = 0.0;
+
+    if (EMISSIVE_TRIANGLES_COUNT > 0)
+    {
+        float2 xiTriangle = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
+        uint emissivePrimitiveID = EmissiveTriangles[uint(xiTriangle.x * float(EMISSIVE_TRIANGLES_COUNT))];
+        float3 L;
+        triangleLight = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, randomEmissiveTrianglePdf, triangleLightPdf, L);
+
+        float3 emissive = triangleLight * MISWeight(triangleLightPdf, bsdfPdf);
+        color.rgb += emissive;
+        dominantDirection.xyz += L * Luminance(emissive);
+    }
+
     Hit bounceHit;
     if (TraceRay(ray, bounceHit))
     {
@@ -73,9 +90,27 @@ struct PushConstants
         }
 
         float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
-        float3 current = bounceEmission * color.a;
-        color.rgb += bounceEmission * color.a;
-        dominantDirection.xyz += ray.D * Luminance(current);
+        float3 emission = bounceEmission * color.a;
+
+        if (EMISSIVE_TRIANGLES_COUNT > 0)
+        {
+            float triangleArea = CalculateTriangleArea(bounceHit.primitiveID);
+            float3 positionToLight = surface.P - positionWS;
+            float distSq = dot(positionToLight, positionToLight);
+            float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
+            float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
+
+            emission *= MISWeight(bsdfPdf, lightPdf);
+
+            color.rgb += emission;
+            dominantDirection.xyz += ray.D * Luminance(emission);
+        }
+        else
+        {
+
+            color.rgb += emission;
+            dominantDirection.xyz += ray.D * Luminance(emission);
+        }
     }
     else
     {

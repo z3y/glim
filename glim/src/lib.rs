@@ -333,9 +333,9 @@ fn initialize_render(app: &mut Glim) {
 
     (app.config.log_callback)(LogMessage::message(&message));
 
-    let mesh::AccelerationStructureType::RayQuery(blas) = &app.gpu_mesh.acceleration_structure
-    else {
-        panic!("Expected RayQuery variant");
+    let blas = match &app.gpu_mesh.acceleration_structure {
+        mesh::AccelerationStructureType::RayQuery(blas) => blas,
+        _ => panic!("Expected RayQuery variant"),
     };
 
     app.tlas = create_tlas(&app.vk, blas);
@@ -347,7 +347,7 @@ fn initialize_render(app: &mut Glim) {
     if app.config.is_preview {
         render_preview(app);
     } else {
-        render_lightmaps3(app);
+        render_lightmaps(app);
     }
     unsafe {
         app.vk.device.device_wait_idle().unwrap();
@@ -852,17 +852,23 @@ fn extract_emissive_triangles(app: &mut Glim) {
     // todo indices of both opaque and transparent
     let vertices = &app.opaque_mesh.vertices;
     let indices = &app.opaque_mesh.indices;
-    let mut emissive_triangles = Vec::new();
+    let mut emissive_triangles: Vec<u32> = Vec::new();
 
     if app.config.mis {
-        for (primitive_id, chunk) in indices.chunks(3).enumerate() {
-            if chunk.len() < 3 {
-                break;
-            }
+        for primitive_id in 0..(indices.len() / 3) {
+            let i0 = indices[primitive_id * 3 + 0] as usize;
+            let i1 = indices[primitive_id * 3 + 1] as usize;
+            let i2 = indices[primitive_id * 3 + 2] as usize;
 
-            let v0 = &vertices[chunk[0] as usize];
-            let v1 = &vertices[chunk[1] as usize];
-            let v2 = &vertices[chunk[2] as usize];
+            let v0 = &vertices[i0];
+            let v1 = &vertices[i1];
+            let v2 = &vertices[i2];
+
+            let emissive = (v0.flags & (1 << 17)) != 0;
+
+            if !emissive {
+                continue;
+            }
 
             let uv0 = v0.uv;
             let uv1 = v1.uv;
@@ -872,53 +878,27 @@ fn extract_emissive_triangles(app: &mut Glim) {
             let group = &app.groups[group_index];
             let pixels = &group.emission_pixels;
 
-            let min_u = uv0.x.min(uv1.x).min(uv2.x).clamp(0.0, 1.0);
-            let max_u = uv0.x.max(uv1.x).max(uv2.x).clamp(0.0, 1.0);
-            let min_v = uv0.y.min(uv1.y).min(uv2.y).clamp(0.0, 1.0);
-            let max_v = uv0.y.max(uv1.y).max(uv2.y).clamp(0.0, 1.0);
+            let w = group.settings.width;
+            let h = group.settings.height;
 
-            let width = group.settings.width;
-            let height = group.settings.height;
+            let center_uv = (uv0 + uv1 + uv2) / 3.0;
 
-            let tex_w = width as f32;
-            let tex_h = height as f32;
+            let x = (center_uv.x * w as f32).clamp(0.0, (w - 1) as f32) as usize;
+            let y = (center_uv.y * h as f32).clamp(0.0, (h - 1) as f32) as usize;
 
-            let start_x = ((min_u * tex_w).floor() as u32).min(width - 1);
-            let end_x = ((max_u * tex_w).ceil() as u32).min(width - 1);
-            let start_y = ((min_v * tex_h).floor() as u32).min(height - 1);
-            let end_y = ((max_v * tex_h).ceil() as u32).min(height - 1);
+            let index = (y * w as usize + x) * 4;
 
-            let mut is_emissive = false;
-            'pixel_search: for y in start_y..=end_y {
-                for x in start_x..=end_x {
-                    let p_u = (x as f32 + 0.5) / tex_w;
-                    let p_v = (y as f32 + 0.5) / tex_h;
+            let emission = &pixels[index..index + 4];
 
-                    let w0 = edge_side(uv1.x, uv1.y, uv2.x, uv2.y, p_u, p_v);
-                    let w1 = edge_side(uv2.x, uv2.y, uv0.x, uv0.y, p_u, p_v);
-                    let w2 = edge_side(uv0.x, uv0.y, uv1.x, uv1.y, p_u, p_v);
-
-                    let is_inside = (w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0)
-                        || (w0 <= 0.0 && w1 <= 0.0 && w2 <= 0.0);
-
-                    if is_inside {
-                        let emissive_r = pixels[((y * width + x) * 4 + 0) as usize];
-                        let emissive_g = pixels[((y * width + x) * 4 + 1) as usize];
-                        let emissive_b = pixels[((y * width + x) * 4 + 2) as usize];
-
-                        if emissive_r > 0.0 || emissive_g > 0.0 || emissive_b > 0.0 {
-                            is_emissive = true;
-                            break 'pixel_search;
-                        }
-                    }
-                }
-            }
+            let is_emissive = emission[0] > 0.0 || emission[1] > 0.0 || emission[2] > 0.0;
 
             if is_emissive {
                 emissive_triangles.push(primitive_id as u32);
             }
         }
+    }
 
+    if app.config.mis {
         let message = format!(
             "Found {} emissive triangles for MIS",
             emissive_triangles.len()
@@ -937,11 +917,10 @@ fn extract_emissive_triangles(app: &mut Glim) {
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
     } else {
-        let dummy = [0u32];
-        app.emissive_triangles_buffer = Buffer::new(
+        app.emissive_triangles_buffer = Buffer::empty(
             &app.vk,
             String::from("Emissive Triangles"),
-            &dummy,
+            32,
             vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER
                 | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
@@ -1193,7 +1172,7 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32]) -> io::Result<()>
     Ok(())
 }
 
-fn render_lightmaps3(app: &mut Glim) {
+fn render_lightmaps(app: &mut Glim) {
     let mut max_resolution = (1, 1);
     let mut total_pixel_count = 0;
     for group in &app.groups {

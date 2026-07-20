@@ -233,6 +233,8 @@ pub extern "C" fn app_add_mesh(app: *mut Glim, mesh: FfiMesh) {
             &mut app.opaque_mesh
         };
 
+        let emissive = mesh.emissive;
+
         Mesh::append_ffi_mesh(
             target_mesh,
             mesh,
@@ -240,6 +242,7 @@ pub extern "C" fn app_add_mesh(app: *mut Glim, mesh: FfiMesh) {
             &mut app.seams,
             // todo add seams per renderer
             !app.config.is_preview,
+            emissive,
         );
     }));
 

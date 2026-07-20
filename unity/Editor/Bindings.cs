@@ -162,6 +162,7 @@ namespace Glim
 
             [MarshalAs(UnmanagedType.I1)] public bool backface_gi;
             [MarshalAs(UnmanagedType.I1)] public bool transparent;
+            [MarshalAs(UnmanagedType.I1)] public bool emissive;
         }
 
         public enum LightType : uint

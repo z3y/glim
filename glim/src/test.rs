@@ -50,11 +50,11 @@ mod tests {
             light_falloff: LightFalloffType::InverseSquare,
             vulkan_validation_layers: true,
             seams_debug: false,
-            direct_samples: 512,
+            direct_samples: 32,
             indirect_samples: 256,
             bounce_count: 5,
             log_callback: log_callback,
-            mis: false,
+            mis: true,
             lightmap_mode: LightmapMode::Directional,
         };
         config
@@ -179,26 +179,26 @@ mod tests {
         //     },
         // );
 
-        app_add_light(
-            app,
-            Light {
-                ty: LightType::Area,
-                position: Vector3 {
-                    x: 0.5,
-                    y: 0.3,
-                    z: -0.5,
-                },
-                direction: Vector3::new(1.0, 0.0, -1.0).normalize(),
-                range: 5.0,
-                color: Vector3::new(1.0, 1.0, 1.0),
-                shadow_radius_or_angle: 0.01,
-                spot_inner_percent: 80.0,
-                spot_outer: 50.0,
-                area_size: Vector2::new(0.5, 0.5),
-                up: Vector3::UP,
-                ..Default::default()
-            },
-        );
+        // app_add_light(
+        //     app,
+        //     Light {
+        //         ty: LightType::Area,
+        //         position: Vector3 {
+        //             x: 0.5,
+        //             y: 0.3,
+        //             z: -0.5,
+        //         },
+        //         direction: Vector3::new(1.0, 0.0, -1.0).normalize(),
+        //         range: 5.0,
+        //         color: Vector3::new(1.0, 1.0, 1.0),
+        //         shadow_radius_or_angle: 0.01,
+        //         spot_inner_percent: 80.0,
+        //         spot_outer: 50.0,
+        //         area_size: Vector2::new(0.5, 0.5),
+        //         up: Vector3::UP,
+        //         ..Default::default()
+        //     },
+        // );
 
         // app_add_light(
         //     app,
@@ -288,17 +288,17 @@ mod tests {
         for pixel in &mut emission_pixels {
             *pixel *= f32::consts::PI;
         }
-        let w = 512;
-        let h = 512;
-        let emission_pixels = vec![0.0; (w * h * 4) as usize];
+        // let w = 512;
+        // let h = 512;
+        // let emission_pixels = vec![0.0; (w * h * 4) as usize];
 
         let albedo_pixels = vec![255; (w * h * 4) as usize];
         let settings = LightmapSettings {
             width: w,
             height: h,
-            denoise: true,
-            dilate: true,
-            fix_seams: true,
+            denoise: false,
+            dilate: false,
+            fix_seams: false,
         };
 
         app_add_lightmap_group(
@@ -447,6 +447,7 @@ mod tests {
                     lightmap_group: group,
                     backface_gi,
                     transparent,
+                    emissive: true,
                 };
                 app_add_mesh(app, mesh);
             }

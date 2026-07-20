@@ -35,5 +35,6 @@
 - [ ] Can only bake one currently loaded scene
 - [ ] Preview crashes when closing the window on linux
 - [ ] Preview window doesnt work on KDE Wayland (Fedora) in certain cases
+- [ ] The slang extension complains about errors in IDE even though it all compiles
 - [ ] Bake reflection probes button starts the built-in baker if the lighting is not baked which could cause confusion
 - [ ] Double sided global illumination doesnt work?

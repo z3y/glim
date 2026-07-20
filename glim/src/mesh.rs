@@ -20,6 +20,7 @@ pub struct FfiMesh {
     pub lightmap_group: u32,
     pub backface_gi: bool,
     pub transparent: bool,
+    pub emissive: bool,
 }
 
 #[repr(C)]
@@ -63,6 +64,7 @@ impl Mesh {
         system: CoordinateSystem,
         all_seams: &mut Vec<Seam>,
         add_seams: bool,
+        emissive: bool,
     ) {
         let positions =
             unsafe { slice::from_raw_parts(mesh.vertices, mesh.vertices_length as usize) };
@@ -97,6 +99,9 @@ impl Mesh {
             flags |= lightmap_group & 0xFFFF;
             if backface_gi {
                 flags |= 1 << 16;
+            }
+            if emissive {
+                flags |= 1 << 17;
             }
 
             let mut uv = uvs[i];
@@ -166,8 +171,9 @@ impl VulkanAs {
         assert!(!self.memory.is_null());
         assert!(!self.buffer.is_null());
 
-        let Some(as_device) = &vk.as_device else {
-            unreachable!("expected as device");
+        let as_device = match &vk.as_device {
+            Some(x) => x,
+            None => unreachable!("expected as device"),
         };
 
         unsafe {
@@ -325,8 +331,9 @@ impl GpuMesh {
 
         let mut size_info = vk::AccelerationStructureBuildSizesInfoKHR::default();
 
-        let Some(as_device) = &vk.as_device else {
-            unreachable!("expected as device");
+        let as_device = match &vk.as_device {
+            Some(x) => x,
+            None => unreachable!("expected as device"),
         };
 
         unsafe {
@@ -453,8 +460,9 @@ impl GpuMesh {
 }
 
 pub fn create_tlas(vk: &VulkanContext, blas: &VulkanAs) -> VulkanAs {
-    let Some(as_device) = &vk.as_device else {
-        unreachable!("expected as device");
+    let as_device = match &vk.as_device {
+        Some(x) => x,
+        None => unreachable!("expected as device"),
     };
 
     let as_instance = vk::AccelerationStructureInstanceKHR {

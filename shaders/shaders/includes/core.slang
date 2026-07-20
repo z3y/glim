@@ -353,83 +353,82 @@ uint GetCompactedIndex(float2 uv, uint lightmapGroup, bool flipY = true)
     return compactIndex;
 }
 
-// float MISWeight(float pdf1, float pdf2)
-// {
-//     float p1 = pdf1 * pdf1;
-//     float p2 = pdf2 * pdf2;
-//     return p1 / (p1 + p2);
-// }
+float MISWeight(float pdf1, float pdf2)
+{
+    float p1 = pdf1 * pdf1;
+    float p2 = pdf2 * pdf2;
+    return p1 / (p1 + p2);
+}
 
 float Luminance(float3 rgb)
 {
     return dot(rgb, float3(0.2126, 0.7152, 0.0722));
 }
 
-// float3 ShadeTriangleLight(uint primitiveID, Surface surface, float2 xi, float3 throughput, float randomEmissiveTrianglePdf, out float pdf)
-// {
-//     float r0 = sqrt(xi.x);
-//     float r1 = xi.y;
-//     float2 bary = float2(r0 * (1.0f - r1), r0 * r1);
+float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, float randomEmissiveTrianglePdf, out float pdf, out float3 L)
+{
+    float r0 = sqrt(xi.x);
+    float r1 = xi.y;
+    float2 bary = float2(r0 * (1.0f - r1), r0 * r1);
 
-//     Surface emissiveSurface = Surface::Get(primitiveID, bary);
+    Surface emissiveSurface = Surface::Get(primitiveID, bary);
 
-//     float3 lightColor = SampleEmission(emissiveSurface.uv, emissiveSurface.lightmapGroup).rgb / float.getPi();
+    float3 lightColor = SampleEmission(emissiveSurface.uv, emissiveSurface.lightmapGroup).rgb / float.getPi();
 
-//     if (!any(lightColor > 0.0))
-//     {
-//         pdf = 0.0;
-//         return 0.0;
-//     }
+    if (!any(lightColor > 0.0))
+    {
+        pdf = 0.0;
+        return 0.0;
+    }
 
-//     float triangleArea = CalculateTriangleArea(primitiveID);
-//     float pdfArea = randomEmissiveTrianglePdf / triangleArea;
+    float triangleArea = CalculateTriangleArea(primitiveID);
+    float pdfArea = randomEmissiveTrianglePdf / triangleArea;
 
-//     float3 L = emissiveSurface.P;
-//     float3 positionToLight = L - surface.P;
-//     L = normalize(positionToLight);
-//     float distanceSquare = dot(positionToLight, positionToLight);
+    L = emissiveSurface.P;
+    float3 positionToLight = L - positionWS;
+    L = normalize(positionToLight);
+    float distanceSquare = dot(positionToLight, positionToLight);
 
-//     float cosTheta = saturate(dot(surface.N, L));
+    float cosTheta = saturate(dot(normalWS, L));
 
-//     float cosThetaLight = dot(-L, emissiveSurface.N);
+    float cosThetaLight = dot(-L, emissiveSurface.N);
 
-//     if (emissiveSurface.backfaceGI)
-//     {
-//         cosThetaLight = saturate(abs(cosThetaLight));
-//     }
-//     else
-//     {
-//         cosThetaLight = saturate(cosThetaLight);
-//     }
+    if (emissiveSurface.backfaceGI)
+    {
+        cosThetaLight = saturate(abs(cosThetaLight));
+    }
+    else
+    {
+        cosThetaLight = saturate(cosThetaLight);
+    }
 
-//     if (cosThetaLight <= 0.0001f)
-//     {
-//         pdf = 0.0;
-//         return 0.0;
-//     }
+    if (cosThetaLight <= 0.0001f)
+    {
+        pdf = 0.0;
+        return 0.0;
+    }
 
-//     float solidAngleWeight = cosThetaLight / (distanceSquare * pdfArea);
+    float solidAngleWeight = cosThetaLight / (distanceSquare * pdfArea);
 
-//     float3 color = cosTheta * solidAngleWeight * lightColor * throughput;
+    float3 color = cosTheta * solidAngleWeight * lightColor * throughput;
 
-//     Ray shadowRay;
-//     shadowRay.P = RayOffset(surface.P, surface.Ng);
-//     shadowRay.tMin = 0;
-//     shadowRay.tMax = sqrt(distanceSquare) - 0.001f;
-//     shadowRay.D = L;
-//     [branch]
-//     if (any(color > 0.0))
-//     {
-//         if (TraceShadowRay(shadowRay))
-//         {
-//             color = 0.0;
-//         }
-//     }
+    Ray shadowRay;
+    shadowRay.P = positionWS;
+    shadowRay.tMin = 0;
+    shadowRay.tMax = sqrt(distanceSquare) - 0.001f;
+    shadowRay.D = L;
+    [branch] if (any(color > 0.0))
+    {
+        if (TraceShadowRay(shadowRay))
+        {
+            color = 0.0;
+        }
+    }
 
-//     pdf = pdfArea * distanceSquare / cosThetaLight;
+    pdf = pdfArea * distanceSquare / cosThetaLight;
 
-//     return color;
-// }
+    return color;
+}
 
 float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, out float3 L)
 {
