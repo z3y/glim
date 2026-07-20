@@ -33,7 +33,8 @@ namespace Glim
         public uint lightProbeSamples = 4096;
         public float lightProbeRadius = 0.0f;
 
-        public bool multipleImportanceSampling = false;
+        [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing noise by combining direct light sampling and BSDF sampling.")]
+        public bool multipleImportanceSampling = true;
 
         [Tooltip("Temporarly increases reflection probe resolution by 2x and downsamples on the imported cubemap")]
         public bool reflectionProbesSuperSampling = false;
