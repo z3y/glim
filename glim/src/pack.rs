@@ -13,7 +13,6 @@ use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::math::{Vector2, Vector3};
 use core::slice;
-use std::println;
 
 pub struct Chart {
     pub uvs: Vec<Vector2>,
@@ -129,7 +128,12 @@ impl Chart {
     #[inline]
     fn validate_padding(&mut self, packing_scale: &mut f32) {
         let max_padding = 16.0;
-        let min_scale = 1024.0 / (max_padding - 2.0);
+        let min_padding = 2.0;
+        let reference_scale = 1024.0;
+
+        let mut min_scale = min_padding * reference_scale / max_padding;
+
+        min_scale *= self.user_scale_multiplier.min(1.0);
 
         if *packing_scale < min_scale {
             *packing_scale = min_scale;
