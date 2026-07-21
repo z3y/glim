@@ -225,8 +225,10 @@ impl GpuMesh {
         merged_mesh.merge_mesh(transparent_mesh);
 
         let mut group_resolutions = vec![Vector2::ZERO; lightmap_groups.len()];
-        for group in lightmap_groups {
-            group_resolutions[group.index as usize] =
+
+        for index in 0..lightmap_groups.len() {
+            let group = &lightmap_groups[index];
+            group_resolutions[index] =
                 Vector2::new(group.settings.width as f32, group.settings.height as f32);
         }
 

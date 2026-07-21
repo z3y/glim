@@ -6,22 +6,22 @@ use std::{
 };
 
 pub struct Texture2D {
-    format: vk::Format,
-    width: u32,
-    height: u32,
-    layout: vk::ImageLayout,
+    pub format: vk::Format,
+    pub width: u32,
+    pub height: u32,
+    pub layout: vk::ImageLayout,
 
-    image: vk::Image,
-    memory: vk::DeviceMemory,
-    view: vk::ImageView,
+    pub image: vk::Image,
+    pub memory: vk::DeviceMemory,
+    pub view: vk::ImageView,
 
-    bytes: u64,
+    pub bytes: u64,
     pub name: String,
 }
 
 static ALLOCATED_GPU_MEMORY: AtomicU64 = AtomicU64::new(0);
 
-fn register_gpu_alloc(bytes: u64) -> f64 {
+pub fn register_gpu_alloc(bytes: u64) -> f64 {
     let val = ALLOCATED_GPU_MEMORY.fetch_add(bytes, Ordering::Relaxed) + bytes;
 
     let mb = val as f64 / (1024.0 * 1024.0);

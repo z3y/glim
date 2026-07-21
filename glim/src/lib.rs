@@ -30,6 +30,7 @@ use crate::shaders::compaction_mask::{
 };
 use crate::shaders::decompact::{load_shader_decompact, update_shader_decompact};
 use crate::skybox::Skybox;
+use crate::texture_array::{TextureArray, TextureDescriptor};
 use crate::{
     camera::Camera,
     compute_shader::{
@@ -62,6 +63,7 @@ mod shaders;
 mod skybox;
 mod test;
 mod texture2d;
+mod texture_array;
 mod vulkan_cmd;
 mod vulkan_context;
 mod vulkan_swapchain;
@@ -108,13 +110,15 @@ pub struct Glim {
     pub output_dir: PathBuf,
 
     pub skybox: Skybox,
+
+    pub albedo_array: TextureArray,
+    pub emission_array: TextureArray,
 }
 
 impl Drop for Glim {
     fn drop(&mut self) {
-        for group in &mut self.groups {
-            group.destroy(&self.vk);
-        }
+        self.albedo_array.destroy(&self.vk);
+        self.emission_array.destroy(&self.vk);
 
         if !self.staging_buffer.buffer.is_null() {
             self.staging_buffer.destroy(&self.vk);
@@ -165,15 +169,8 @@ pub struct RenderTarget {
 
 pub struct LightmapGroup {
     pub settings: LightmapSettings,
-    pub index: u32,
-
-    pub albedo: Texture2D,
-    pub emission: Texture2D,
+    pub albedo_pixels: Vec<u8>,
     pub emission_pixels: Vec<f32>,
-
-    pub lightmap_diffuse_final: Vec<f32>,
-    pub lightmap_directional: Vec<f32>,
-    pub lightmap_diffuse_previous_bounce: Vec<f32>,
 }
 
 #[inline]
@@ -344,6 +341,54 @@ fn initialize_render(app: &mut Glim) {
         app.skybox = Skybox::solid(&app.vk, 4, 4, Vector3::new(0.0, 0.0, 0.0));
     }
 
+    // create meta textures
+
+    let mut albedos = Vec::new();
+    let mut emissions = Vec::new();
+
+    for index in 0..app.groups.len() {
+        let group = &app.groups[index];
+
+        let desc = TextureDescriptor {
+            width: group.settings.width,
+            height: group.settings.height,
+            format: vk::Format::R8G8B8A8_UNORM,
+            usage: vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST,
+            name: format!("Albedo {}", index),
+        };
+        albedos.push(desc);
+
+        let desc = TextureDescriptor {
+            width: group.settings.width,
+            height: group.settings.height,
+            format: vk::Format::R32G32B32A32_SFLOAT, // todo 16bit
+            usage: vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST,
+            name: format!("Emission {}", index),
+        };
+        emissions.push(desc);
+    }
+
+    let mut albedo_array = TextureArray::new(&app.vk, albedos);
+    let mut emission_array = TextureArray::new(&app.vk, emissions);
+
+    for index in 0..app.groups.len() {
+        let group = &app.groups[index];
+
+        albedo_array.textures[index].set_pixels(&app.vk, &group.albedo_pixels, &app.staging_buffer);
+        emission_array.textures[index].set_pixels(
+            &app.vk,
+            &group.emission_pixels,
+            &app.staging_buffer,
+        );
+    }
+
+    app.albedo_array = albedo_array;
+    app.emission_array = emission_array;
+
     if app.config.is_preview {
         render_preview(app);
     } else {
@@ -355,8 +400,8 @@ fn initialize_render(app: &mut Glim) {
 }
 
 fn render_preview(app: &mut Glim) {
-    let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
-    let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
+    let albedos = app.albedo_array.views();
+    let emissions = app.emission_array.views();
 
     let window = app.window;
 
@@ -810,7 +855,7 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
             String::from("RT Visibility"),
         );
 
-        let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
+        let albedos = app.albedo_array.views();
 
         update_init_from_camera_shader(
             vk,
@@ -948,54 +993,40 @@ impl LightmapGroup {
     ) -> LightmapGroup {
         // println!("creating lightmap group {:?}", &settings);
 
-        let mut albedo = Texture2D::new(
-            &app.vk,
-            settings.width,
-            settings.height,
-            vk::Format::R8G8B8A8_UNORM,
-            vk::ImageUsageFlags::SAMPLED
-                | vk::ImageUsageFlags::TRANSFER_SRC
-                | vk::ImageUsageFlags::TRANSFER_DST,
-            format!("Albedo {}", index),
-        );
+        // let mut albedo = Texture2D::new(
+        //     &app.vk,
+        //     settings.width,
+        //     settings.height,
+        //     vk::Format::R8G8B8A8_UNORM,
+        //     vk::ImageUsageFlags::SAMPLED
+        //         | vk::ImageUsageFlags::TRANSFER_SRC
+        //         | vk::ImageUsageFlags::TRANSFER_DST,
+        //     format!("Albedo {}", index),
+        // );
 
-        let mut emission = Texture2D::new(
-            &app.vk,
-            settings.width,
-            settings.height,
-            vk::Format::R32G32B32A32_SFLOAT,
-            vk::ImageUsageFlags::SAMPLED
-                | vk::ImageUsageFlags::TRANSFER_SRC
-                | vk::ImageUsageFlags::TRANSFER_DST,
-            format!("Emission {}", index),
-        );
+        // let mut emission = Texture2D::new(
+        //     &app.vk,
+        //     settings.width,
+        //     settings.height,
+        //     vk::Format::R32G32B32A32_SFLOAT,
+        //     vk::ImageUsageFlags::SAMPLED
+        //         | vk::ImageUsageFlags::TRANSFER_SRC
+        //         | vk::ImageUsageFlags::TRANSFER_DST,
+        //     format!("Emission {}", index),
+        // );
 
-        // if emission_pixels.len() > 0 {
-        emission.set_pixels(&app.vk, emission_pixels, &app.staging_buffer);
-        // }
+        // // if emission_pixels.len() > 0 {
+        // emission.set_pixels(&app.vk, emission_pixels, &app.staging_buffer);
+        // // }
 
-        // if albedo_pixels.len() > 0 {
-        albedo.set_pixels(&app.vk, albedo_pixels, &app.staging_buffer);
-        // }
+        // // if albedo_pixels.len() > 0 {
+        // albedo.set_pixels(&app.vk, albedo_pixels, &app.staging_buffer);
+        // // }
 
         LightmapGroup {
             settings,
-            albedo,
-            emission,
+            albedo_pixels: albedo_pixels.to_vec(),
             emission_pixels: emission_pixels.to_vec(),
-            lightmap_diffuse_final: Vec::new(),
-            lightmap_diffuse_previous_bounce: Vec::new(),
-            index,
-            lightmap_directional: Vec::new(),
-        }
-    }
-
-    pub fn destroy(&mut self, vk: &VulkanContext) {
-        if !self.albedo.image().is_null() {
-            self.albedo.destroy(vk);
-        }
-        if !self.emission.image().is_null() {
-            self.emission.destroy(vk);
         }
     }
 }
@@ -1124,6 +1155,8 @@ impl Glim {
             constants,
             output_dir,
             skybox,
+            albedo_array: TextureArray::null(),
+            emission_array: TextureArray::null(),
         }
     }
 }
@@ -1681,8 +1714,8 @@ fn render_lightmaps(app: &mut Glim) {
     staging_buffer_compaction.destroy(&app.vk);
     drop(staging_buffer_compaction);
 
-    let albedos: Vec<vk::ImageView> = app.groups.iter().map(|x| x.albedo.view()).collect();
-    let emissions: Vec<vk::ImageView> = app.groups.iter().map(|x| x.emission.view()).collect();
+    let albedos = app.albedo_array.views();
+    let emissions = app.emission_array.views();
 
     // adjust sample positions
     {
