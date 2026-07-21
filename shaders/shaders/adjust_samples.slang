@@ -87,12 +87,12 @@ struct PushConstants
     }
 
     float4 visibility = CompactedVisibility[index];
-
-    float2 bary = visibility.xy;
-    uint primitiveID = asuint(visibility.z);
+    uint primitiveID = asuint(visibility.x);
+    float2 bary = visibility.yz;
 
     Surface surface = Surface::Get(primitiveID, bary, true);
     float3 positionWS = AdjustSamplePosition(surface, primitiveID, bary);
+    // positionWS.xyz = RayOffset(surface.P, surface.Ng);
 
     float packed = PackNormalOctahedron(surface.N);
 

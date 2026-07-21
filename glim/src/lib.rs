@@ -1196,7 +1196,7 @@ fn render_lightmaps(app: &mut Glim) {
         &app.vk,
         max_resolution.0,
         max_resolution.1,
-        vk::Format::R32G32_UINT,
+        vk::Format::R32G32B32A32_SFLOAT,
         vk::ImageUsageFlags::STORAGE
             | vk::ImageUsageFlags::TRANSFER_SRC
             | vk::ImageUsageFlags::TRANSFER_DST
@@ -2111,7 +2111,9 @@ fn render_lightmaps(app: &mut Glim) {
                 (log)(LogMessage::message(&message));
             }
 
-            dilate(pixels, group.width, group.height, 0.0);
+            if group.dilate {
+                dilate(pixels, group.width, group.height, 0.0);
+            }
 
             // for baking light probes the denoised lightmap could also be used
             // just by compacting it back here

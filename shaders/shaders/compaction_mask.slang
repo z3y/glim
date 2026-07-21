@@ -23,8 +23,8 @@ struct PushConstants
     {
         uint2 coords = IndexToUV(threadID.x);
 
-        uint2 visibility = VisibilityBuffer[coords];
-        visible = visibility.x != uint::maxValue;
+        float4 visibility = VisibilityBuffer[coords];
+        visible = asuint(visibility.x) != uint::maxValue;
     }
 
     uint mask = WaveActiveBallot(visible).x;

@@ -25,6 +25,11 @@ static const int DILATE_RADIUS = 1;
 
 void DilateLightmap(int2 coords, uint compactedOffset, inout float4 original)
 {
+    if (Push.dilate == 0)
+    {
+        return;
+    }
+
     float4 colorSum = 0.0;
     float weightSum = 0.0;
 

@@ -36,15 +36,12 @@ main(uint3 threadID : SV_DispatchThreadID)
         uint rank = countbits(entry.x & ((1u << bit) - 1));
         uint compactIndex = entry.y + rank;
 
-        uint2 expandedVisibility = VisibilityBuffer[coords];
-        uint primitiveID = expandedVisibility.x;
-        uint2 originalCoords = UnpackCoords(expandedVisibility.y);
-        float2 uv = float2(originalCoords) + 0.5;
-        float2 bary = BaryFromUV(primitiveID, uv);
-
+        float4 expandedVisibility = VisibilityBuffer[coords];
+        uint primitiveID = asuint(expandedVisibility.x);
+        float2 bary = expandedVisibility.yz;
         float3 normal = Surface::Get(primitiveID, bary).N;
 
-        float4 visibility = float4(bary, asfloat(primitiveID), PackNormalOctahedron(normal));
+        float4 visibility = float4(expandedVisibility.xyz, PackNormalOctahedron(normal));
         CompactedVisibility[compactIndex] = visibility;
     }
 }
