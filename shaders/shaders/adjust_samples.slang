@@ -1,5 +1,4 @@
 #include "includes/core.slang"
-#include "includes/sobol_burley.slang"
 
 float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
 {

@@ -342,7 +342,10 @@ namespace Glim
                     probeCount = _bakeProbesResults.Count,
                 });
 
-                LightmapBakerEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1, _context.reflectionProbesSpecular);
+                if (_context.bakeReflectionProbes)
+                {
+                    LightmapBakerEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1, _context.reflectionProbesSpecular);
+                }
             }
             finally
             {

@@ -36,12 +36,12 @@ namespace Glim
         [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.")]
         public bool multipleImportanceSampling = false;
 
+        public bool bakeReflectionProbes = true;
         [Tooltip("Temporarly increases reflection probe resolution by 2x and downsamples on the imported cubemap")]
         public bool reflectionProbesSuperSampling = false;
 
         [Tooltip("Creates a mesh for each light visible in reflection probes, based on the shadow radius, area size or directional angle")]
         public bool reflectionProbesSpecular = false; // todo URP Shader
-
 
         [Header("Preview Settings")]
         public uint previewWidth = 1024;

@@ -83,6 +83,7 @@ namespace Glim
 
         public bool reflectionProbesSuperSampling;
         public bool reflectionProbesSpecular;
+        public bool bakeReflectionProbes;
 
         public string outputDir;
         public LightmapMode lightmapMode;
@@ -103,6 +104,7 @@ namespace Glim
             this.reflectionProbesSuperSampling = baker.reflectionProbesSuperSampling;
             this.reflectionProbesSpecular = baker.reflectionProbesSpecular;
             this.isPreview = config.is_preview;
+            this.bakeReflectionProbes = baker.bakeReflectionProbes;
 
             this.skyboxPixels = SkyboxCapture.Capture(SceneManager.GetActiveScene());
 
