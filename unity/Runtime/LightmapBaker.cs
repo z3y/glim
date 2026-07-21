@@ -35,11 +35,14 @@ namespace Glim
 
         [Space]
         public uint lightProbeSamples = 4096;
+        [Tooltip("Offset each light probe sample in random direction by defined radius in meters, instead of baking it at its exact world position to prevent accidental intersections with geometry. Keep this range low < 0.1 ")]
         public float lightProbeRadius = 0.0f;
+        [Tooltip("Applies Lanczos windowing function to light probes to reduce ringing")]
         public bool lightProbeDeringing = false;
         [Range(0.0f, 1.0f)] public float deringingIntensity = 0.5f;
 
         [Space]
+        [Tooltip("Automatically bake reflection probes too after the bake is complete")]
         public bool bakeReflectionProbes = true;
         [Tooltip("Temporarly increases reflection probe resolution by 2x and downsamples on the imported cubemap")]
         public bool reflectionProbesSuperSampling = false;
