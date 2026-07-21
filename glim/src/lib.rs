@@ -268,6 +268,8 @@ fn initialize_render(app: &mut Glim) {
         lightmap_group_count: app.groups.len() as u32,
         lightmap_mode: config.lightmap_mode as u32,
         coordinate_system: app.config.coordinate_system as u32,
+        skybox_intensity: config.skybox_intensity,
+        indirect_intensity: config.indirect_intensity,
     };
 
     app.preview_shader = load_preview_shader(&app.vk, &app.constants);
@@ -1123,6 +1125,8 @@ impl Glim {
             lightmap_group_count: 0,
             lightmap_mode: 0,
             coordinate_system: config.coordinate_system as u32,
+            skybox_intensity: config.skybox_intensity,
+            indirect_intensity: config.indirect_intensity,
         };
 
         let skybox = Skybox::null();

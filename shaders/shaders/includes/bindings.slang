@@ -85,6 +85,8 @@ SamplerState SkyboxSampler;
 [vk::constant_id(5)] const uint LIGHTMAP_GROUP_COUNT;
 [vk::constant_id(6)] const uint LIGHTMAP_MODE;
 [vk::constant_id(7)] const uint COORDINATE_SPACE;
+[vk::constant_id(8)] const float SKYBOX_INTENSITY;
+[vk::constant_id(9)] const float INDIRECT_INTENSITY;
 
 enum LightmapMode : uint
 {
@@ -115,5 +117,5 @@ float3 SampleSkybox(float3 dir)
     }
     const float SKYBOX_MAX = 10.0;
 
-    return clamp(Skybox.SampleLevel(SkyboxSampler, dir, 0.0).rgb, 0.0, SKYBOX_MAX);
+    return clamp(Skybox.SampleLevel(SkyboxSampler, dir, 0.0).rgb * SKYBOX_INTENSITY, 0.0, SKYBOX_MAX);
 }

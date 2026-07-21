@@ -129,6 +129,8 @@ struct PushConstants
     bool last = Push.sampleIndex == (Push.maxSamples - 1);
     [branch] if (last)
     {
+        previous.rgb *= INDIRECT_INTENSITY;
+
         CompactedLightmap[index * 3 + 0] += previous.r;
         CompactedLightmap[index * 3 + 1] += previous.g;
         CompactedLightmap[index * 3 + 2] += previous.b;

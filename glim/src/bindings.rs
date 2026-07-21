@@ -43,6 +43,8 @@ pub struct GlimConfig {
     pub indirect_samples: u32,
     pub bounce_count: u32,
     pub lightmap_mode: LightmapMode,
+    pub skybox_intensity: f32,
+    pub indirect_intensity: f32,
 }
 
 #[repr(u32)]

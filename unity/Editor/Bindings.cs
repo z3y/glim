@@ -43,6 +43,9 @@ namespace Glim
             public readonly uint bounce_count;
             public readonly LightmapMode lightmap_mode;
 
+            public readonly float skybox_intensity;
+            public readonly float indirect_intensity;
+
             public GlimConfig(CoordinateSystem coordinate_system,
                                uint direct_samples,
                                uint indirect_samples,
@@ -55,7 +58,10 @@ namespace Glim
                                uint probe_samples,
                                LightFalloffType falloff,
                                bool mis,
-                               LightmapMode lightmap_mode)
+                               LightmapMode lightmap_mode,
+                               float skybox_intensity,
+                               float indirect_intensity
+                               )
             {
                 this.coordinate_system = coordinate_system;
                 this.is_preview = is_preview;
@@ -74,6 +80,9 @@ namespace Glim
                 this.seams_debug = false;
                 this.mis = mis;
                 this.lightmap_mode = lightmap_mode;
+
+                this.skybox_intensity = skybox_intensity;
+                this.indirect_intensity = indirect_intensity;
 
                 var currentPipeline = GraphicsSettings.currentRenderPipeline;
                 uint autoFalloff = 0;

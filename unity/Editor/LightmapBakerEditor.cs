@@ -90,7 +90,9 @@ namespace Glim
                         baker.lightProbeSamples,
                         baker.lightFalloff,
                         baker.multipleImportanceSampling,
-                        baker.lightmapMode
+                        baker.lightmapMode,
+                        RenderSettings.ambientIntensity,
+                        baker.indirectMultiplier
                     );
 
                     Bake.Start(baker, config);
@@ -169,7 +171,9 @@ namespace Glim
                         baker.lightProbeSamples,
                         baker.lightFalloff,
                         baker.multipleImportanceSampling,
-                        baker.lightmapMode
+                        baker.lightmapMode,
+                        RenderSettings.ambientIntensity,
+                        baker.indirectMultiplier
                     );
                     Bake.Start(baker, config);
                 };
