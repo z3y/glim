@@ -46,7 +46,7 @@ mod tests {
             throttle_preview_ms: 2,
             lightprobes_read_callback: test_probes_callback,
             probe_samples: 4096,
-            probe_bounces: 3,
+            probe_bounces: 64,
             light_falloff: LightFalloffType::InverseSquare,
             vulkan_validation_layers: true,
             seams_debug: false,

@@ -3,10 +3,7 @@
 
 float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
 {
-    bool smoothP = UseSmoothPosition(surface);
-
-    float3 positionWS = smoothP ? surface.smoothP : surface.P;
-    positionWS = RayOffset(positionWS, surface.Ng);
+    float3 positionWS = surface.P;
 
     uint i0 = Indices[primitiveID * 3 + 0];
     uint i1 = Indices[primitiveID * 3 + 1];
@@ -41,7 +38,7 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
     float3 rayDirs[4] = {u, -u, v, -v};
 
     Ray leakRay;
-    leakRay.P = positionWS;
+    leakRay.P = RayOffset(surface.P, surface.Ng);
     leakRay.tMin = 0;
     leakRay.tMax = rayLength;
     Hit leakHit;
@@ -56,10 +53,18 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
             {
                 Surface hitSurf = Surface::Get(leakHit.primitiveID, leakHit.bary, true);
                 positionWS = RayOffset(positionWS + leakRay.D * leakHit.t, hitSurf.Ng);
-                break;
+                return positionWS;
             }
         }
     }
+
+    bool smoothP = UseSmoothPosition(surface);
+    if (smoothP)
+    {
+        positionWS = surface.smoothP;
+    }
+
+    positionWS = RayOffset(positionWS, surface.Ng);
 
     return positionWS;
 }
@@ -92,7 +97,6 @@ struct PushConstants
 
     Surface surface = Surface::Get(primitiveID, bary, true);
     float3 positionWS = AdjustSamplePosition(surface, primitiveID, bary);
-    // positionWS.xyz = RayOffset(surface.P, surface.Ng);
 
     float packed = PackNormalOctahedron(surface.N);
 
