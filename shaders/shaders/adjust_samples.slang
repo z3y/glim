@@ -51,7 +51,7 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
             if (!leakHit.frontFace)
             {
                 Surface hitSurf = Surface::Get(leakHit.primitiveID, leakHit.bary, true);
-                positionWS = RayOffset(positionWS + leakRay.D * leakHit.t, hitSurf.Ng);
+                positionWS = RayOffset(hitSurf.P, hitSurf.Ng);
                 return positionWS;
             }
         }
