@@ -35,6 +35,8 @@ namespace Glim
 
         public uint lightProbeSamples = 4096;
         public float lightProbeRadius = 0.0f;
+        public bool lightProbeDeringing = false;
+        [Range(0.0f, 1.0f)] public float deringingIntensity = 0.5f;
 
         [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.")]
         public bool multipleImportanceSampling = false;

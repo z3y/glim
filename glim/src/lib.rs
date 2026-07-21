@@ -270,6 +270,7 @@ fn initialize_render(app: &mut Glim) {
         coordinate_system: app.config.coordinate_system as u32,
         skybox_intensity: config.skybox_intensity,
         indirect_intensity: config.indirect_intensity,
+        lightprobe_deringing: config.lightprobe_deringing,
     };
 
     app.preview_shader = load_preview_shader(&app.vk, &app.constants);
@@ -1127,6 +1128,7 @@ impl Glim {
             coordinate_system: config.coordinate_system as u32,
             skybox_intensity: config.skybox_intensity,
             indirect_intensity: config.indirect_intensity,
+            lightprobe_deringing: config.lightprobe_deringing,
         };
 
         let skybox = Skybox::null();

@@ -87,6 +87,7 @@ SamplerState SkyboxSampler;
 [vk::constant_id(7)] const uint COORDINATE_SPACE;
 [vk::constant_id(8)] const float SKYBOX_INTENSITY;
 [vk::constant_id(9)] const float INDIRECT_INTENSITY;
+[vk::constant_id(10)] const float LIGHTPROBE_DERINGING;
 
 enum LightmapMode : uint
 {

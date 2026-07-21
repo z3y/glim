@@ -222,6 +222,28 @@ void AccumulateColor(inout float4 previous, uint sampleIndex, float4 color)
     }
 }
 
+// https://www.ppsloan.org/publications/shdering.pdf
+float SHLanczos(float l, float w)
+{
+    float v = float.getPi() * l / w;
+    return pow(sin(v) / v, 4.0);
+}
+void DeringSHProbeL2(inout SHProbeL2 probe, float w)
+{
+    float w1 = SHLanczos(1.0, w);
+    float w2 = SHLanczos(2.0, w);
+
+    probe.sh[1].xyz *= w1;
+    probe.sh[2].xyz *= w1;
+    probe.sh[3].xyz *= w1;
+
+    probe.sh[4].xyz *= w2;
+    probe.sh[5].xyz *= w2;
+    probe.sh[6].xyz *= w2;
+    probe.sh[7].xyz *= w2;
+    probe.sh[8].xyz *= w2;
+}
+
 void AccumulateL2(inout SHProbeL2 previous, uint sampleIndex, float3 color, float3 wi)
 {
     // flip Z for Unity

@@ -45,6 +45,7 @@ namespace Glim
 
             public readonly float skybox_intensity;
             public readonly float indirect_intensity;
+            public readonly float lightprobe_deringing;
 
             public GlimConfig(CoordinateSystem coordinate_system,
                                uint direct_samples,
@@ -60,7 +61,8 @@ namespace Glim
                                bool mis,
                                LightmapMode lightmap_mode,
                                float skybox_intensity,
-                               float indirect_intensity
+                               float indirect_intensity,
+                               float lightprobe_deringing
                                )
             {
                 this.coordinate_system = coordinate_system;
@@ -80,6 +82,7 @@ namespace Glim
                 this.seams_debug = false;
                 this.mis = mis;
                 this.lightmap_mode = lightmap_mode;
+                this.lightprobe_deringing = lightprobe_deringing;
 
                 this.skybox_intensity = skybox_intensity;
                 this.indirect_intensity = indirect_intensity;

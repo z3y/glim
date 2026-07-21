@@ -94,5 +94,13 @@ struct PushConstants
         AccumulateL2(probe, sampleIndex, SampleSkybox(ray.D) * 4 * sampleScale, ray.D);
     }
 
+    if (LIGHTPROBE_DERINGING > 0.0)
+    {
+        if (Push.sampleIndex == Push.maxSamples - 1)
+        {
+            DeringSHProbeL2(probe, LIGHTPROBE_DERINGING);
+        }
+    }
+
     SHProbes[probeIndex] = probe;
 }

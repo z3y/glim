@@ -92,7 +92,8 @@ namespace Glim
                         baker.multipleImportanceSampling,
                         baker.lightmapMode,
                         RenderSettings.ambientIntensity,
-                        baker.indirectMultiplier
+                        baker.indirectMultiplier,
+                        0.0f
                     );
 
                     Bake.Start(baker, config);
@@ -158,6 +159,12 @@ namespace Glim
                 {
                     var previewSettings = new Bindings.LightmapSettings();
 
+                    float w = Mathf.Lerp(8.0f, 2.0f, baker.deringingIntensity);
+                    if (!baker.lightProbeDeringing || baker.deringingIntensity <= 0.0f)
+                    {
+                        w = 0.0f;
+                    }
+
                     var config = new Bindings.GlimConfig(
                         Bindings.CoordinateSystem.Unity,
                         baker.directSamples,
@@ -173,7 +180,8 @@ namespace Glim
                         baker.multipleImportanceSampling,
                         baker.lightmapMode,
                         RenderSettings.ambientIntensity,
-                        baker.indirectMultiplier
+                        baker.indirectMultiplier,
+                        w
                     );
                     Bake.Start(baker, config);
                 };

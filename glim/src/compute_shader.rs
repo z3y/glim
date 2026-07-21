@@ -145,7 +145,7 @@ pub struct BakeSHPushConstants {
     pub probes_count: u32,
 }
 
-pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 10] {
+pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 11] {
     let size = std::mem::size_of::<u32>();
 
     [
@@ -199,6 +199,11 @@ pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 10] {
             offset: 9 * size as u32,
             size,
         },
+        vk::SpecializationMapEntry {
+            constant_id: 10,
+            offset: 10 * size as u32,
+            size,
+        },
     ]
 }
 
@@ -221,6 +226,7 @@ pub struct SpecializationConstants {
     pub coordinate_system: u32,
     pub skybox_intensity: f32,
     pub indirect_intensity: f32,
+    pub lightprobe_deringing: f32,
 }
 
 // fn create_specialization_constants(

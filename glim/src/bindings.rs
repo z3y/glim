@@ -45,6 +45,7 @@ pub struct GlimConfig {
     pub lightmap_mode: LightmapMode,
     pub skybox_intensity: f32,
     pub indirect_intensity: f32,
+    pub lightprobe_deringing: f32,
 }
 
 #[repr(u32)]
