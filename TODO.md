@@ -3,7 +3,6 @@
 - [ ] Higher resolution alpha
 - [ ] Terrain Support
 - [ ] Light Cookies
-- [ ] Light Probes Deringing
 - [ ] Shadowmask
 - [ ] Subtractive
 - [ ] Ambient Occlusion
@@ -11,7 +10,6 @@
 - [ ] Adaptive Probe Volumes
 - [ ] Probe occlusion
 - [ ] Emissive multiplier
-- [ ] Indirect multiplier
 - [ ] CWBVH (Implement https://github.com/jbikker/tinybvh BVH8_CWBVH with spatial splits)
 - [ ] Bake sky reflection probe
 - [ ] Per chart UV Packing

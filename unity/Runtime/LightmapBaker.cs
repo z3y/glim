@@ -25,26 +25,24 @@ namespace Glim
     {
         [Header("Bake Settings")]
         public LightmapMode lightmapMode = LightmapMode.NonDirectioal;
+        public LightFalloffType lightFalloff = LightFalloffType.Auto;
+        [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.")]
+        public bool multipleImportanceSampling = false;
         public uint directSamples = 512;
-
         public uint indirectSamples = 256;
         public uint bounces = 5;
         [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;
 
-        public LightFalloffType lightFalloff = LightFalloffType.Auto;
-
+        [Space]
         public uint lightProbeSamples = 4096;
         public float lightProbeRadius = 0.0f;
         public bool lightProbeDeringing = false;
         [Range(0.0f, 1.0f)] public float deringingIntensity = 0.5f;
 
-        [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.")]
-        public bool multipleImportanceSampling = false;
-
+        [Space]
         public bool bakeReflectionProbes = true;
         [Tooltip("Temporarly increases reflection probe resolution by 2x and downsamples on the imported cubemap")]
         public bool reflectionProbesSuperSampling = false;
-
         [Tooltip("Creates a mesh for each light visible in reflection probes, based on the shadow radius, area size or directional angle")]
         public bool reflectionProbesSpecular = false; // todo URP Shader
 
