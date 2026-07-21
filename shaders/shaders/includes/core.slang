@@ -369,6 +369,7 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     if (!any(lightColor > 0.0) || triangleArea <= 0.001)
     {
         pdf = 0.0;
+        L = 0.0;
         return 0.0;
     }
 
