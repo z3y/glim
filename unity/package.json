@@ -1,7 +1,7 @@
 {
   "name": "io.github.z3y.glim",
   "description": "Lightmap Baker",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "unity": "2022.3",
   "displayName": "Glim Lightmapper",
   "hideInEditor": false,
