@@ -67,7 +67,8 @@ struct PushConstants
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
         float2 xiTriangle = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
-        uint emissivePrimitiveID = EmissiveTriangles[uint(xiTriangle.x * float(EMISSIVE_TRIANGLES_COUNT))];
+        uint triIndex = min(uint(xiTriangle.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
+        uint emissivePrimitiveID = EmissiveTriangles[triIndex];
         float3 L;
         triangleLight = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, randomEmissiveTrianglePdf, triangleLightPdf, L);
 
