@@ -2181,7 +2181,7 @@ fn render_lightmaps(app: &mut Glim) {
                 let layer = Layer::new(
                     (w, h),
                     LayerAttributes::named("diffuse"),
-                    Encoding::SMALL_LOSSLESS,
+                    Encoding::FAST_LOSSLESS,
                     channels,
                 );
 
