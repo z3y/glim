@@ -18,7 +18,8 @@ namespace Glim
     public enum LightmapMode : uint
     {
         NonDirectioal = 0,
-        Directional = 1,
+        DominantDirection = 1,
+        CombinedSH = 3,
     }
 
     public class LightmapBaker : MonoBehaviour

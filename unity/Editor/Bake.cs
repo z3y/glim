@@ -199,6 +199,8 @@ namespace Glim
                 long lightmapBytes = 0;
                 long lightmapMemoryBytes = 0;
 
+                bool hasDirectional = _context.lightmapMode == LightmapMode.DominantDirection || _context.lightmapMode == LightmapMode.CombinedSH;
+
                 // hard coded paths for now in rust
                 for (int groupIndex = 0; groupIndex < _context.groups.Count; groupIndex++)
                 {
@@ -217,7 +219,7 @@ namespace Glim
                         }
                     }
 
-                    if (_context.lightmapMode == LightmapMode.Directional)
+                    if (hasDirectional)
                     {
                         string metaPath = Path.Combine(_context.outputDir, $"{directionalName}.meta");
                         if (!File.Exists(metaPath))
@@ -247,7 +249,7 @@ namespace Glim
                         lightmapBytes += new FileInfo(path).Length;
                     }
 
-                    if (_context.lightmapMode == LightmapMode.Directional)
+                    if (hasDirectional)
                     {
                         var path = Path.Combine(_context.outputDir, directionalName);
                         var loadedAsset = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
@@ -277,7 +279,7 @@ namespace Glim
                     element.FindPropertyRelative("m_ShadowMask").objectReferenceValue = lightmapDatas[i].shadowMask;
                 }
 
-                lda.FindProperty("m_LightmapsMode").intValue = _context.lightmapMode == LightmapMode.Directional ?
+                lda.FindProperty("m_LightmapsMode").intValue = hasDirectional ?
                     (int)LightmapsMode.CombinedDirectional : (int)LightmapsMode.NonDirectional;
 
                 // apply light probes
@@ -329,7 +331,7 @@ namespace Glim
                 EditorSceneManager.MarkSceneDirty(_context.scene);
 
                 LightmapSettings.lightmaps = lightmapDatas.ToArray();
-                LightmapSettings.lightmapsMode = _context.lightmapMode == LightmapMode.Directional ? LightmapsMode.CombinedDirectional : LightmapsMode.NonDirectional;
+                LightmapSettings.lightmapsMode = hasDirectional ? LightmapsMode.CombinedDirectional : LightmapsMode.NonDirectional;
 
                 SaveReport(scenePath, new BakeReport
                 {
