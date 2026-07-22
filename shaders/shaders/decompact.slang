@@ -69,14 +69,7 @@ void DilateLightmap(int2 coords, uint compactedOffset, inout float4 original)
 
     if (weightSum > 0.0)
     {
-        if (LIGHTMAP_MODE == LightmapMode::CombinedSH && compactedOffset == 0)
-        {
-            original = (colorSum / weightSum) * Y0() * A_HAT_0 * L0_NORMALIZATION;
-        }
-        else
-        {
-            original = colorSum / weightSum;
-        }
+        original = colorSum / weightSum;
     }
 }
 
@@ -144,11 +137,6 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
         CompactedLightmap[compactIndex * 3 + 1],
         CompactedLightmap[compactIndex * 3 + 2]);
 
-    if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
-    {
-        diffuse *= Y0() * A_HAT_0 * L0_NORMALIZATION;
-    }
-
     if (Push.lightmapType == 0)
     {
         DecompactTarget[linearIndex] = float4(diffuse, 1.0);
@@ -183,11 +171,18 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
     {
         uint compactIndex = compactIndex + Push.compactedCount;
 
-        float3 l1combined = float3(
+        float3 combined = float3(
             CompactedLightmap[compactIndex * 3 + 0],
             CompactedLightmap[compactIndex * 3 + 1],
             CompactedLightmap[compactIndex * 3 + 2]);
 
-        DecompactTarget[linearIndex] = float4(l1combined, 1.0);
+        float3 L0 = diffuse;
+        float lumaL0 = max(Luminance(L0), 1e-4);
+        combined /= (lumaL0 * 2.0);
+
+        float3 ratio = clamp(combined, -1.0, 1.0);
+        float3 result = saturate(mad(ratio, 0.5, 0.5));
+
+        DecompactTarget[linearIndex] = float4(result, 1.0);
     }
 }

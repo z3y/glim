@@ -47,11 +47,14 @@ struct PushConstants
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
+        Light light = Lights[lightIndex];
         float3 L;
-        float3 current = ShadeLightDirect(Lights[lightIndex], positionWS, normalWS, xiLight, throughput, L);
+        float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L);
         color.rgb += current;
         dominantDirection.xyz += L * Luminance(current);
-        AccumulateL2(sh, Push.sampleIndex, current, L);
+
+        float NoL = max(0.001, saturate(dot(normalWS, L)));
+        AccumulateL2(sh, Push.sampleIndex, current / NoL, L);
     }
 
     float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
@@ -78,7 +81,7 @@ struct PushConstants
         float3 emissive = triangleLight * MISWeight(triangleLightPdf, bsdfPdf);
         color.rgb += emissive;
         dominantDirection.xyz += L * Luminance(emissive);
-        AccumulateL2(sh, Push.sampleIndex, emissive, L);
+        AccumulateL2(sh, Push.sampleIndex, emissive, L); // todo triangle sh direct
     }
 
     Hit hit;
@@ -113,14 +116,14 @@ struct PushConstants
                     emission *= MISWeight(bsdfPdf, lightPdf);
                     color.rgb += emission;
                     dominantDirection.xyz += ray.D * Luminance(emission);
-                    AccumulateL2(sh, Push.sampleIndex, emission, ray.D);
+                    AccumulateL2(sh, Push.sampleIndex, emission * 4, ray.D);
                 }
             }
             else
             {
                 color.rgb += emission;
                 dominantDirection.xyz += ray.D * Luminance(emission);
-                AccumulateL2(sh, Push.sampleIndex, emission, ray.D);
+                AccumulateL2(sh, Push.sampleIndex, emission * 4, ray.D);
             }
         }
     }
@@ -129,32 +132,19 @@ struct PushConstants
         float3 current = SampleSkybox(ray.D);
         color.rgb += current;
         dominantDirection.xyz += ray.D * Luminance(current);
-        AccumulateL2(sh, Push.sampleIndex, current, ray.D);
+        AccumulateL2(sh, Push.sampleIndex, current * 4, ray.D);
     }
 
     ValidateSampleColor(color);
 
-    float4 previous = float4(
-        CompactedLightmap[index * 3 + 0],
-        CompactedLightmap[index * 3 + 1],
-        CompactedLightmap[index * 3 + 2],
-        1.0);
-
-    AccumulateColor(previous, sampleIndex, color);
-    CompactedLightmap[index * 3 + 0] = previous.x;
-    CompactedLightmap[index * 3 + 1] = previous.y;
-    CompactedLightmap[index * 3 + 2] = previous.z;
-
-    if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
-    {
-        uint index = index + Push.compactedCount;
-        CompactedLightmap[index * 3 + 0] += dominantDirection.x;
-        CompactedLightmap[index * 3 + 1] += dominantDirection.y;
-        CompactedLightmap[index * 3 + 2] += dominantDirection.z;
-    }
-
     if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
     {
+        float3 L0 = sh.sh[0].xyz;
+        L0 *= sampleScale;
+        CompactedLightmap[index * 3 + 0] += L0.x;
+        CompactedLightmap[index * 3 + 1] += L0.y;
+        CompactedLightmap[index * 3 + 2] += L0.z;
+
         uint index = index + Push.compactedCount;
 
         float3 combinedSH = EncodeCombinedSHL1(sh);
@@ -163,5 +153,26 @@ struct PushConstants
         CompactedLightmap[index * 3 + 0] += combinedSH.x;
         CompactedLightmap[index * 3 + 1] += combinedSH.y;
         CompactedLightmap[index * 3 + 2] += combinedSH.z;
+    }
+    else
+    {
+        float4 previous = float4(
+            CompactedLightmap[index * 3 + 0],
+            CompactedLightmap[index * 3 + 1],
+            CompactedLightmap[index * 3 + 2],
+            1.0);
+
+        AccumulateColor(previous, sampleIndex, color);
+        CompactedLightmap[index * 3 + 0] = previous.x;
+        CompactedLightmap[index * 3 + 1] = previous.y;
+        CompactedLightmap[index * 3 + 2] = previous.z;
+    }
+
+    if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
+    {
+        uint index = index + Push.compactedCount;
+        CompactedLightmap[index * 3 + 0] += dominantDirection.x;
+        CompactedLightmap[index * 3 + 1] += dominantDirection.y;
+        CompactedLightmap[index * 3 + 2] += dominantDirection.z;
     }
 }

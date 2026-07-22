@@ -1172,11 +1172,16 @@ impl Glim {
     }
 }
 
-fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32]) -> io::Result<()> {
+fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> io::Result<()> {
     use std::fs::File;
     use std::io::BufWriter;
 
     let mut file = BufWriter::new(File::create(path)?);
+
+    let bits = match alpha {
+        true => 32,
+        false => 24,
+    };
 
     // TGA header (18 bytes)
     let header: [u8; 18] = [
@@ -1195,29 +1200,48 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32]) -> io::Result<()>
         (w & 0xFF) as u8,
         ((w >> 8) & 0xFF) as u8, // Width
         (h & 0xFF) as u8,
-        ((h >> 8) & 0xFF) as u8, // Height
-        32,                      // Bits per pixel (32 = RGBA)
-        0x28,                    // Descriptor: 8 alpha bits, top-left origin (bit 5 set)
+        ((h >> 8) & 0xFF) as u8,         // Height
+        bits,                            // Bits per pixel (32 = RGBA)
+        if alpha { 0x28 } else { 0x20 }, // top-left origin
     ];
     file.write_all(&header)?;
 
-    let mut row = vec![0u8; w * 4];
-    for y in 0..h {
-        for x in 0..w {
-            let flipped_y = h - 1 - y;
-            let index = (x + flipped_y * w) * 4;
-            let r = (pixels[index + 0].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-            let g = (pixels[index + 1].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-            let b = (pixels[index + 2].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-            let a = (pixels[index + 3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+    if alpha {
+        let mut row = vec![0u8; w * 4];
+        for y in 0..h {
+            for x in 0..w {
+                let flipped_y = h - 1 - y;
+                let index = (x + flipped_y * w) * 4;
+                let r = (pixels[index + 0].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let g = (pixels[index + 1].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let b = (pixels[index + 2].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let a = (pixels[index + 3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
 
-            let out = x * 4;
-            row[out + 0] = b;
-            row[out + 1] = g;
-            row[out + 2] = r;
-            row[out + 3] = a;
+                let out = x * 4;
+                row[out + 0] = b;
+                row[out + 1] = g;
+                row[out + 2] = r;
+                row[out + 3] = a;
+            }
+            file.write_all(&row)?;
         }
-        file.write_all(&row)?;
+    } else {
+        let mut row = vec![0u8; w * 3];
+        for y in 0..h {
+            for x in 0..w {
+                let flipped_y = h - 1 - y;
+                let index = (x + flipped_y * w) * 4;
+                let r = (pixels[index + 0].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let g = (pixels[index + 1].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let b = (pixels[index + 2].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+
+                let out = x * 3;
+                row[out + 0] = b;
+                row[out + 1] = g;
+                row[out + 2] = r;
+            }
+            file.write_all(&row)?;
+        }
     }
 
     Ok(())
@@ -2217,8 +2241,8 @@ fn render_lightmaps(app: &mut Glim) {
                 //     )
                 // })
                 // .unwrap();
-
-                save_tga(full_path, w, h, pixels).unwrap();
+                let alpha = if lightmap_type == 3 { false } else { true };
+                save_tga(full_path, w, h, pixels, alpha).unwrap();
             }
         };
     };
