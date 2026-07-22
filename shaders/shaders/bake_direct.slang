@@ -31,6 +31,7 @@ struct PushConstants
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
     uint lightCount = Push.lightCount;
+    float sampleScale = 1.0 / float(sampleCount);
 
     SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
     uint pixelSeed = RNGPixelInit1D(index);
@@ -42,6 +43,7 @@ struct PushConstants
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
+    SHProbeL2 sh = SHProbeL2::new ();
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
@@ -49,6 +51,7 @@ struct PushConstants
         float3 current = ShadeLightDirect(Lights[lightIndex], positionWS, normalWS, xiLight, throughput, L);
         color.rgb += current;
         dominantDirection.xyz += L * Luminance(current);
+        AccumulateL2(sh, Push.sampleIndex, current, L);
     }
 
     float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
@@ -75,6 +78,7 @@ struct PushConstants
         float3 emissive = triangleLight * MISWeight(triangleLightPdf, bsdfPdf);
         color.rgb += emissive;
         dominantDirection.xyz += L * Luminance(emissive);
+        AccumulateL2(sh, Push.sampleIndex, emissive, L);
     }
 
     Hit hit;
@@ -109,12 +113,14 @@ struct PushConstants
                     emission *= MISWeight(bsdfPdf, lightPdf);
                     color.rgb += emission;
                     dominantDirection.xyz += ray.D * Luminance(emission);
+                    AccumulateL2(sh, Push.sampleIndex, emission, ray.D);
                 }
             }
             else
             {
                 color.rgb += emission;
                 dominantDirection.xyz += ray.D * Luminance(emission);
+                AccumulateL2(sh, Push.sampleIndex, emission, ray.D);
             }
         }
     }
@@ -123,6 +129,7 @@ struct PushConstants
         float3 current = SampleSkybox(ray.D);
         color.rgb += current;
         dominantDirection.xyz += ray.D * Luminance(current);
+        AccumulateL2(sh, Push.sampleIndex, current, ray.D);
     }
 
     ValidateSampleColor(color);
@@ -138,11 +145,23 @@ struct PushConstants
     CompactedLightmap[index * 3 + 1] = previous.y;
     CompactedLightmap[index * 3 + 2] = previous.z;
 
-    if (LIGHTMAP_MODE == LightmapMode::Directional)
+    if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
     {
         uint index = index + Push.compactedCount;
         CompactedLightmap[index * 3 + 0] += dominantDirection.x;
         CompactedLightmap[index * 3 + 1] += dominantDirection.y;
         CompactedLightmap[index * 3 + 2] += dominantDirection.z;
+    }
+
+    if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
+    {
+        uint index = index + Push.compactedCount;
+
+        float3 combinedSH = EncodeCombinedSHL1(sh);
+        combinedSH *= sampleScale;
+
+        CompactedLightmap[index * 3 + 0] += combinedSH.x;
+        CompactedLightmap[index * 3 + 1] += combinedSH.y;
+        CompactedLightmap[index * 3 + 2] += combinedSH.z;
     }
 }

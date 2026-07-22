@@ -262,6 +262,26 @@ void AccumulateL2(inout SHProbeL2 previous, uint sampleIndex, float3 color, floa
     previous.sh[8].xyz += color * Y22(wi) * A_HAT_2 * L22_NORMALIZATION;
 }
 
+float3 EncodeCombinedSHL1(SHProbeL2 probe)
+{
+    float3 L0 = probe.sh[0].xyz;
+    float3 L1x = probe.sh[3].xyz;
+    float3 L1y = probe.sh[1].xyz;
+    float3 L1z = probe.sh[2].xyz;
+
+    float3 safeL0 = max(L0, 1e-4);
+
+    const float3 w = float3(0.2126, 0.7152, 0.0722);
+
+    float lumaL0 = max(dot(L0, w), 1e-4);
+    float ratioX = dot(L1x, w) / (lumaL0 * 2.0);
+    float ratioY = dot(L1y, w) / (lumaL0 * 2.0);
+    float ratioZ = dot(L1z, w) / (lumaL0 * 2.0);
+
+    float3 ratio = clamp(float3(ratioX, ratioY, ratioZ), -1.0, 1.0);
+    return saturate(mad(ratio, 0.5, 0.5));
+}
+
 bool UseSmoothPosition(Surface surface)
 {
     float3 rayP = RayOffset(surface.P, surface.Ng);

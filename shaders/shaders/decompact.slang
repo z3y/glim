@@ -117,6 +117,12 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
                 float4 encoded = EncodeDirectional(dilatedDirectional.xyz, dilatedDiffuse.rgb);
                 DecompactTarget[linearIndex] = float4(encoded.xyz, 0.0);
             }
+            else if (Push.lightmapType == 3)
+            {
+                float4 dilatedSh = 0.0;
+                DilateLightmap(coords, Push.compactedCount, dilatedSh);
+                DecompactTarget[linearIndex] = float4(dilatedSh.rgb, 0.0);
+            }
             else
             {
                 DecompactTarget[linearIndex] = float4(dilatedDiffuse.xyz, 0.0);
@@ -160,5 +166,16 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
 
         float4 encoded = mad(float4(normalizedDirection, NoL), 0.5, 0.5);
         DecompactTarget[linearIndex] = encoded;
+    }
+    else if (Push.lightmapType == 3)
+    {
+        uint compactIndex = compactIndex + Push.compactedCount;
+
+        float3 l1combined = float3(
+            CompactedLightmap[compactIndex * 3 + 0],
+            CompactedLightmap[compactIndex * 3 + 1],
+            CompactedLightmap[compactIndex * 3 + 2]);
+
+        DecompactTarget[linearIndex] = float4(l1combined, 1.0);
     }
 }

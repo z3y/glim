@@ -9,6 +9,12 @@ struct SHProbeL2
     float3 position;
     float radius;
     float4 sh[9];
+
+    static SHProbeL2 new()
+    {
+        SHProbeL2 probe = (SHProbeL2)0;
+        return probe;
+    }
 };
 
 static const float L0_NORMALIZATION = 0.5 * sqrt(1.0 / float.getPi());

@@ -92,7 +92,8 @@ SamplerState SkyboxSampler;
 enum LightmapMode : uint
 {
     NonDirectional = 0,
-    Directional = 1,
+    DominantDirection = 1,
+    CombinedSH = 3,
 }
 
 float4

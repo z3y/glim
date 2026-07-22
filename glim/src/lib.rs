@@ -389,6 +389,13 @@ fn initialize_render(app: &mut Glim) {
         );
     }
 
+    // free
+    for index in 0..app.groups.len() {
+        let group = &mut app.groups[index];
+        group.albedo_pixels = Vec::new();
+        group.emission_pixels = Vec::new();
+    }
+
     app.albedo_array = albedo_array;
     app.emission_array = emission_array;
 
@@ -988,11 +995,9 @@ fn extract_emissive_triangles(app: &mut Glim) {
 
 impl LightmapGroup {
     fn new(
-        app: &mut Glim,
         settings: LightmapSettings,
         albedo_pixels: &[u8],
         emission_pixels: &[f32],
-        index: u32,
     ) -> LightmapGroup {
         // println!("creating lightmap group {:?}", &settings);
 
@@ -1772,7 +1777,8 @@ fn render_lightmaps(app: &mut Glim) {
 
     let mut lightmap_channels = match app.config.lightmap_mode {
         LightmapMode::NonDirectional => 3,
-        LightmapMode::Directional => 6,
+        LightmapMode::DominantDirection => 6,
+        LightmapMode::CombinedSH => 6,
     };
 
     // todo this could definitely be moved into a separate buffer
@@ -2009,7 +2015,8 @@ fn render_lightmaps(app: &mut Glim) {
 
     let lightmaps_per_group = match app.config.lightmap_mode {
         LightmapMode::NonDirectional => 1,
-        LightmapMode::Directional => 2,
+        LightmapMode::DominantDirection => 2,
+        LightmapMode::CombinedSH => 2,
     };
     let post_total = (app.groups.len() * lightmaps_per_group).max(1) as u32;
 
@@ -2160,6 +2167,11 @@ fn render_lightmaps(app: &mut Glim) {
             let w = group.width as usize;
             let h = group.height as usize;
 
+            (log)(LogMessage::message(&format!(
+                "Encoding Lightmap ({}/{})",
+                post_step, post_total
+            )));
+
             if lightmap_type == 0 {
                 use exr::prelude::*;
                 use half::f16;
@@ -2186,7 +2198,7 @@ fn render_lightmaps(app: &mut Glim) {
                 );
 
                 Image::from_layer(layer).write().to_file(full_path).unwrap();
-            } else if lightmap_type == 1 {
+            } else if lightmap_type == 1 || lightmap_type == 3 {
                 let full_path =
                     output_dir.join(format!("Lightmap-{}_Directional.tga", group_index));
 
@@ -2222,11 +2234,17 @@ fn render_lightmaps(app: &mut Glim) {
                 post_step += 1;
                 process_lightmap(group_index, 0, post_step);
             }
-            LightmapMode::Directional => {
+            LightmapMode::DominantDirection => {
                 post_step += 1;
                 process_lightmap(group_index, 0, post_step);
                 post_step += 1;
                 process_lightmap(group_index, 1, post_step);
+            }
+            LightmapMode::CombinedSH => {
+                post_step += 1;
+                process_lightmap(group_index, 0, post_step);
+                post_step += 1;
+                process_lightmap(group_index, 3, post_step);
             }
         }
     }

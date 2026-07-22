@@ -52,7 +52,8 @@ pub struct GlimConfig {
 #[derive(Clone, Copy)]
 pub enum LightmapMode {
     NonDirectional = 0,
-    Directional = 1,
+    DominantDirection = 1,
+    CombinedSH = 3,
 }
 
 #[repr(u32)]
@@ -308,8 +309,7 @@ pub extern "C" fn app_add_lightmap_group(
         let albedo_pixels =
             unsafe { slice::from_raw_parts(albedo_pixels, albedo_pixels_length as usize) };
 
-        let index = app.groups.len() as u32;
-        let group = LightmapGroup::new(app, settings, albedo_pixels, emission_pixels, index);
+        let group = LightmapGroup::new(settings, albedo_pixels, emission_pixels);
         app.groups.push(group);
     }));
 

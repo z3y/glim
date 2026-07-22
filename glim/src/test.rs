@@ -55,7 +55,7 @@ mod tests {
             direct_samples: 512,
             indirect_samples: 256,
             bounce_count: 5,
-            lightmap_mode: LightmapMode::Directional,
+            lightmap_mode: LightmapMode::DominantDirection,
             skybox_intensity: 1.0,
             indirect_intensity: 1.0,
             lightprobe_deringing: 4.0,
