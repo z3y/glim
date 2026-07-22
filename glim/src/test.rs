@@ -58,6 +58,7 @@ mod tests {
             lightmap_mode: LightmapMode::Directional,
             skybox_intensity: 1.0,
             indirect_intensity: 1.0,
+            lightprobe_deringing: 4.0,
         };
         config
     }

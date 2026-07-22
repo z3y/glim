@@ -99,7 +99,7 @@ struct PushConstants
             {
                 float triangleArea = CalculateTriangleArea(hit.primitiveID);
                 float3 positionToLight = surface.P - positionWS;
-                float distSq = dot(positionToLight, positionToLight);
+                float distSq = max(dot(positionToLight, positionToLight), 0.0001);
                 float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
 
                 if (cosThetaLight > 0.0)
@@ -112,7 +112,6 @@ struct PushConstants
             }
             else
             {
-
                 color.rgb += emission;
                 dominantDirection.xyz += ray.D * Luminance(emission);
             }
@@ -124,6 +123,8 @@ struct PushConstants
         color.rgb += current;
         dominantDirection.xyz += ray.D * Luminance(current);
     }
+
+    ValidateSampleColor(color);
 
     float4 previous = float4(
         CompactedLightmap[index * 3 + 0],

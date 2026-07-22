@@ -388,39 +388,17 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
 
     float triangleArea = CalculateTriangleArea(primitiveID);
 
-    if (!any(lightColor > 0.0) || triangleArea <= 0.001)
-    {
-        pdf = 0.0;
-        L = 0.0;
-        return 0.0;
-    }
-
     float pdfArea = randomEmissiveTrianglePdf / triangleArea;
 
     L = emissiveSurface.P;
     float3 positionToLight = L - positionWS;
     L = normalize(positionToLight);
-    float distanceSquare = dot(positionToLight, positionToLight);
-
-    if (distanceSquare <= 1e-8)
-    {
-        pdf = 0.0;
-        L = 0.0;
-        return 0.0;
-    }
+    float distanceSquare = max(dot(positionToLight, positionToLight), 0.0001);
 
     float cosTheta = saturate(dot(normalWS, L));
 
     float cosThetaLight = dot(-L, emissiveSurface.N);
-
-    if (emissiveSurface.backfaceGI)
-    {
-        cosThetaLight = saturate(abs(cosThetaLight));
-    }
-    else
-    {
-        cosThetaLight = saturate(cosThetaLight);
-    }
+    cosThetaLight = emissiveSurface.backfaceGI ? abs(cosThetaLight) : saturate(cosThetaLight);
 
     if (cosThetaLight <= 0.001)
     {
@@ -446,9 +424,17 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     }
 
     pdf = pdfArea * distanceSquare / cosThetaLight;
-    pdf = min(pdf, 1e16f);
 
     return color;
+}
+
+void ValidateSampleColor(inout float4 color)
+{
+    if (any(!isfinite(color)))
+    {
+        color = 0.0;
+    }
+    color = max(0.0, color);
 }
 
 float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, out float3 L)

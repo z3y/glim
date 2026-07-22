@@ -107,6 +107,8 @@ struct PushConstants
         // }
     }
 
+    ValidateSampleColor(color);
+
     float4 previous = float4(
         CompactedLightmap[(currentOffset + index) * 3 + 0],
         CompactedLightmap[(currentOffset + index) * 3 + 1],
