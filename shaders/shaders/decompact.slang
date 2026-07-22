@@ -69,7 +69,14 @@ void DilateLightmap(int2 coords, uint compactedOffset, inout float4 original)
 
     if (weightSum > 0.0)
     {
-        original = colorSum / weightSum;
+        if (LIGHTMAP_MODE == LightmapMode::CombinedSH && compactedOffset == 0)
+        {
+            original = (colorSum / weightSum) * Y0() * A_HAT_0 * L0_NORMALIZATION;
+        }
+        else
+        {
+            original = colorSum / weightSum;
+        }
     }
 }
 
@@ -136,6 +143,11 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
         CompactedLightmap[compactIndex * 3 + 0],
         CompactedLightmap[compactIndex * 3 + 1],
         CompactedLightmap[compactIndex * 3 + 2]);
+
+    if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
+    {
+        diffuse *= Y0() * A_HAT_0 * L0_NORMALIZATION;
+    }
 
     if (Push.lightmapType == 0)
     {
