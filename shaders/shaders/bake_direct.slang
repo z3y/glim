@@ -67,22 +67,22 @@ struct PushConstants
 
     float randomEmissiveTrianglePdf = 1.0 / float(EMISSIVE_TRIANGLES_COUNT);
     float bsdfPdf = 1.0 / float.getPi();
-    float triangleLightPdf = 0.0;
-    float3 triangleLight = 0.0;
 
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
         float2 xiTriangle = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
         uint triIndex = min(uint(xiTriangle.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
         uint emissivePrimitiveID = EmissiveTriangles[triIndex];
-        float3 L;
-        triangleLight = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, randomEmissiveTrianglePdf, triangleLightPdf, L);
 
-        float3 emissive = triangleLight * MISWeight(triangleLightPdf, bsdfPdf);
-        color.rgb += emissive;
-        dominantDirection.xyz += L * Luminance(emissive);
-        // AccumulateL2(sh, Push.sampleIndex, emissive, L); // todo triangle sh direct
-        // AccumulateL1Lightmap(sh, current, L, normalWS);
+        float3 L;
+        float pdf = 0.0;
+        float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, randomEmissiveTrianglePdf, pdf, L, false);
+        float3 NoL = saturate(dot(L, normalWS));
+
+        current *= MISWeight(pdf, bsdfPdf);
+        color.rgb += current * NoL;
+        dominantDirection.xyz += L * Luminance(current * NoL);
+        AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 
     float pdf = 1.0 / max(dot(ray.D, normalWS), 1e-4);

@@ -21,7 +21,7 @@ struct PushConstants
 // ideally there should be no change to the lightmap before denoising
 // because the denoiser doesnt detect proper noise levels
 // 1px can still very slightly make the denoising worse but its worth it for no seams
-static const int DILATE_RADIUS = 2;
+static const int DILATE_RADIUS = 1;
 
 void DilateLightmap(int2 coords, uint compactedOffset, inout float4 original)
 {
@@ -87,6 +87,7 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
     return value;
 }
 
+// https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/gdc2018-precomputedgiobalilluminationinfrostbite.pdf
 float3 EncodeCombinedSH(float3 L0, float3 L1)
 {
     float3 safeL0 = max(Luminance(L0), 1e-4);

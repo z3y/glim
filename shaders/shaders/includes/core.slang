@@ -433,7 +433,7 @@ float Luminance(float3 rgb)
     return dot(rgb, float3(0.2126, 0.7152, 0.0722));
 }
 
-float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, float randomEmissiveTrianglePdf, out float pdf, out float3 L)
+float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, float randomEmissiveTrianglePdf, out float pdf, out float3 L, bool isLightProbe)
 {
     float r0 = sqrt(xi.x);
     float r1 = xi.y;
@@ -452,8 +452,6 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     L = normalize(positionToLight);
     float distanceSquare = max(dot(positionToLight, positionToLight), 0.0001);
 
-    float cosTheta = saturate(dot(normalWS, L));
-
     float cosThetaLight = dot(-L, emissiveSurface.N);
     cosThetaLight = emissiveSurface.backfaceGI ? abs(cosThetaLight) : saturate(cosThetaLight);
 
@@ -465,14 +463,23 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
 
     float solidAngleWeight = cosThetaLight / (distanceSquare * pdfArea);
 
-    float3 color = cosTheta * solidAngleWeight * lightColor * throughput;
+    float3 color = solidAngleWeight * lightColor * throughput;
 
     Ray shadowRay;
     shadowRay.P = positionWS;
     shadowRay.tMin = 0;
     shadowRay.tMax = max(sqrt(distanceSquare) - 0.001f, 0.0001);
     shadowRay.D = L;
-    [branch] if (any(color > 0.0))
+
+    float visible = any(color > 0.0) ? 1 : 0;
+
+    if (!isLightProbe)
+    {
+        float NoL = dot(normalWS, L);
+        visible *= NoL;
+    }
+
+    [branch] if (visible > 0.0)
     {
         if (TraceShadowRay(shadowRay))
         {
