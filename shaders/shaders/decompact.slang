@@ -21,7 +21,7 @@ struct PushConstants
 // ideally there should be no change to the lightmap before denoising
 // because the denoiser doesnt detect proper noise levels
 // 1px can still very slightly make the denoising worse but its worth it for no seams
-static const int DILATE_RADIUS = 1;
+static const int DILATE_RADIUS = 2;
 
 void DilateLightmap(int2 coords, uint compactedOffset, inout float4 original)
 {
@@ -87,6 +87,15 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
     return value;
 }
 
+float3 EncodeCombinedSH(float3 L0, float3 L1)
+{
+    float3 safeL0 = max(Luminance(L0), 1e-4);
+    L1 /= safeL0 * 2.0;
+
+    L1 = clamp(L1, -1.0, 1.0);
+    return saturate(mad(L1, 0.5, 0.5));
+}
+
 [numthreads(8, 8, 1)] void main(uint3 threadID : SV_DispatchThreadID)
 {
     uint2 coords = threadID.xy;
@@ -130,7 +139,9 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
             {
                 float4 dilatedSh = 0.0;
                 DilateLightmap(coords, lightmap1offset, dilatedSh);
-                DecompactTarget[linearIndex] = float4(dilatedSh.rgb, 0.0);
+                float3 result = EncodeCombinedSH(dilatedDiffuse.rgb, dilatedSh.rgb);
+
+                DecompactTarget[linearIndex] = float4(result, 0.0);
             }
             else
             {
@@ -181,13 +192,7 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
             CompactedLightmap[(compactIndex + lightmap1offset) * 3 + 1],
             CompactedLightmap[(compactIndex + lightmap1offset) * 3 + 2]);
 
-        float3 L0 = diffuse;
-
-        float3 safeL0 = max(Luminance(L0), 1e-4);
-        combined /= safeL0 * 2.0;
-
-        combined = clamp(combined, -1.0, 1.0);
-        float3 result = saturate(mad(combined, 0.5, 0.5));
+        float3 result = EncodeCombinedSH(diffuse, combined);
 
         DecompactTarget[linearIndex] = float4(result, 1.0);
     }
