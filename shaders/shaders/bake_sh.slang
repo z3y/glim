@@ -53,7 +53,7 @@ struct PushConstants
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         float3 L;
-        float3 color = ShadeLightDirectSH(Lights[lightIndex], probePosition, xiLight, throughput, L);
+        float3 color = ShadeLightDirect(Lights[lightIndex], probePosition, 0.0, xiLight, throughput, L, true);
         AccumulateL2(probe, sampleIndex, color * sampleScale, L);
     }
 

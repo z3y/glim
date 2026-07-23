@@ -49,12 +49,12 @@ struct PushConstants
     {
         Light light = Lights[lightIndex];
         float3 L;
-        float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L);
-        color.rgb += current;
-        dominantDirection.xyz += L * Luminance(current);
+        float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L, false);
+        float3 NoL = saturate(dot(L, normalWS));
+        color.rgb += current * NoL;
+        dominantDirection.xyz += L * Luminance(current * NoL);
 
-        float NoL = saturate(dot(normalWS, L));
-        AccumulateL1Lightmap(sh, current / NoL, L);
+        AccumulateL1Lightmap(sh, current, L, normalWS);
     }
 
     float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);

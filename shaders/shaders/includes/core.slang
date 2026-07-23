@@ -471,83 +471,7 @@ void ValidateSampleColor(inout float4 color)
     color = max(0.0, color);
 }
 
-float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, out float3 L)
-{
-    Ray shadowRay;
-    shadowRay.P = positionWS;
-    shadowRay.tMin = 0;
-
-    float falloff;
-    if (light.type == LightType::Directional)
-    {
-        L = GetDirectionalLightAngle(light.direction, light.ShadowRangeOrAngle, xi);
-        falloff = 1.0;
-
-        shadowRay.tMax = RAY_MAX;
-    }
-    else
-    {
-        if (light.type == LightType::Area)
-        {
-            float2 offset = xi - 0.5;
-            float3 right = normalize(cross(light.up, light.direction));
-            L = light.position + right * offset.x * light.AreaSize.x + light.up * offset.y * light.AreaSize.y;
-        }
-        else
-        {
-            if (light.ShadowRangeOrAngle > 0.0)
-            {
-                L = RandomPointOnOrientedDisk(light.position, light.ShadowRangeOrAngle, positionWS, xi);
-            }
-        }
-
-        float3 positionToLight = L - positionWS;
-        L = normalize(positionToLight);
-
-        float distanceSquare = dot(positionToLight, positionToLight);
-
-        float rangeSq = light.range * light.range;
-
-        falloff = LightFalloff(distanceSquare, 1.0 / rangeSq);
-
-        if (light.type == LightType::Spot)
-        {
-            float spotScale;
-            float spotOffset;
-            GetSpotScaleOffset(light.SpotOuter, light.SpotInnerPercent, spotScale, spotOffset);
-            float spotAttenuation = GetSpotAngleAttenuation(light.direction, L, spotScale, spotOffset);
-
-            falloff *= spotAttenuation;
-        }
-
-        if (light.type == LightType::Area)
-        {
-            float area = light.AreaSize.x * light.AreaSize.y;
-            float cosLight = saturate(dot(-L, light.direction));
-            falloff = (cosLight * area) / (float ::getPi() * distanceSquare);
-        }
-
-        shadowRay.tMax = sqrt(distanceSquare);
-    }
-
-    float cosTheta = saturate(dot(normalWS, L));
-
-    shadowRay.D = L;
-
-    float3 color = cosTheta * falloff * light.color * throughput;
-
-    [branch] if (any(color > 0.0))
-    {
-        if (TraceShadowRay(shadowRay))
-        {
-            color = 0.0;
-        }
-    }
-
-    return color;
-}
-
-float3 ShadeLightDirectSH(Light light, float3 positionWS, float2 xi, float3 throughput, out float3 L)
+float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, out float3 L, bool isLightProbe)
 {
     Ray shadowRay;
     shadowRay.P = positionWS;
@@ -610,7 +534,15 @@ float3 ShadeLightDirectSH(Light light, float3 positionWS, float2 xi, float3 thro
 
     float3 color = falloff * light.color * throughput;
 
-    [branch] if (any(color > 0.0))
+    float visible = any(color > 0.0) ? 1 : 0;
+
+    if (!isLightProbe)
+    {
+        float NoL = dot(normalWS, L);
+        visible *= NoL;
+    }
+
+    [branch] if (visible > 0.0)
     {
         if (TraceShadowRay(shadowRay))
         {

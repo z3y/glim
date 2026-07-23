@@ -84,7 +84,9 @@ struct PushConstants
         for (uint lightIndex = 0; lightIndex < Push.lightCount; lightIndex++)
         {
             float3 L;
-            color.rgb += ShadeLightDirect(Lights[lightIndex], positionWS, normalWS, xiLight, throughput, L);
+            float3 current = ShadeLightDirect(Lights[lightIndex], positionWS, normalWS, xiLight, throughput, L, false);
+            float3 NoL = saturate(dot(L, normalWS));
+            color.rgb += current * NoL;
         }
 
         float2 xiBounce = SobolBurleySample2D(indexing.x, dimension++, indexing.y, indexing.z);
