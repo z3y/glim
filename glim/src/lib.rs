@@ -2070,6 +2070,8 @@ fn render_lightmaps(app: &mut Glim) {
             post_step, post_total
         )));
 
+        (log)(LogMessage::progress(post_step as f32 / post_total as f32));
+
         let mut compaction_push = CompactionPushConstants {
             width: group.width,
             height: group.height,
@@ -2296,10 +2298,10 @@ fn render_lightmaps(app: &mut Glim) {
     drop(compacted_visibility);
     drop(staging_buffer_lightmap);
 
-    (log)(LogMessage::message(&format!("Baking Light Probes")));
-
     // light probes
     if app.probes.len() > 0 && !is_cancelled() {
+        (log)(LogMessage::message(&format!("Baking Light Probes")));
+
         let mut shader = load_bake_light_probes_shader(&app.vk, &app.constants);
 
         update_bake_light_probes_shader(
@@ -2331,9 +2333,18 @@ fn render_lightmaps(app: &mut Glim) {
         let groups_x = (probes_count + 63) / 64;
         let vk = &app.vk.device;
 
+        let mut progress = 0.0;
+        let progress_scale = 1.0 / app.config.probe_samples as f32;
+        let last_sample = app.config.probe_samples - 1;
+
         for sample_index in 0..app.config.probe_samples {
             push.sample_index = sample_index;
             let constants_bytes = as_bytes(&push);
+
+            if sample_index % 4 == 0 || sample_index == last_sample {
+                (log)(LogMessage::progress(progress * progress_scale));
+            }
+            progress += 1.0;
 
             let cmd = app.vk.begin_single_use_cmd();
             unsafe {
