@@ -373,7 +373,7 @@ namespace Glim
             _progressID = -1;
         }
 
-        public static Vector4[] GenerateProbeVolume(Vector3 center, Vector3 size, Vector3Int resolution)
+        public static Vector4[] GenerateProbeVolume(Vector3 center, Vector3 size, Quaternion rotation, Vector3Int resolution)
         {
             Vector4[] positions = new Vector4[resolution.x * resolution.y * resolution.z];
 
@@ -383,9 +383,8 @@ namespace Glim
                 size.z / resolution.z
             );
 
-            Vector3 origin = center - size * 0.5f;
-
-            origin += texelSize / 2.0f;
+            Vector3 localOrigin = -size * 0.5f;
+            localOrigin += texelSize / 2.0f;
 
             float radius = Mathf.Min(texelSize.x, texelSize.y, texelSize.z) / 2.0f;
 
@@ -394,7 +393,10 @@ namespace Glim
                 for (int y = 0; y < resolution.y; y++)
                     for (int x = 0; x < resolution.x; x++)
                     {
-                        Vector4 probe = origin + Vector3.Scale(new Vector3(x, y, z), texelSize);
+                        Vector3 localPos = localOrigin + Vector3.Scale(new Vector3(x, y, z), texelSize);
+                        Vector3 worldPos = center + rotation * localPos;
+
+                        Vector4 probe = worldPos;
                         probe.w = radius;
                         positions[i++] = probe;
                     }
@@ -418,7 +420,7 @@ namespace Glim
                 };
 
                 ctx.probeVolumes.Add(lvData);
-                var volume = GenerateProbeVolume(lv.transform.position, lv.transform.lossyScale, lv.Resolution);
+                var volume = GenerateProbeVolume(lv.transform.position, lv.transform.lossyScale, lv.transform.rotation, lv.Resolution);
                 ctx.probePositions.AddRange(volume);
             }
         }

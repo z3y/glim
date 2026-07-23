@@ -43,7 +43,7 @@ namespace Glim
         public LightmapMode lightmapMode = LightmapMode.NonDirectional;
 
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
-        [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.")]
+        [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times. Affects lightmaps, light probes and light volumes.")]
         public bool multipleImportanceSampling = false;
 
         [Tooltip("Number of direct samples, affects direct lights, emissive materials and multiple importance sampling")]
