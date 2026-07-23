@@ -1811,7 +1811,6 @@ fn render_lightmaps(app: &mut Glim) {
         lightmap_channels += 6;
     }
 
-    // todo initialize
     let mut compacted_lightmap = Buffer::empty(
         &app.vk,
         "Diffuse Buffer".to_owned(),
@@ -1822,6 +1821,23 @@ fn render_lightmaps(app: &mut Glim) {
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
+
+    {
+        let cmd = app.vk.begin_single_use_cmd();
+        let vk = &app.vk.device;
+
+        unsafe {
+            vk.cmd_fill_buffer(
+                cmd,
+                compacted_lightmap.buffer,
+                0,
+                compacted_lightmap.bytes,
+                0,
+            );
+        }
+
+        app.vk.end_single_use_cmd(cmd);
+    }
 
     let mut bake_direct_shader = load_bake_direct_shader(&app.vk, &app.constants);
     update_bake_direct_shader(

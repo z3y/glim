@@ -53,8 +53,8 @@ struct PushConstants
         color.rgb += current;
         dominantDirection.xyz += L * Luminance(current);
 
-        float NoL = max(0.001, saturate(dot(normalWS, L)));
-        AccumulateL2(sh, Push.sampleIndex, current / NoL, L);
+        float NoL = saturate(dot(normalWS, L));
+        AccumulateL1Lightmap(sh, current / NoL, L);
     }
 
     float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
@@ -81,7 +81,7 @@ struct PushConstants
         float3 emissive = triangleLight * MISWeight(triangleLightPdf, bsdfPdf);
         color.rgb += emissive;
         dominantDirection.xyz += L * Luminance(emissive);
-        AccumulateL2(sh, Push.sampleIndex, emissive, L); // todo triangle sh direct
+        // AccumulateL2(sh, Push.sampleIndex, emissive, L); // todo triangle sh direct
     }
 
     Hit hit;
@@ -116,14 +116,14 @@ struct PushConstants
                     emission *= MISWeight(bsdfPdf, lightPdf);
                     color.rgb += emission;
                     dominantDirection.xyz += ray.D * Luminance(emission);
-                    AccumulateL2(sh, Push.sampleIndex, emission * 4, ray.D);
+                    // AccumulateL2(sh, Push.sampleIndex, emission * 4, ray.D);
                 }
             }
             else
             {
                 color.rgb += emission;
                 dominantDirection.xyz += ray.D * Luminance(emission);
-                AccumulateL2(sh, Push.sampleIndex, emission * 4, ray.D);
+                // AccumulateL2(sh, Push.sampleIndex, emission * 4, ray.D);
             }
         }
     }
@@ -132,15 +132,14 @@ struct PushConstants
         float3 current = SampleSkybox(ray.D);
         color.rgb += current;
         dominantDirection.xyz += ray.D * Luminance(current);
-        AccumulateL2(sh, Push.sampleIndex, current * 4, ray.D);
+        // AccumulateL2(sh, Push.sampleIndex, current * 4, ray.D);
     }
 
     ValidateSampleColor(color);
 
     if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
     {
-        float3 L0 = sh.sh[0].xyz;
-        L0 *= sampleScale;
+        float3 L0 = sh.sh[0].xyz * sampleScale;
         CompactedLightmap[index * 3 + 0] += L0.x;
         CompactedLightmap[index * 3 + 1] += L0.y;
         CompactedLightmap[index * 3 + 2] += L0.z;

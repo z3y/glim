@@ -262,13 +262,37 @@ void AccumulateL2(inout SHProbeL2 previous, uint sampleIndex, float3 color, floa
     previous.sh[8].xyz += color * Y22(wi) * A_HAT_2 * L22_NORMALIZATION;
 }
 
+void AccumulateL1Lightmap(inout SHProbeL2 previous, float3 color, float3 wi, float3 normalWS)
+{
+    // flip Z for Unity
+    wi.z = -wi.z;
+    normalWS.z = -normalWS.z;
+
+    float NoL = saturate(dot(wi, normalWS) * 4.0);
+    float AY0 = 0.25;
+    float AY1 = 0.50;
+
+    color *= NoL;
+
+    if (NoL > 0.0)
+    {
+        previous.sh[0].xyz += color * AY0;
+
+        float luma = Luminance(color);
+
+        previous.sh[3].xyz += luma * wi.x * AY1;
+        previous.sh[1].xyz += luma * wi.y * AY1;
+        previous.sh[2].xyz += luma * wi.z * AY1;
+    }
+}
+
 float3 EncodeCombinedSHL1(SHProbeL2 probe)
 {
-    float3 L1r = probe.sh[3].xyz;
-    float3 L1g = probe.sh[1].xyz;
-    float3 L1b = probe.sh[2].xyz;
+    float3 L1x = probe.sh[3].xyz;
+    float3 L1y = probe.sh[1].xyz;
+    float3 L1z = probe.sh[2].xyz;
 
-    float3 combined = float3(Luminance(L1r), Luminance(L1g), Luminance(L1b));
+    float3 combined = float3(L1x.x, L1y.x, L1z.x);
     return combined;
 }
 

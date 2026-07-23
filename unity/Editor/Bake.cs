@@ -403,7 +403,7 @@ namespace Glim
         }
 
 #if VRC_LIGHT_VOLUMES
-        static void AddLightProbeVolumes(LightmapBaker baker, BakeContext ctx)
+        static void AddLightProbeVolumes(GlimLightmapper baker, BakeContext ctx)
         {
             var vrclv = ctx.scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<VRCLightVolumes.LightVolume>(false)).ToArray();
 
@@ -498,7 +498,7 @@ namespace Glim
         // Refocus the window for QoL
         static void RestoreSelection()
         {
-            var baker = UnityEngine.Object.FindAnyObjectByType<LightmapBaker>();
+            var baker = UnityEngine.Object.FindAnyObjectByType<GlimLightmapper>();
 
             if (baker != null)
             {
@@ -506,7 +506,7 @@ namespace Glim
             }
         }
 
-        public static void Start(LightmapBaker baker, Bindings.GlimConfig config)
+        public static void Start(GlimLightmapper baker, Bindings.GlimConfig config)
         {
             if (_running)
             {

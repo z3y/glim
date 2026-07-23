@@ -11,7 +11,7 @@ using UnityEngine.UIElements;
 
 namespace Glim
 {
-    [CustomEditor(typeof(LightmapBaker))]
+    [CustomEditor(typeof(GlimLightmapper))]
     public class LightmapBakerEditor : Editor
     {
         SerializedObject _nestedSO;
@@ -20,7 +20,7 @@ namespace Glim
         {
             var root = new VisualElement();
 
-            var baker = target as LightmapBaker;
+            var baker = target as GlimLightmapper;
 
             InspectorElement.FillDefaultInspector(root, serializedObject, this);
 

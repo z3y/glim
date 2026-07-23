@@ -22,7 +22,7 @@ namespace Glim
         CombinedSH = 3,
     }
 
-    public class LightmapBaker : MonoBehaviour
+    public class GlimLightmapper : MonoBehaviour
     {
         [Header("Bake Settings")]
         public LightmapMode lightmapMode = LightmapMode.NonDirectioal;
@@ -66,7 +66,7 @@ namespace Glim
             var scene = SceneManager.GetActiveScene();
             var roots = scene.GetRootGameObjects();
 
-            var baker = roots.SelectMany(x => x.GetComponentsInChildren<LightmapBaker>()).FirstOrDefault();
+            var baker = roots.SelectMany(x => x.GetComponentsInChildren<GlimLightmapper>()).FirstOrDefault();
             if (!baker)
             {
                 var go = new GameObject("Glim Baker")
@@ -76,7 +76,7 @@ namespace Glim
 
                 go.transform.SetSiblingIndex(0);
 
-                baker = go.AddComponent<LightmapBaker>();
+                baker = go.AddComponent<GlimLightmapper>();
 
                 var group = ScriptableObject.CreateInstance<LightmapGroup>();
                 baker.group = group;

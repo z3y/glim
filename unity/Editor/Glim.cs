@@ -98,7 +98,7 @@ namespace Glim
             return depth;
         }
 
-        public BakeContext(LightmapBaker baker, Bindings.GlimConfig config)
+        public BakeContext(GlimLightmapper baker, Bindings.GlimConfig config)
         {
             this.lightmapMode = baker.lightmapMode;
             this.reflectionProbesSuperSampling = baker.reflectionProbesSuperSampling;
