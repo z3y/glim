@@ -108,7 +108,8 @@ struct PushConstants
             color.rgb += current;
             dominantDirection.xyz += ray.D * Luminance(current);
 
-            AccumulateL1Lightmap(sh, current, ray.D);
+            float pdf = 1.0 / max(dot(ray.D, normalWS), 1e-4);
+            AccumulateL1LightmapDirect(sh, current * pdf, ray.D, normalWS);
         }
         // else
         // {
