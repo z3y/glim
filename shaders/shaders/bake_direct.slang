@@ -85,6 +85,8 @@ struct PushConstants
         // AccumulateL1Lightmap(sh, current, L, normalWS);
     }
 
+    float pdf = 1.0 / max(dot(ray.D, normalWS), 1e-4);
+
     Hit hit;
     if (TraceRay(ray, hit))
     {
@@ -117,14 +119,14 @@ struct PushConstants
                     emission *= MISWeight(bsdfPdf, lightPdf);
                     color.rgb += emission;
                     dominantDirection.xyz += ray.D * Luminance(emission);
-                    AccumulateL1Lightmap(sh, emission * 2, ray.D);
+                    AccumulateL1LightmapDirect(sh, emission * pdf, ray.D, normalWS);
                 }
             }
             else
             {
                 color.rgb += emission;
                 dominantDirection.xyz += ray.D * Luminance(emission);
-                AccumulateL1Lightmap(sh, emission * 2, ray.D);
+                AccumulateL1LightmapDirect(sh, emission * pdf, ray.D, normalWS);
             }
         }
     }
@@ -133,7 +135,7 @@ struct PushConstants
         float3 current = SampleSkybox(ray.D);
         color.rgb += current;
         dominantDirection.xyz += ray.D * Luminance(current);
-        AccumulateL1Lightmap(sh, current * 2, ray.D);
+        AccumulateL1LightmapDirect(sh, current * pdf, ray.D, normalWS);
     }
 
     ValidateSampleColor(color);
