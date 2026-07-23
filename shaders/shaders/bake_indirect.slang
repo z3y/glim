@@ -57,10 +57,15 @@ struct PushConstants
     uint bounceAOffset = Push.compactedCount;
     uint bounceBOffset = Push.compactedCount * 2;
 
-    if (LIGHTMAP_MODE == LightmapMode::DominantDirection || LIGHTMAP_MODE == LightmapMode::CombinedSH)
+    if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
     {
         bounceAOffset += Push.compactedCount;
         bounceBOffset += Push.compactedCount;
+    }
+    else if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
+    {
+        bounceAOffset += Push.compactedCount * 2;
+        bounceBOffset += Push.compactedCount * 2;
     }
 
     uint previousOffset = 0;

@@ -96,6 +96,15 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
         return;
     }
 
+    // todo precalculate offsets
+    uint lightmap0offset = 0;
+    uint lightmap1offset = Push.compactedCount;
+    if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
+    {
+        lightmap0offset += Push.compactedCount;
+        lightmap1offset += Push.compactedCount;
+    }
+
     uint linearIndex = coords.y * Push.resolution.x + coords.x;
     uint compactIndex = GetCompactedIndex(float2(coords), Push.groupIndex, false);
     bool active = compactIndex != uint::maxValue;
@@ -109,18 +118,18 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
         else
         {
             float4 dilatedDiffuse = 0.0;
-            DilateLightmap(coords, 0, dilatedDiffuse);
+            DilateLightmap(coords, lightmap0offset, dilatedDiffuse);
             if (Push.lightmapType == 1)
             {
                 float4 dilatedDirectional = 0.0;
-                DilateLightmap(coords, Push.compactedCount, dilatedDirectional);
+                DilateLightmap(coords, lightmap1offset, dilatedDirectional);
                 float4 encoded = EncodeDirectional(dilatedDirectional.xyz, dilatedDiffuse.rgb);
                 DecompactTarget[linearIndex] = float4(encoded.xyz, 0.0);
             }
             else if (Push.lightmapType == 3)
             {
                 float4 dilatedSh = 0.0;
-                DilateLightmap(coords, Push.compactedCount, dilatedSh);
+                DilateLightmap(coords, lightmap1offset, dilatedSh);
                 DecompactTarget[linearIndex] = float4(dilatedSh.rgb, 0.0);
             }
             else
@@ -133,9 +142,9 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
     }
 
     float3 diffuse = float3(
-        CompactedLightmap[compactIndex * 3 + 0],
-        CompactedLightmap[compactIndex * 3 + 1],
-        CompactedLightmap[compactIndex * 3 + 2]);
+        CompactedLightmap[(compactIndex + lightmap0offset) * 3 + 0],
+        CompactedLightmap[(compactIndex + lightmap0offset) * 3 + 1],
+        CompactedLightmap[(compactIndex + lightmap0offset) * 3 + 2]);
 
     float4 visiblity = CompactedVisibility[compactIndex];
     float3 normalWS = UnpackNormalOctahedron(visiblity.w);
@@ -146,12 +155,10 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
     }
     else if (Push.lightmapType == 1)
     {
-        uint compactIndex = compactIndex + Push.compactedCount;
-
         float3 directional = float3(
-            CompactedLightmap[compactIndex * 3 + 0],
-            CompactedLightmap[compactIndex * 3 + 1],
-            CompactedLightmap[compactIndex * 3 + 2]);
+            CompactedLightmap[(compactIndex + lightmap1offset) * 3 + 0],
+            CompactedLightmap[(compactIndex + lightmap1offset) * 3 + 1],
+            CompactedLightmap[(compactIndex + lightmap1offset) * 3 + 2]);
 
         DecompactTarget[linearIndex] = EncodeDirectional(directional, diffuse);
     }
@@ -169,12 +176,10 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
     }
     else if (Push.lightmapType == 3)
     {
-        uint compactIndexL1 = compactIndex + Push.compactedCount;
-
         float3 combined = float3(
-            CompactedLightmap[compactIndexL1 * 3 + 0],
-            CompactedLightmap[compactIndexL1 * 3 + 1],
-            CompactedLightmap[compactIndexL1 * 3 + 2]);
+            CompactedLightmap[(compactIndex + lightmap1offset) * 3 + 0],
+            CompactedLightmap[(compactIndex + lightmap1offset) * 3 + 1],
+            CompactedLightmap[(compactIndex + lightmap1offset) * 3 + 2]);
 
         float3 L0 = diffuse;
 

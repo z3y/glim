@@ -1802,7 +1802,7 @@ fn render_lightmaps(app: &mut Glim) {
     let mut lightmap_channels = match app.config.lightmap_mode {
         LightmapMode::NonDirectional => 3,
         LightmapMode::DominantDirection => 6,
-        LightmapMode::CombinedSH => 6,
+        LightmapMode::CombinedSH => 9,
     };
 
     // todo this could definitely be moved into a separate buffer
