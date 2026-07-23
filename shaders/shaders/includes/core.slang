@@ -274,7 +274,7 @@ void AccumulateL1LightmapDirect(inout SHProbeL2 previous, float3 color, float3 w
 
     color *= NoL;
 
-    if (NoL > 0.0)
+    if (NoL > 0.001)
     {
         previous.sh[0].xyz += color * AY0;
 
@@ -286,21 +286,27 @@ void AccumulateL1LightmapDirect(inout SHProbeL2 previous, float3 color, float3 w
     }
 }
 
-void AccumulateL1Lightmap(inout SHProbeL2 previous, float3 color, float3 wi)
+void AccumulateL1LightmapIndirect(inout SHProbeL2 previous, float3 color, float3 wi, float3 normalWS)
 {
+    float NoL = saturate(dot(wi, normalWS));
+    color *= 1.0 / NoL;
+
     // flip Z for Unity
     wi.z = -wi.z;
+    normalWS.z = -normalWS.z;
 
     float AY0 = 0.25;
     float AY1 = 0.50;
+    if (NoL > 0.001)
+    {
+        previous.sh[0].xyz += color * AY0;
 
-    previous.sh[0].xyz += color * AY0;
+        float luma = Luminance(color);
 
-    float luma = Luminance(color);
-
-    previous.sh[3].xyz += luma * wi.x * AY1;
-    previous.sh[1].xyz += luma * wi.y * AY1;
-    previous.sh[2].xyz += luma * wi.z * AY1;
+        previous.sh[3].xyz += luma * wi.x * AY1;
+        previous.sh[1].xyz += luma * wi.y * AY1;
+        previous.sh[2].xyz += luma * wi.z * AY1;
+    }
 }
 
 float3 EncodeCombinedSHL1(SHProbeL2 probe)

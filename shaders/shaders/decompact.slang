@@ -183,7 +183,7 @@ float4 EncodeDirectional(float3 directional, float3 diffuse)
 
         float3 L0 = diffuse;
 
-        float3 safeL0 = max(L0, 1e-4);
+        float3 safeL0 = max(Luminance(L0), 1e-4);
         combined /= safeL0 * 2.0;
 
         combined = clamp(combined, -1.0, 1.0);
