@@ -54,7 +54,7 @@ struct PushConstants
         color.rgb += current * NoL;
         dominantDirection.xyz += L * Luminance(current * NoL);
 
-        AccumulateL1Lightmap(sh, current, L, normalWS);
+        AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 
     float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
@@ -117,14 +117,14 @@ struct PushConstants
                     emission *= MISWeight(bsdfPdf, lightPdf);
                     color.rgb += emission;
                     dominantDirection.xyz += ray.D * Luminance(emission);
-                    AccumulateL1Lightmap(sh, emission * 2, ray.D, normalWS);
+                    AccumulateL1Lightmap(sh, emission * 2, ray.D);
                 }
             }
             else
             {
                 color.rgb += emission;
                 dominantDirection.xyz += ray.D * Luminance(emission);
-                AccumulateL1Lightmap(sh, emission * 2, ray.D, normalWS);
+                AccumulateL1Lightmap(sh, emission * 2, ray.D);
             }
         }
     }
@@ -133,7 +133,7 @@ struct PushConstants
         float3 current = SampleSkybox(ray.D);
         color.rgb += current;
         dominantDirection.xyz += ray.D * Luminance(current);
-        AccumulateL1Lightmap(sh, current * 2, ray.D, normalWS);
+        AccumulateL1Lightmap(sh, current * 2, ray.D);
     }
 
     ValidateSampleColor(color);

@@ -107,7 +107,8 @@ struct PushConstants
             float3 current = previousDiffuse * bounceAlbedo * color.a;
             color.rgb += current;
             dominantDirection.xyz += ray.D * Luminance(current);
-            AccumulateL2(sh, Push.sampleIndex, current * sampleScale, ray.D);
+
+            AccumulateL1Lightmap(sh, current, ray.D);
         }
         // else
         // {
@@ -128,24 +129,31 @@ struct PushConstants
     CompactedLightmap[(currentOffset + index) * 3 + 1] = previous.g;
     CompactedLightmap[(currentOffset + index) * 3 + 2] = previous.b;
 
-    if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
+    if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
+    {
+        float3 L0 = sh.sh[0].xyz * sampleScale;
+
+        // write L0
+        uint index = index + Push.compactedCount;
+        CompactedLightmap[index * 3 + 0] += L0.x;
+        CompactedLightmap[index * 3 + 1] += L0.y;
+        CompactedLightmap[index * 3 + 2] += L0.z;
+
+        float3 combinedSH = EncodeCombinedSHL1(sh);
+        combinedSH *= sampleScale;
+
+        // write L1
+        index += Push.compactedCount;
+        CompactedLightmap[index * 3 + 0] += combinedSH.x;
+        CompactedLightmap[index * 3 + 1] += combinedSH.y;
+        CompactedLightmap[index * 3 + 2] += combinedSH.z;
+    }
+    else if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
     {
         uint index = index + Push.compactedCount;
         CompactedLightmap[index * 3 + 0] += dominantDirection.x;
         CompactedLightmap[index * 3 + 1] += dominantDirection.y;
         CompactedLightmap[index * 3 + 2] += dominantDirection.z;
-    }
-
-    if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
-    {
-        uint index = index + Push.compactedCount;
-
-        float3 combinedSH = EncodeCombinedSHL1(sh);
-        combinedSH *= sampleScale;
-
-        CompactedLightmap[index * 3 + 0] += combinedSH.x;
-        CompactedLightmap[index * 3 + 1] += combinedSH.y;
-        CompactedLightmap[index * 3 + 2] += combinedSH.z;
     }
 
     bool last = Push.sampleIndex == (Push.maxSamples - 1);
