@@ -17,7 +17,7 @@ namespace Glim
 
     public enum LightmapMode : uint
     {
-        NonDirectioal = 0,
+        NonDirectional = 0,
         DominantDirection = 1,
         CombinedSH = 3,
     }
@@ -25,7 +25,25 @@ namespace Glim
     public class GlimLightmapper : MonoBehaviour
     {
         [Header("Bake Settings")]
-        public LightmapMode lightmapMode = LightmapMode.NonDirectioal;
+
+        [Tooltip(
+@"Lightmap Modes
+
+• Non-Directional
+  Bakes a single diffuse lightmap texture.
+
+• Dominant Direction
+  Bakes an additional directional lightmap that stores the dominant incoming light direction.
+  Supports normal maps and improves directional lighting.
+
+• Combined SH
+  Bakes two textures:
+  - L0: L0 Spherical Harmonics
+  - L1: Monochromatic luminance encoded into L1 Spherical Harmonics.
+  Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it."
+)]
+        public LightmapMode lightmapMode = LightmapMode.NonDirectional;
+
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
         [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.")]
         public bool multipleImportanceSampling = false;
