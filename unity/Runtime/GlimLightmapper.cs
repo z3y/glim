@@ -27,9 +27,7 @@ namespace Glim
         [Header("Bake Settings")]
 
         [Tooltip(
-@"Lightmap Modes
-
-• Non-Directional
+@"• Non-Directional
   Bakes a single diffuse lightmap texture.
 
 • Dominant Direction
@@ -47,7 +45,10 @@ namespace Glim
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
         [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.")]
         public bool multipleImportanceSampling = false;
+
+        [Tooltip("Number of direct samples, affects direct lights, emissive materials and multiple importance sampling")]
         public uint directSamples = 512;
+        [Tooltip("Only affects bounced light")]
         public uint indirectSamples = 256;
         public uint bounces = 5;
         [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;

@@ -2317,6 +2317,7 @@ fn render_lightmaps(app: &mut Glim) {
             group_info_buffer.buffer,
             app.skybox.view(),
             app.skybox.sampler(),
+            app.emissive_triangles_buffer.buffer,
         );
 
         let mut push = BakeSHPushConstants {

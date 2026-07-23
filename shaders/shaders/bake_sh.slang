@@ -59,6 +59,22 @@ struct PushConstants
 
     float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
 
+    float randomEmissiveTrianglePdf = 1.0 / float(EMISSIVE_TRIANGLES_COUNT);
+    float bsdfPdf = 1.0 / (4.0 * float.getPi());
+
+    if (EMISSIVE_TRIANGLES_COUNT > 0)
+    {
+        float2 xiTriangle = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
+        uint triIndex = min(uint(xiTriangle.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
+        uint emissivePrimitiveID = EmissiveTriangles[triIndex];
+
+        float3 L;
+        float pdf = 0.0;
+        float3 current = ShadeTriangleLight(emissivePrimitiveID, probePosition, 0.0, xiLight, throughput, randomEmissiveTrianglePdf, pdf, L, true);
+        current *= MISWeight(pdf, bsdfPdf);
+        AccumulateL2(probe, sampleIndex, current * sampleScale, L);
+    }
+
     Ray ray;
     ray.P = probePosition;
     ray.D = RandomDirectionSphere(xiBounce);
@@ -74,8 +90,30 @@ struct PushConstants
 
         if (!backface)
         {
-            float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
-            AccumulateL2(probe, sampleIndex, bounceEmission.rgb * 4 * sampleScale, ray.D);
+            float3 emission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+
+            if (any(emission > 0.0))
+            {
+                bool isEmissiveTriange = surface.emissive;
+                if (EMISSIVE_TRIANGLES_COUNT > 0 && isEmissiveTriange)
+                {
+                    float triangleArea = CalculateTriangleArea(hit.primitiveID);
+                    float3 positionToLight = surface.P - probePosition;
+                    float distSq = max(dot(positionToLight, positionToLight), 0.0001);
+                    float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
+
+                    if (cosThetaLight > 0.0)
+                    {
+                        float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
+                        emission *= MISWeight(bsdfPdf, lightPdf);
+                        AccumulateL2(probe, sampleIndex, emission.rgb * 4 * sampleScale, ray.D);
+                    }
+                }
+                else
+                {
+                    AccumulateL2(probe, sampleIndex, emission.rgb * 4 * sampleScale, ray.D);
+                }
+            }
 
             float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
 
