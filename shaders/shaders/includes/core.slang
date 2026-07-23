@@ -295,6 +295,8 @@ void AccumulateL1LightmapIndirect(inout SHProbeL2 previous, float3 color, float3
     wi.z = -wi.z;
     normalWS.z = -normalWS.z;
 
+    color *= saturate(NoL * 4.0);
+
     float AY0 = 0.25;
     float AY1 = 0.50;
     if (NoL > 0.001)
