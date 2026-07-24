@@ -11,7 +11,9 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 - Seam stitching with a least squares solver
 - UV Packing with hole filling
 - Open Image Denoise 2.0
+- SH Lightmap mode (Monochromatic L1)
 - Light Probe baking (L2 Spherical Harmonics)
+- Multiple importance sampling for emissive meshes
 - VRCLightVolumes baking
 - Physically correct
 - Lightmap Groups
