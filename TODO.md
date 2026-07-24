@@ -6,26 +6,23 @@
 - [ ] Shadowmask
 - [ ] Subtractive
 - [ ] Ambient Occlusion
-- [ ] SH Lightmaps
 - [ ] Adaptive Probe Volumes
 - [ ] Probe occlusion
 - [ ] Emissive multiplier
 - [ ] CWBVH (Implement https://github.com/jbikker/tinybvh BVH8_CWBVH with spatial splits)
 - [ ] Bake sky reflection probe
 - [ ] Per chart UV Packing
-- [ ] Cancel bake button
 - [ ] Efficient LOD chart packing
 - [ ] Meta fallback shader for mats without meta
-- [ ] Light Probes/Volumes are noisy with direct light from small emissives
-  - [ ] Maybe denoise light probes or do MIS
 - [ ] MIS for area lights
 - [ ] The manual denoiser setup is not ideal
 - [ ] There is no weight for MIS
+- [ ] Adjust light probe sample positions if inside objects
 
 ## Optimization
 - [ ] Manually build the LightingData asset. This is one of the slowest things that happens before the bake starts becuse it has to start the built in baker (in an empty scene) for light probes tetrahedralization
 - [ ] Make emissive triangle detection check only emissive meshes
-- [ ] Submit multiple samples at once instead of waiting for faster ray tracing
+- [ ] UV Packer is slow
 
 ## Bugs
 - [ ] Sync scene view fov
