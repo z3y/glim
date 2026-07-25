@@ -2338,6 +2338,9 @@ fn render_lightmaps(app: &mut Glim) {
         let last_sample = app.config.probe_samples - 1;
 
         for sample_index in 0..app.config.probe_samples {
+            if is_cancelled() {
+                break;
+            }
             push.sample_index = sample_index;
             let constants_bytes = as_bytes(&push);
 

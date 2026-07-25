@@ -55,7 +55,11 @@ namespace Glim
 
         [Space]
         public uint lightProbeSamples = 4096;
-        [Tooltip("Offset each light probe sample in random direction by defined radius in meters, instead of baking it at its exact world position to prevent accidental intersections with geometry. Keep this range low < 0.1 ")]
+        [Tooltip(
+@"Jitters light probe samples by defined radius in meters.
+Probe positions are also moved outside of geometry defined by this radius.
+Automatically applied to light volumes based on texel size."
+)]
         public float lightProbeRadius = 0.0f;
         [Tooltip("Applies Lanczos windowing function to light probes to reduce ringing")]
         public bool lightProbeDeringing = false;
