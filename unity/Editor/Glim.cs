@@ -60,28 +60,19 @@ namespace Glim
 
             settings = new Bindings.LightmapSettings(group);
 
-            // todo
-            // using var metaAlbedo = new MetaTexture((int)settings.width, MetaTexture.AtlasType.Albedo);
-            // using var metaEmission = new MetaTexture((int)settings.width, MetaTexture.AtlasType.Emission);
+            using var metaAlbedo = new TerrainMetaTexture((int)settings.width, MetaTexture.AtlasType.Albedo);
+            // using var metaEmission = new TerrainMetaTexture((int)settings.width, MetaTexture.AtlasType.Emission);
 
-            // // The two atlases are independent, so issue both readbacks before blocking on
-            // // either and let them overlap rather than stalling on each in turn.
-            // var albedoRequest = metaAlbedo.CreateAtlas(renderers, MetaTexture.AtlasType.Albedo);
-            // var emissionRequest = metaEmission.CreateAtlas(renderers, MetaTexture.AtlasType.Emission);
+            var albedoRequest = metaAlbedo.CreateAtlas(terrain, MetaTexture.AtlasType.Albedo);
+            // var emissionRequest = metaEmission.CreateAtlas(terrain, MetaTexture.AtlasType.Emission);
 
-            // albedoRequest.WaitForCompletion();
+            albedoRequest.WaitForCompletion();
             // emissionRequest.WaitForCompletion();
-
-            // albedo = albedoRequest.GetData<Color32>().ToArray();
+            albedo = albedoRequest.GetData<Color32>().ToArray();
             // emission = emissionRequest.GetData<Color>().ToArray();
 
-            albedo = new Color32[group.Width * group.Height];
+            // albedo = new Color32[group.Width * group.Height];
             emission = new Color[group.Width * group.Height];
-
-            for (int i = 0; i < albedo.Length; i++)
-            {
-                albedo[i] = Color.white;
-            }
 
 
             // var albedoAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.ARGB32, 1, true);
