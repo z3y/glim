@@ -252,6 +252,7 @@ namespace Glim
 
                 // Each access to .sharedMaterials allocates a new array.
                 var sharedMaterials = renderer.sharedMaterials;
+                int submeshCount = mesh.subMeshCount;
 
                 var baseSo = renderer.lightmapScaleOffset;
 
@@ -269,8 +270,13 @@ namespace Glim
 
                     cmd.SetGlobalVector(unity_LightmapST, so);
 
-                    for (int submeshIndex = 0; submeshIndex < mesh.subMeshCount; submeshIndex++)
+                    for (int submeshIndex = 0; submeshIndex < sharedMaterials.Length; submeshIndex++)
                     {
+                        if (submeshIndex >= submeshCount)
+                        {
+                            break;
+                        }
+
                         var mat = sharedMaterials[submeshIndex];
 
                         if (type == AtlasType.Alpha)

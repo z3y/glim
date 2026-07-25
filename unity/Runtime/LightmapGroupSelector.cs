@@ -5,7 +5,7 @@ namespace Glim
 {
     public class LightmapGroupSelector : MonoBehaviour
     {
-        public LightmapGroup group;
+        public GlimLightmapGroup group;
 
         void Start() { }
     }

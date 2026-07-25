@@ -21,7 +21,6 @@
 
 ## Optimization
 - [ ] Manually build the LightingData asset. This is one of the slowest things that happens before the bake starts becuse it has to start the built in baker (in an empty scene) for light probes tetrahedralization
-- [ ] Make emissive triangle detection check only emissive meshes
 - [ ] UV Packer is slow
 
 ## Bugs

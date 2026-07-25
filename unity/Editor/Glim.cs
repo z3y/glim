@@ -15,9 +15,9 @@ namespace Glim
         public Color32[] albedo;
         public Color[] emission;
         public Bindings.LightmapSettings settings;
-        public LightmapGroup groupAsset;
+        public GlimLightmapGroup groupAsset;
 
-        public BakeContextGroup(LightmapGroup group, IList<Renderer> renderers)
+        public BakeContextGroup(GlimLightmapGroup group, IList<Renderer> renderers)
         {
             groupAsset = group;
 
@@ -36,6 +36,52 @@ namespace Glim
 
             albedo = albedoRequest.GetData<Color32>().ToArray();
             emission = emissionRequest.GetData<Color>().ToArray();
+
+
+            // var albedoAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.ARGB32, 1, true);
+            // albedoAtlas.SetPixels32(albedo);
+            // AssetDatabase.CreateAsset(albedoAtlas, "Assets/AbledoAtlas.asset");
+            // var emissionAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.RGBAFloat, 1, true);
+            // emissionAtlas.SetPixels(emission);
+            // AssetDatabase.CreateAsset(emissionAtlas, "Assets/EmissionAtlas.asset");
+
+
+            // var albedoAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.ARGB32, 1, true);
+            // albedoAtlas.SetPixels32(albedo);
+            // var albedoBytes = albedoAtlas.EncodeToTGA();
+            // File.WriteAllBytes("Assets/AbledoAtlas.tga", albedoBytes);
+
+            // Debug.Log($"Group width: {settings.width}, height:{settings.height}");
+        }
+
+        public BakeContextGroup(GlimLightmapGroup group, Terrain terrain)
+        {
+            groupAsset = group;
+
+            settings = new Bindings.LightmapSettings(group);
+
+            // todo
+            // using var metaAlbedo = new MetaTexture((int)settings.width, MetaTexture.AtlasType.Albedo);
+            // using var metaEmission = new MetaTexture((int)settings.width, MetaTexture.AtlasType.Emission);
+
+            // // The two atlases are independent, so issue both readbacks before blocking on
+            // // either and let them overlap rather than stalling on each in turn.
+            // var albedoRequest = metaAlbedo.CreateAtlas(renderers, MetaTexture.AtlasType.Albedo);
+            // var emissionRequest = metaEmission.CreateAtlas(renderers, MetaTexture.AtlasType.Emission);
+
+            // albedoRequest.WaitForCompletion();
+            // emissionRequest.WaitForCompletion();
+
+            // albedo = albedoRequest.GetData<Color32>().ToArray();
+            // emission = emissionRequest.GetData<Color>().ToArray();
+
+            albedo = new Color32[group.Width * group.Height];
+            emission = new Color[group.Width * group.Height];
+
+            for (int i = 0; i < albedo.Length; i++)
+            {
+                albedo[i] = Color.white;
+            }
 
 
             // var albedoAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.ARGB32, 1, true);
@@ -257,7 +303,7 @@ namespace Glim
 
             Array.Sort(allSelectors, (a, b) => GetDepth(b.transform).CompareTo(GetDepth(a.transform)));
 
-            var groupMap = new Dictionary<LightmapGroup, List<MeshRenderer>>();
+            var groupMap = new Dictionary<GlimLightmapGroup, List<MeshRenderer>>();
             var claimed = new HashSet<MeshRenderer>();
 
             foreach (var selector in allSelectors)
@@ -295,7 +341,7 @@ namespace Glim
                     unclaimedRenderers.Add(r);
                 }
             }
-            var globalGroup = baker.group == null ? ScriptableObject.CreateInstance<LightmapGroup>() : baker.group;
+            var globalGroup = baker.group == null ? ScriptableObject.CreateInstance<GlimLightmapGroup>() : baker.group;
             if (unclaimedRenderers.Count > 0)
             {
                 groupMap[globalGroup] = unclaimedRenderers;
@@ -380,6 +426,8 @@ namespace Glim
                     for (int i = 0; i < rendererArray.Length; i++)
                     {
                         MeshRenderer mr = rendererArray[i];
+                        var scaleOffset = mr.lightmapScaleOffset;
+
                         var ids = rendererDataIds.GetArrayElementAtIndex(mrDataOffset + i);
                         var lmData = rendererData.GetArrayElementAtIndex(mrDataOffset + i);
 
@@ -391,7 +439,6 @@ namespace Glim
                         ids.longValue = soi.PrefabLFID;
 
                         lmData.FindPropertyRelative("lightmapIndex").intValue = (int)groupIndex;
-                        var scaleOffset = mr.lightmapScaleOffset;
                         lmData.FindPropertyRelative("lightmapST").vector4Value = scaleOffset;
                         lmData.FindPropertyRelative("lightmapSTDynamic").vector4Value = new Vector4(1, 1, 0, 0);
 
@@ -410,6 +457,43 @@ namespace Glim
                 sceneMesh.AddRange(Glim.ExtractMeshData(rendererArray, groupIndex));
                 groupIndex++;
             }
+
+            var terrains = rootObjects
+                .SelectMany(x => x.GetComponentsInChildren<Terrain>(false))
+                .Where(t => t.enabled && t.gameObject.activeInHierarchy
+                    && GameObjectUtility.GetStaticEditorFlags(t.gameObject).HasFlag(StaticEditorFlags.ContributeGI));
+
+            foreach (var terrain in terrains)
+            {
+                var data = terrain.terrainData;
+                if (data == null) continue;
+
+                terrain.lightmapScaleOffset = new Vector4(1, 1, 0, 0);
+                EditorUtility.SetDirty(terrain);
+
+                var mesh = TerrainExporter.GenerateMesh(data, step: 4);
+
+                var terrainGroup = ScriptableObject.CreateInstance<GlimLightmapGroup>();
+                terrainGroup.packingType = UVPackingType.None;
+
+                groups.Add(new BakeContextGroup(terrainGroup, terrain));
+
+                var meshData = new Glim.MeshData
+                {
+                    vertices = mesh.vertices,
+                    normals = mesh.normals,
+                    uvs = mesh.uv,
+                    triangles = mesh.triangles,
+                    groupIndex = groupIndex,
+                    backfaceGI = false,
+                    transparent = false,
+                    emissive = false,
+                };
+                sceneMesh.Add(meshData);
+                groupIndex++;
+                GameObject.DestroyImmediate(mesh);
+            }
+
 
             if (groupIndex <= 0)
             {
@@ -515,13 +599,6 @@ namespace Glim
                 return false;
             }
 
-            // var uv = mesh.HasVertexAttribute(VertexAttribute.TexCoord1) ? mesh.uv2 : mesh.uv;
-
-            // if (uv.Length != vertices)
-            // {
-            //     return false;
-            // }
-
 
             return true;
         }
@@ -558,6 +635,7 @@ namespace Glim
                 var triangles = mesh.triangles;
 
                 var uvs = mesh.HasVertexAttribute(VertexAttribute.TexCoord1) ? mesh.uv2 : mesh.uv;
+                int subMeshCount = mesh.subMeshCount;
                 // todo backfacegi, emissive and transparent per submesh instead of entire mesh
                 bool backfaceGI = false;
                 bool transparent = false;
@@ -577,8 +655,14 @@ namespace Glim
                     }
 
                     var mats = mr.sharedMaterials;
-                    foreach (var mat in mats)
+                    for (int j = 0; j < mats.Length; j++)
                     {
+                        if (j >= subMeshCount)
+                        {
+                            break;
+                        }
+
+                        Material mat = mats[j];
                         if (mat == null)
                         {
                             continue;

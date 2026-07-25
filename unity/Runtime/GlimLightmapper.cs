@@ -77,7 +77,7 @@ namespace Glim
         public uint previewBounces = 2;
 
         [Header("Default Group")]
-        public LightmapGroup group;
+        public GlimLightmapGroup group;
 
         [MenuItem("Glim/Bake")]
         public static void CreateLightmapBaker()
@@ -88,7 +88,7 @@ namespace Glim
             var baker = roots.SelectMany(x => x.GetComponentsInChildren<GlimLightmapper>()).FirstOrDefault();
             if (!baker)
             {
-                var go = new GameObject("Glim Baker")
+                var go = new GameObject("Glim Lightmapper")
                 {
                     tag = "EditorOnly"
                 };
@@ -97,7 +97,7 @@ namespace Glim
 
                 baker = go.AddComponent<GlimLightmapper>();
 
-                var group = ScriptableObject.CreateInstance<LightmapGroup>();
+                var group = ScriptableObject.CreateInstance<GlimLightmapGroup>();
                 baker.group = group;
                 EditorUtility.SetDirty(baker);
 

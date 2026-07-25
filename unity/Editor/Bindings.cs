@@ -123,7 +123,7 @@ namespace Glim
                 this.fix_seams = fix_seams;
             }
 
-            public LightmapSettings(LightmapGroup group) :
+            public LightmapSettings(GlimLightmapGroup group) :
                 this(group.Width, group.Height, group.dilate, group.denoise, group.fixSeams)
             {
                 return;
