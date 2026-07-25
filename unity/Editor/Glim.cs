@@ -468,7 +468,9 @@ namespace Glim
                 var data = terrain.terrainData;
                 if (data == null) continue;
 
-                terrain.lightmapScaleOffset = new Vector4(1, 1, 0, 0);
+                Vector4 scaleOffset = new(1, 1, 0, 0);
+
+                terrain.lightmapScaleOffset = scaleOffset;
                 EditorUtility.SetDirty(terrain);
 
                 var mesh = TerrainExporter.GenerateMesh(data, step: 4);
@@ -490,8 +492,35 @@ namespace Glim
                     emissive = false,
                 };
                 sceneMesh.Add(meshData);
-                groupIndex++;
                 GameObject.DestroyImmediate(mesh);
+
+                if (!config.is_preview)
+                {
+                    var rendererDataIds = lda.FindProperty("m_LightmappedRendererDataIDs");
+                    var rendererData = lda.FindProperty("m_LightmappedRendererData");
+                    rendererDataIds.arraySize += 1;
+                    rendererData.arraySize += 1;
+                    int lastIndex = rendererData.arraySize - 1;
+
+                    var ids = rendererDataIds.GetArrayElementAtIndex(lastIndex);
+                    var lmData = rendererData.GetArrayElementAtIndex(lastIndex);
+
+                    var soi = LightingData.ObjectToSOI(terrain);
+
+                    ids.Next(true);
+                    ids.longValue = soi.MainLFID;
+                    ids.Next(false);
+                    ids.longValue = soi.PrefabLFID;
+
+                    lmData.FindPropertyRelative("lightmapIndex").intValue = (int)groupIndex;
+                    lmData.FindPropertyRelative("lightmapST").vector4Value = scaleOffset;
+                    lmData.FindPropertyRelative("lightmapSTDynamic").vector4Value = scaleOffset;
+                    lmData.FindPropertyRelative("terrainDynamicUVST").vector4Value = scaleOffset;
+                    lmData.FindPropertyRelative("terrainChunkDynamicUVST").vector4Value = scaleOffset;
+                    lmData.FindPropertyRelative("lightmapIndexDynamic").intValue = 65535;
+                }
+
+                groupIndex++;
             }
 
 
