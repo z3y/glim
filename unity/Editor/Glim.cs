@@ -435,6 +435,8 @@ namespace Glim
 
                 Vector4 scaleOffset = new(1, 1, 0, 0);
 
+                bool hasHoles = data.holesTexture != null;
+
                 terrain.lightmapScaleOffset = scaleOffset;
                 EditorUtility.SetDirty(terrain);
 
@@ -453,7 +455,7 @@ namespace Glim
                     triangles = mesh.triangles,
                     groupIndex = groupIndex,
                     backfaceGI = false,
-                    transparent = false,
+                    transparent = hasHoles ? true : false,
                     emissive = false,
                 };
                 sceneMesh.Add(meshData);
