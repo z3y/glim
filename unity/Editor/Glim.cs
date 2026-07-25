@@ -60,35 +60,9 @@ namespace Glim
 
             settings = new Bindings.LightmapSettings(group);
 
-            using var metaAlbedo = new TerrainMetaTexture((int)settings.width, MetaTexture.AtlasType.Albedo);
-            // using var metaEmission = new TerrainMetaTexture((int)settings.width, MetaTexture.AtlasType.Emission);
-
-            var albedoRequest = metaAlbedo.CreateAtlas(terrain, MetaTexture.AtlasType.Albedo);
-            // var emissionRequest = metaEmission.CreateAtlas(terrain, MetaTexture.AtlasType.Emission);
-
-            albedoRequest.WaitForCompletion();
-            // emissionRequest.WaitForCompletion();
-            albedo = albedoRequest.GetData<Color32>().ToArray();
-            // emission = emissionRequest.GetData<Color>().ToArray();
-
-            // albedo = new Color32[group.Width * group.Height];
+            using var metaAlbedo = new TerrainMetaTexture((int)settings.width);
+            albedo = metaAlbedo.CreateAtlas(terrain);
             emission = new Color[group.Width * group.Height];
-
-
-            // var albedoAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.ARGB32, 1, true);
-            // albedoAtlas.SetPixels32(albedo);
-            // AssetDatabase.CreateAsset(albedoAtlas, "Assets/AbledoAtlas.asset");
-            // var emissionAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.RGBAFloat, 1, true);
-            // emissionAtlas.SetPixels(emission);
-            // AssetDatabase.CreateAsset(emissionAtlas, "Assets/EmissionAtlas.asset");
-
-
-            // var albedoAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.ARGB32, 1, true);
-            // albedoAtlas.SetPixels32(albedo);
-            // var albedoBytes = albedoAtlas.EncodeToTGA();
-            // File.WriteAllBytes("Assets/AbledoAtlas.tga", albedoBytes);
-
-            // Debug.Log($"Group width: {settings.width}, height:{settings.height}");
         }
 
         public void ClearPixels()

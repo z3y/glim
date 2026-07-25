@@ -91,20 +91,16 @@ namespace Glim
     public class TerrainMetaTexture : IDisposable
     {
         RenderTexture _rt;
-
+        static Material _metaMat;
         static Mesh _quad;
         static Mesh QuadMesh => _quad ??= BuildQuad();
 
-        static readonly int _Control = Shader.PropertyToID("_Control");
-        static readonly int[] _Splat =
-        {
-            Shader.PropertyToID("_Splat0"),
-            Shader.PropertyToID("_Splat1"),
-            Shader.PropertyToID("_Splat2"),
-            Shader.PropertyToID("_Splat3"),
-        };
+        static readonly int _MainTex = Shader.PropertyToID("_MainTex");
+        static readonly int _MainTexST = Shader.PropertyToID("_MainTex_ST");
+        static readonly int _Splat = Shader.PropertyToID("_Splat");
+        static readonly int _SplatChannel = Shader.PropertyToID("_SplatChannel");
 
-        public TerrainMetaTexture(int resolution, MetaTexture.AtlasType type)
+        public TerrainMetaTexture(int resolution)
         {
             var desc = new RenderTextureDescriptor
             {
@@ -113,13 +109,23 @@ namespace Glim
                 height = resolution,
                 useMipMap = false,
                 mipCount = 1,
-                colorFormat = type == MetaTexture.AtlasType.Albedo ? RenderTextureFormat.ARGB32 : RenderTextureFormat.ARGBHalf,
+                colorFormat = RenderTextureFormat.ARGB32,
                 sRGB = false,
                 volumeDepth = 1,
                 msaaSamples = 1,
                 dimension = TextureDimension.Tex2D
             };
             _rt = new RenderTexture(desc) { filterMode = FilterMode.Point };
+
+            if (_metaMat == null)
+            {
+                var shader = Shader.Find("Hidden/Glim/TerrainMeta");
+                if (shader == null)
+                {
+                    throw new Exception("Hidden/Glim/TerrainMeta shader not found.");
+                }
+                _metaMat = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            }
         }
 
         static Mesh BuildQuad()
@@ -130,130 +136,63 @@ namespace Glim
                 hideFlags = HideFlags.HideAndDontSave,
                 vertices = new[]
                 {
-                    new Vector3(0, 0, 0),
-                    new Vector3(1, 0, 0),
-                    new Vector3(0, 1, 0),
-                    new Vector3(1, 1, 0),
+                    new Vector3(0, 0, 0), new Vector3(1, 0, 0),
+                    new Vector3(0, 1, 0), new Vector3(1, 1, 0),
                 },
                 uv = new[]
                 {
-                    new Vector2(0, 0),
-                    new Vector2(1, 0),
-                    new Vector2(0, 1),
-                    new Vector2(1, 1),
+                    new Vector2(0, 0), new Vector2(1, 0),
+                    new Vector2(0, 1), new Vector2(1, 1),
                 },
                 triangles = new[] { 0, 2, 1, 1, 2, 3 }
             };
-            mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
         }
 
-        static readonly int _MainTex_ST = Shader.PropertyToID("_MainTex_ST");
-        static readonly int[] _SplatST =
+        public Color32[] CreateAtlas(Terrain terrain)
         {
-            Shader.PropertyToID("_Splat0_ST"),
-            Shader.PropertyToID("_Splat1_ST"),
-            Shader.PropertyToID("_Splat2_ST"),
-            Shader.PropertyToID("_Splat3_ST"),
-        };
-
-        /// <summary>
-        /// Mirrors what Unity's internal terrain renderer sets up per-frame: bind each alphamap
-        /// (control texture) and its up-to-4 associated layer diffuse textures onto the shared
-        /// terrain material for this draw only, via property block (no shared-material mutation).
-        /// </summary>
-        static MaterialPropertyBlock BuildPropertyBlock(Terrain terrain)
-        {
-            var mpb = new MaterialPropertyBlock();
             var data = terrain.terrainData;
             var layers = data.terrainLayers;
-            int alphamaps = data.alphamapTextureCount;
             Vector3 size = data.size;
 
-            // Force identity - this gets applied to tc.xy in the META pass before splat sampling,
-            // we don't want any unexpected transform on our raw 0..1 quad UVs.
-            mpb.SetVector(_MainTex_ST, new Vector4(1, 1, 0, 0));
-
-            for (int i = 0; i < alphamaps; i++)
+            using (var cmd = new CommandBuffer())
             {
-                int controlId = i == 0 ? _Control : Shader.PropertyToID($"_Control{i}");
-                mpb.SetTexture(controlId, data.GetAlphamapTexture(i));
+                cmd.SetRenderTarget(_rt);
+                cmd.ClearRenderTarget(true, true, Color.clear);
 
-                for (int s = 0; s < 4; s++)
+                for (int layerIndex = 0; layerIndex < layers.Length; layerIndex++)
                 {
-                    int layerIndex = i * 4 + s;
-                    if (layerIndex >= layers.Length) continue;
-
                     var layer = layers[layerIndex];
-                    mpb.SetTexture(_Splat[s], layer.diffuseTexture);
+                    if (layer.diffuseTexture == null) continue;
+
+                    int alphamapIndex = layerIndex / 4;
+                    int channel = layerIndex % 4;
+                    if (alphamapIndex >= data.alphamapTextureCount) continue;
 
                     Vector2 tileSize = layer.tileSize;
                     if (tileSize.x <= 0f) tileSize.x = 0.001f;
                     if (tileSize.y <= 0f) tileSize.y = 0.001f;
 
-                    var st = new Vector4(
+                    var mpb = new MaterialPropertyBlock();
+                    mpb.SetTexture(_MainTex, layer.diffuseTexture);
+                    mpb.SetVector(_MainTexST, new Vector4(
                         size.x / tileSize.x,
                         size.z / tileSize.y,
                         layer.tileOffset.x / tileSize.x,
-                        layer.tileOffset.y / tileSize.y);
+                        layer.tileOffset.y / tileSize.y));
+                    mpb.SetTexture(_Splat, data.GetAlphamapTexture(alphamapIndex));
+                    mpb.SetInt(_SplatChannel, channel);
 
-                    mpb.SetVector(_SplatST[s], st);
+                    cmd.DrawMesh(QuadMesh, Matrix4x4.identity, _metaMat, 0, 0, mpb);
                 }
+
+                Graphics.ExecuteCommandBuffer(cmd);
             }
 
-            return mpb;
-        }
-
-        public AsyncGPUReadbackRequest CreateAtlas(Terrain terrain, MetaTexture.AtlasType type)
-        {
-            var material = terrain.materialTemplate;
-            int meta = material != null ? material.FindPass("META") : -1;
-
-            using var cmd = new CommandBuffer();
-            cmd.SetRenderTarget(_rt);
-            cmd.ClearRenderTarget(true, true, type == MetaTexture.AtlasType.Albedo ? Color.gray : Color.black);
-
-            Matrix4x4 proj = Matrix4x4.Ortho(0, 1, 0, 1, 0.01f, 100f);
-            Matrix4x4 view = Matrix4x4.LookAt(new Vector3(0, 0, -10), Vector3.zero, Vector3.up);
-            cmd.SetViewProjectionMatrices(view, proj);
-
-            cmd.SetGlobalVector("unity_MetaVertexControl", new Vector4(1, 0, 0, 0));
-            cmd.SetGlobalFloat("unity_OneOverOutputBoost", 1.0f);
-            cmd.SetGlobalFloat("unity_UseLinearSpace", 1.0f);
-            cmd.SetGlobalFloat("unity_VisualizationMode", -1);
-
-            var scaleOffset = new Vector4(1f, 1f, 0f, 0f);
-            bool flipY = !SystemInfo.graphicsUVStartsAtTop;
-            if (flipY)
-            {
-                scaleOffset.y = -scaleOffset.y;
-                scaleOffset.w = 1.0f - scaleOffset.w;
-            }
-
-            cmd.SetGlobalVector("unity_LightmapST", scaleOffset);
-
-            if (type == MetaTexture.AtlasType.Albedo)
-            {
-                cmd.SetGlobalVector("unity_MetaFragmentControl", new Vector4(1, 0, 0, 0));
-                cmd.SetGlobalFloat("unity_MaxOutputValue", 1.0f);
-            }
-            else
-            {
-                cmd.SetGlobalVector("unity_MetaFragmentControl", new Vector4(0, 1, 0, 0));
-                cmd.SetGlobalFloat("unity_MaxOutputValue", 100.0f);
-            }
-
-            if (meta >= 0)
-            {
-                var mpb = BuildPropertyBlock(terrain);
-                cmd.DrawMesh(QuadMesh, Matrix4x4.identity, material, 0, meta, mpb);
-            }
-
-            Graphics.ExecuteCommandBuffer(cmd);
-
-            var format = type == MetaTexture.AtlasType.Albedo ? TextureFormat.RGBA32 : TextureFormat.RGBAFloat;
-            return AsyncGPUReadback.Request(_rt, 0, format);
+            var request = AsyncGPUReadback.Request(_rt, 0, TextureFormat.RGBA32);
+            request.WaitForCompletion();
+            return request.GetData<Color32>().ToArray();
         }
 
         public void Dispose()
