@@ -19,7 +19,6 @@ pub struct Chart {
     pub uvs: Vec<Vector2>,
     base_uvs: Vec<Vector2>,
 
-    pub positions: Vec<Vector3>,
     pub indices: Vec<u32>,
     pub mesh_id: usize,
     pub uv_area: f64,
@@ -35,14 +34,14 @@ pub struct Chart {
 }
 
 impl Chart {
-    fn calculate_area_multiplier(&self) -> f32 {
+    fn calculate_area_multiplier(&self, positions: &[Vector3]) -> f32 {
         let mut uv_area = 0.0f64;
         let mut world_area = 0.0f64;
 
         for chunk in self.indices.chunks_exact(3) {
             let (ia, ib, ic) = (chunk[0] as usize, chunk[1] as usize, chunk[2] as usize);
 
-            let (v1, v2, v3) = (self.positions[ia], self.positions[ib], self.positions[ic]);
+            let (v1, v2, v3) = (positions[ia], positions[ib], positions[ic]);
             world_area += (v2 - v1).cross(v3 - v1).length() as f64;
 
             let (u1, u2, u3) = (self.uvs[ia], self.uvs[ib], self.uvs[ic]);
@@ -219,7 +218,6 @@ impl UVPacker {
         let mut chart = Chart {
             uvs: uvs.to_vec(),
             base_uvs: Vec::new(),
-            positions: positions.to_vec(),
             indices: indices.to_vec(),
             mesh_id,
             uv_area: 0.0,
@@ -240,7 +238,7 @@ impl UVPacker {
 
         chart.user_scale_multiplier = user_scale_multiplier;
         chart.base_uvs = chart.uvs.clone();
-        chart.world_scale_multiplier = chart.calculate_area_multiplier();
+        chart.world_scale_multiplier = chart.calculate_area_multiplier(positions);
         chart.uv_area = chart.calculate_uv_area();
         chart.uv_bounds_area = chart.calculate_uv_bounds_area();
 
