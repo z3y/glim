@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -7,6 +8,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
+using Debug = UnityEngine.Debug;
 
 namespace Glim
 {
@@ -320,6 +322,9 @@ namespace Glim
 
                 if (lightmapGroup.packingType == UVPackingType.ScaleOffset)
                 {
+                    var sw = new Stopwatch();
+                    sw.Start();
+
                     bool bruteForce = lightmapGroup.bruteForce;
                     bool ensurePadding = lightmapGroup.ensurePadding;
                     var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, ensurePadding);
@@ -361,6 +366,10 @@ namespace Glim
                     {
                         throw new Exception("UV Packing failed, try increasing lightmap resolution, packing iteration count or brute force mode or disable ensure padding");
                     }
+
+                    sw.Stop();
+                    var elapsed = sw.ElapsedMilliseconds;
+                    Debug.Log($"UVs packed in {elapsed}ms");
 
                     for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                     {

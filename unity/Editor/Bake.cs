@@ -512,7 +512,7 @@ namespace Glim
         {
             if (_running)
             {
-                Debug.LogError("Bake already running");
+                Debug.LogError("Bake or preview already running");
                 return;
             }
 
