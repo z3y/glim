@@ -354,15 +354,17 @@ impl UVPacker {
     }
 
     fn try_pack_at_scale(&mut self, scale: f32) -> Option<Vec<(u32, u32)>> {
+        let brute_force = self.brute_force;
+
         self.charts.par_iter_mut().for_each(|chart| {
             chart.scale_uvs_from_base(scale, self.enforce_min_scale);
             chart.bitmap = Bitmap::rasterize(chart);
         });
 
         let mut target = Bitmap::new(self.width, self.height);
-        let mut placements = Vec::with_capacity(self.charts.len());
+        let mut placements: Vec<(u32, u32)> = Vec::with_capacity(self.charts.len());
 
-        let mut candidates = vec![(0u32, 0u32)];
+        let mut cursor = (0_u32, 0_u32);
 
         for chart in &self.charts {
             let (cw, ch) = (chart.bitmap.width, chart.bitmap.height);
@@ -371,47 +373,31 @@ impl UVPacker {
                 placements.push((0, 0));
                 continue;
             }
-
             if cw > self.width || ch > self.height {
                 return None;
             }
 
-            let mut best = None;
-            let mut best_score = u32::MAX;
+            let start = if brute_force { (0, 0) } else { cursor };
 
-            for &(cx, cy) in &candidates {
-                if cx + cw > self.width || cy + ch > self.height {
-                    continue;
+            let placed = find_placement(&target, &chart.bitmap, start.0, start.1).or_else(|| {
+                if !brute_force {
+                    find_placement(&target, &chart.bitmap, 0, 0)
+                } else {
+                    None
                 }
+            });
 
-                if target.overlaps(&chart.bitmap, cx, cy) {
-                    continue;
-                }
-
-                let score = (cy + ch) * self.width + (cx + cw);
-
-                if score < best_score {
-                    best_score = score;
-                    best = Some((cx, cy));
-                }
-            }
-
-            let (ox, oy) = match best {
-                Some(pos) => pos,
-
-                None => find_placement(&target, &chart.bitmap, 0, 0)?,
-            };
+            let (ox, oy) = placed?;
 
             target.paint(&chart.bitmap, ox, oy);
             placements.push((ox, oy));
 
-            candidates.push((ox + cw, oy));
-            candidates.push((ox, oy + ch));
-
-            candidates.retain(|&(x, y)| x < self.width && y < self.height);
-
-            candidates.sort_unstable();
-            candidates.dedup();
+            if !brute_force {
+                cursor = (ox + cw, oy);
+                if cursor.0 >= self.width {
+                    cursor = (0, oy + 1);
+                }
+            }
         }
 
         self.target = Some(target);
