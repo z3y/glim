@@ -271,7 +271,7 @@ pub fn load_init_from_camera_shader(
 
     ComputeShader::new(
         vk,
-        get_init_from_camera_shader(),
+        &load_shader_bytes(ShaderName::InitFromCamera),
         &bindings,
         &push_constant_ranges,
         &specialization_info,
@@ -399,7 +399,7 @@ pub fn load_preview_shader(
 
     ComputeShader::new(
         vk,
-        get_preview_shader(),
+        &load_shader_bytes(ShaderName::Preview),
         &bindings,
         &push_constant_ranges,
         &specialization_info,
@@ -432,7 +432,7 @@ pub fn load_adjust_samples_shader(
 
     ComputeShader::new(
         vk,
-        get_adjust_samples_shader(),
+        &load_shader_bytes(ShaderName::AdjustSamples),
         &bindings,
         &push_constant_ranges,
         &specialization_info,
@@ -472,7 +472,7 @@ pub fn load_bake_light_probes_shader(
 
     ComputeShader::new(
         vk,
-        get_bake_sh_shader(),
+        &load_shader_bytes(ShaderName::BakeLightProbes),
         &bindings,
         &push_constant_ranges,
         &specialization_info,

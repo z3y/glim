@@ -1,5 +1,5 @@
 use ash::vk;
-use shaders::get_bake_indirect_shader;
+use shaders::*;
 
 use crate::{as_bytes, compute_shader::*, shader_bindings::*, vulkan_context::VulkanContext};
 
@@ -40,7 +40,7 @@ pub fn load_bake_indirect_shader(
 
     ComputeShader::new(
         vk,
-        get_bake_indirect_shader(),
+        &load_shader_bytes(ShaderName::BakeIndirect),
         &bindings,
         &push_constant_ranges,
         &specialization_info,

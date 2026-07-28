@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
-use shaders::{get_init_from_bake_fragment_shader, get_init_from_bake_vertex_shader};
+use shaders::*;
 
 use crate::{
     as_bytes,
@@ -364,8 +364,8 @@ pub fn load_visibility_shader(
 
     let shader = GraphicsShader::new(
         vk,
-        Some(get_init_from_bake_vertex_shader()),
-        Some(get_init_from_bake_fragment_shader()),
+        Some(&load_shader_bytes(ShaderName::InitFromBakeVertex)),
+        Some(&load_shader_bytes(ShaderName::InitFromBakeFragment)),
         None,
         &bindings,
         &push_constant_ranges,
