@@ -344,6 +344,14 @@ namespace Glim
                     probeCount = _bakeProbesResults.Count,
                 });
 
+#if XATLAS_LIGHTMAP_INCLUDED
+                var packers = GameObject.FindObjectsOfType<z3y.XatlasLightmapPacker>();
+                foreach (var packer in packers)
+                {
+                    packer.OnValidate();
+                }
+#endif
+
                 if (_context.bakeReflectionProbes)
                 {
                     LightmapBakerEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1, _context.reflectionProbesSpecular);

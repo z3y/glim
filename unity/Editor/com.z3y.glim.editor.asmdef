@@ -3,7 +3,8 @@
     "rootNamespace": "",
     "references": [
         "GUID:9a8bdddd646a38942a48327b4cf31ca4",
-        "GUID:d8a84397f42e52047b4aa117d7c10706"
+        "GUID:d8a84397f42e52047b4aa117d7c10706",
+        "GUID:96fc23fcec7f11d41bfbbe240e4602dc"
     ],
     "includePlatforms": [
         "Editor"
@@ -14,6 +15,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.z3y.xatlaslightmap",
+            "expression": "0.1.0",
+            "define": "XATLAS_LIGHTMAP_INCLUDED"
+        }
+    ],
     "noEngineReferences": false
 }
