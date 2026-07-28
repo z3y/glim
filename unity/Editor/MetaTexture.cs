@@ -250,7 +250,6 @@ namespace Glim
                     continue;
                 }
 
-                // Each access to .sharedMaterials allocates a new array.
                 var sharedMaterials = renderer.sharedMaterials;
                 int submeshCount = mesh.subMeshCount;
 
@@ -278,6 +277,11 @@ namespace Glim
                         }
 
                         var mat = sharedMaterials[submeshIndex];
+
+                        if (!mat)
+                        {
+                            continue;
+                        }
 
                         if (type == AtlasType.Alpha)
                         {
