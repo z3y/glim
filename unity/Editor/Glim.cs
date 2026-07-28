@@ -326,7 +326,6 @@ namespace Glim
                     sw.Start();
 
                     bool bruteForce = lightmapGroup.bruteForce;
-                    bool ensurePadding = lightmapGroup.ensurePadding;
                     bool holeFilling = lightmapGroup.holeFilling;
                     var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling);
                     for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
@@ -370,7 +369,6 @@ namespace Glim
 
                     sw.Stop();
                     var elapsed = sw.ElapsedMilliseconds;
-                    Debug.Log($"UVs packed in {elapsed}ms");
 
                     for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                     {
@@ -380,6 +378,9 @@ namespace Glim
                         r.lightmapScaleOffset = so;
                         EditorUtility.SetDirty(r);
                     }
+
+                    float coverage = UVPacking.uvpacker_get_coverage(packer);
+                    Debug.Log($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
 
                     UVPacking.uvpacker_destroy(packer);
                 }

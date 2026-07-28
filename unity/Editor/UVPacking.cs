@@ -24,5 +24,9 @@ namespace Glim
         [DllImport(DLL)]
         public static extern Vector4 uvpacker_get_scale_offset(IntPtr handle, uint chart);
 
+        [DllImport(DLL)]
+        public static extern float uvpacker_get_coverage(IntPtr handle);
+
+
     }
 }

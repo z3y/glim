@@ -207,7 +207,7 @@ impl UVPacker {
 
         let density = chart.calculate_area_multiplier(positions);
 
-        chart.world_scale_multiplier = density.powf(0.75);
+        chart.world_scale_multiplier = density.powf(0.8);
         chart.uv_area = chart.calculate_uv_area();
         chart.uv_bounds_area = chart.calculate_uv_bounds_area();
 
@@ -378,6 +378,26 @@ impl UVPacker {
         self.target = Some(target);
 
         Some(placements)
+    }
+
+    pub fn get_coverage(&self) -> f32 {
+        let Some(target) = &self.target else {
+            return 0.0;
+        };
+
+        let mut occupied = 0u64;
+
+        for word in &target.pixels {
+            occupied += word.count_ones() as u64;
+        }
+
+        let total = (target.width as u64) * (target.height as u64);
+
+        if total == 0 {
+            0.0
+        } else {
+            occupied as f32 / total as f32
+        }
     }
 
     #[cfg(test)]
@@ -742,6 +762,16 @@ pub unsafe extern "C" fn uvpacker_get_scale_offset(
     let (scale, offset) = packer.get_scale_offset(chart as usize);
 
     ScaleOffset { scale, offset }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn uvpacker_get_coverage(handle: *mut UVPacker) -> f32 {
+    if handle.is_null() {
+        return 0.0;
+    }
+
+    let packer = unsafe { &*handle };
+    packer.get_coverage()
 }
 
 #[unsafe(no_mangle)]
