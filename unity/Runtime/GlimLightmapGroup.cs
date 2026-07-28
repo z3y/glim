@@ -36,10 +36,12 @@ namespace Glim
         public uint Height => (uint)resolution;
 
         public UVPackingType packingType = UVPackingType.ScaleOffset;
-        [Tooltip("Very slow")] public bool bruteForce = false;
+        // [Tooltip("Very slow")] public bool bruteForce = false;
+        [NonSerialized] public bool bruteForce = false;
 
-        [Tooltip("Scales up smaller charts to ensure there is enough padding, however the lightmap packing will fail if there is not enough resolution to satify all constraints, and resolution of other objects will decrease")]
-        public bool ensurePadding = false;
+        // [Tooltip("Scales up smaller charts to ensure there is enough padding, however the lightmap packing will fail if there is not enough resolution to satify all constraints, and resolution of other objects will decrease")]
+        // public bool ensurePadding = false;
+        [NonSerialized] public bool ensurePadding = false;
         public bool holeFilling = false;
         [Range(3, 30)] public uint packingIterations = 5;
 

@@ -23,7 +23,6 @@ impl TextureArray {
     pub fn new(vk: &VulkanContext, specs: Vec<TextureDescriptor>) -> Self {
         struct Pending {
             image: vk::Image,
-            view: vk::ImageView,
             mem_reqs: vk::MemoryRequirements,
             offset: vk::DeviceSize,
             spec: TextureDescriptor,
@@ -52,7 +51,6 @@ impl TextureArray {
                 let mem_reqs = unsafe { vk.device.get_image_memory_requirements(image) };
                 Pending {
                     image,
-                    view: vk::ImageView::null(),
                     mem_reqs,
                     offset: 0,
                     spec,
