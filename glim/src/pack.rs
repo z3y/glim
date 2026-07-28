@@ -1,14 +1,3 @@
-// split mesh into charts or treat entire mesh as one chart per renderer and use scale offset for uvs
-// calculate a scale multipler for each chart based on world space scale of the object https://github.com/z3y/XatlasLightmap/blob/main/Scripts/XatlasLightmapPacker.cs#L495
-// multiply with scale in lightmap property and scale the uvs
-// calculate area sum of all charts and use as a maximum
-// sort charts by area from largest to smallest
-// calculate bounds for each chart
-// find an approximate float (something like 75% to 100% coverage) to scale all charts to fit inside area of lightmap texture in texel units
-// rasterize each uv chart into a bitmap
-// pack
-// if everything fits repeat with larger approximation or stop and scale charts back into [0, 1] uv range
-
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::math::{Vector2, Vector3};
@@ -232,10 +221,6 @@ impl UVPacker {
 
         chart.offset_uvs();
 
-        // let mut scale = chart.calculate_area_multiplier();
-        // scale *= scale_multiplier;
-        // chart.uvs.iter_mut().for_each(|x| *x *= scale);
-
         chart.user_scale_multiplier = user_scale_multiplier;
         chart.base_uvs = chart.uvs.clone();
         chart.world_scale_multiplier = chart.calculate_area_multiplier(positions);
@@ -256,7 +241,6 @@ impl UVPacker {
         //         .unwrap_or(std::cmp::Ordering::Equal)
         // });
 
-        // todo
         self.charts.sort_by(|a, b| {
             b.uv_bounds_area
                 .partial_cmp(&a.uv_bounds_area)
@@ -365,6 +349,7 @@ impl UVPacker {
         let mut placements: Vec<(u32, u32)> = Vec::with_capacity(self.charts.len());
 
         let mut cursor = (0_u32, 0_u32);
+        let mut hole_filling = false;
 
         for chart in &self.charts {
             let (cw, ch) = (chart.bitmap.width, chart.bitmap.height);
@@ -380,7 +365,9 @@ impl UVPacker {
             let start = if brute_force { (0, 0) } else { cursor };
 
             let placed = find_placement(&target, &chart.bitmap, start.0, start.1).or_else(|| {
-                if !brute_force {
+                if !brute_force && !hole_filling {
+                    hole_filling = true;
+                    cursor = (0, 0);
                     find_placement(&target, &chart.bitmap, 0, 0)
                 } else {
                     None
