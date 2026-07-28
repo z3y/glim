@@ -276,7 +276,12 @@ namespace Glim
                             break;
                         }
 
-                        var mat = sharedMaterials[submeshIndex];
+                        if (sharedMaterials.Length == 0)
+                        {
+                            continue;
+                        }                           
+
+                        var mat = sharedMaterials[Mathf.Min(submeshIndex, sharedMaterials.Length - 1)];
 
                         if (!mat)
                         {
