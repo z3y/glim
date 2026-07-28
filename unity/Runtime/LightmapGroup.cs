@@ -40,7 +40,7 @@ namespace Glim
 
         [Tooltip("Scales up smaller charts to ensure there is enough padding, however the lightmap packing will fail if there is not enough resolution to satify all constraints, and resolution of other objects will decrease")]
         public bool ensurePadding = false;
-
+        public bool holeFilling = false;
         [Range(3, 30)] public uint packingIterations = 5;
 
         public bool dilate = true;

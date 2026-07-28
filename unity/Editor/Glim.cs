@@ -327,7 +327,8 @@ namespace Glim
 
                     bool bruteForce = lightmapGroup.bruteForce;
                     bool ensurePadding = lightmapGroup.ensurePadding;
-                    var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, ensurePadding);
+                    bool holeFilling = lightmapGroup.holeFilling;
+                    var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling, ensurePadding);
                     for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                     {
                         Renderer r = renderers[rendererIndex];

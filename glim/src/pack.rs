@@ -160,6 +160,7 @@ pub struct UVPacker {
     height: u32,
     area: f64,
     brute_force: bool,
+    hole_filling: bool,
     pub target: Option<Bitmap>,
     iterations: u32,
     pub enforce_min_scale: bool,
@@ -171,6 +172,7 @@ impl UVPacker {
         height: u32,
         iterations: u32,
         brute_force: bool,
+        hole_filling: bool,
         enforce_min_scale: bool,
     ) -> Self {
         Self {
@@ -183,6 +185,7 @@ impl UVPacker {
             target: None,
             iterations,
             enforce_min_scale,
+            hole_filling,
         }
     }
 
@@ -366,9 +369,13 @@ impl UVPacker {
 
             let placed = find_placement(&target, &chart.bitmap, start.0, start.1).or_else(|| {
                 if !brute_force && !hole_filling {
-                    hole_filling = true;
-                    cursor = (0, 0);
-                    find_placement(&target, &chart.bitmap, 0, 0)
+                    if self.hole_filling {
+                        hole_filling = true;
+                        cursor = (0, 0);
+                        find_placement(&target, &chart.bitmap, 0, 0)
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
@@ -699,6 +706,7 @@ pub unsafe extern "C" fn uvpacker_create(
     height: u32,
     iterations: u32,
     brute_force: bool,
+    hole_filling: bool,
     enforce_min_scale: bool,
 ) -> *mut UVPacker {
     Box::into_raw(Box::new(UVPacker::new(
@@ -706,6 +714,7 @@ pub unsafe extern "C" fn uvpacker_create(
         height,
         iterations,
         brute_force,
+        hole_filling,
         enforce_min_scale,
     ))) as *mut UVPacker
 }
