@@ -43,7 +43,7 @@ namespace Glim
         // public bool ensurePadding = false;
         [NonSerialized] public bool ensurePadding = false;
         public bool holeFilling = false;
-        [Range(3, 30)] public uint packingIterations = 5;
+        [Range(5, 30)] public uint packingIterations = 5;
 
         public bool dilate = true;
         public bool denoise = true;
