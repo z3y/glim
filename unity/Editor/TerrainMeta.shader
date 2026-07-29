@@ -50,6 +50,11 @@ Shader "Hidden/Glim/TerrainMeta"
                 o.vertex = float4(lightmapUV * 2.0 - 1.0, 0, 1);
 
                 o.uv = v.uv;
+
+                #if !UNITY_UV_STARTS_AT_TOP
+                    o.uv = o.uv * float2(1.0, -1.0) + float2(0.0, 1.0);
+                #endif
+                
                 return o;
             }
 
