@@ -44,8 +44,14 @@ fn main() {
 
     shaders.push(Shader {
         ty: ShaderType::Compute,
-        src: "bake_direct.slang".into(),
-        dst: "bake_direct.spv".into(),
+        src: "bake_direct_emission.slang".into(),
+        dst: "bake_direct_emission.spv".into(),
+    });
+
+    shaders.push(Shader {
+        ty: ShaderType::Compute,
+        src: "bake_direct_light.slang".into(),
+        dst: "bake_direct_light.spv".into(),
     });
 
     shaders.push(Shader {

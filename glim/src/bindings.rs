@@ -39,7 +39,8 @@ pub struct GlimConfig {
 
     pub mis: bool,
 
-    pub direct_samples: u32,
+    pub direct_light_samples: u32,
+    pub direct_emission_samples: u32,
     pub indirect_samples: u32,
     pub bounce_count: u32,
     pub lightmap_mode: LightmapMode,

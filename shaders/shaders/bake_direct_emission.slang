@@ -38,24 +38,10 @@ struct PushConstants
     uint sobolIndexMask = ~0u;
     uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
 
-    float2 xiLight = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
-
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::new ();
-
-    for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
-    {
-        Light light = Lights[lightIndex];
-        float3 L;
-        float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L, false);
-        float3 NoL = saturate(dot(L, normalWS));
-        color.rgb += current * NoL;
-        dominantDirection.xyz += L * Luminance(current * NoL);
-
-        AccumulateL1LightmapDirect(sh, current, L, normalWS);
-    }
 
     float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
 
@@ -70,13 +56,13 @@ struct PushConstants
 
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
-        float2 xiTriangle = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
-        uint triIndex = min(uint(xiTriangle.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
+        float2 xi = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
+        uint triIndex = min(uint(xi.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
         uint emissivePrimitiveID = EmissiveTriangles[triIndex];
 
         float3 L;
         float pdf = 0.0;
-        float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, randomEmissiveTrianglePdf, pdf, L, false);
+        float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xi.y, throughput, randomEmissiveTrianglePdf, pdf, L, false);
         float3 NoL = saturate(dot(L, normalWS));
 
         current *= MISWeight(pdf, bsdfPdf);
@@ -138,16 +124,9 @@ struct PushConstants
 
     ValidateSampleColor(color);
 
-    float4 previous = float4(
-        CompactedLightmap[index * 3 + 0],
-        CompactedLightmap[index * 3 + 1],
-        CompactedLightmap[index * 3 + 2],
-        1.0);
-
-    AccumulateColor(previous, sampleIndex, color);
-    CompactedLightmap[index * 3 + 0] = previous.x;
-    CompactedLightmap[index * 3 + 1] = previous.y;
-    CompactedLightmap[index * 3 + 2] = previous.z;
+    CompactedLightmap[index * 3 + 0] += color.x * sampleScale;
+    CompactedLightmap[index * 3 + 1] += color.y * sampleScale;
+    CompactedLightmap[index * 3 + 2] += color.z * sampleScale;
 
     if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
     {

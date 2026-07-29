@@ -14,6 +14,7 @@ pub struct BakeDirectPushConstants {
 pub fn load_bake_direct_shader(
     vk: &VulkanContext,
     constants: &SpecializationConstants,
+    lights: bool,
 ) -> ComputeShader {
     let mut bindings = Vec::new();
 
@@ -40,9 +41,14 @@ pub fn load_bake_direct_shader(
         size: std::mem::size_of::<BakeDirectPushConstants>() as u32,
     }];
 
+    let shader = match lights {
+        true => ShaderName::BakeDirectLight,
+        false => ShaderName::BakeDirectEmission,
+    };
+
     ComputeShader::new(
         vk,
-        &load_shader_bytes(ShaderName::BakeDirect),
+        &load_shader_bytes(shader),
         &bindings,
         &push_constant_ranges,
         &specialization_info,

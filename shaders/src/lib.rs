@@ -6,8 +6,9 @@ pub enum ShaderName {
     InitFromBakeFragment,
     InitFromCamera,
     BakeLightProbes,
-    BakeDirect,
+    BakeDirectLight,
     BakeIndirect,
+    BakeDirectEmission,
     AdjustSamples,
     Preview,
 }
@@ -25,7 +26,8 @@ pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
         ShaderName::BakeIndirect => include_bytes!(concat!(env!("OUT_DIR"), "/bake_indirect.spv")),
         ShaderName::AdjustSamples => include_bytes!(concat!(env!("OUT_DIR"), "/adjust_samples.spv")),
         ShaderName::Preview => include_bytes!(concat!(env!("OUT_DIR"), "/preview.spv")),
-        ShaderName::BakeDirect => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct.spv")),
+        ShaderName::BakeDirectLight => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_light.spv")),
+        ShaderName::BakeDirectEmission => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_emission.spv")),
     };
 
     let aligned = bytes
