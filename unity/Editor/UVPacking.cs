@@ -9,7 +9,7 @@ namespace Glim
         const string DLL = "glim";
 
         [DllImport(DLL)]
-        public static extern IntPtr uvpacker_create(uint width, uint height, uint iterations, [MarshalAs(UnmanagedType.I1)] bool bruteForce, [MarshalAs(UnmanagedType.I1)] bool holeFilling);
+        public static extern IntPtr uvpacker_create(uint width, uint height, uint iterations, [MarshalAs(UnmanagedType.I1)] bool bruteForce, [MarshalAs(UnmanagedType.I1)] bool holeFilling, float world_scale_exponent);
 
         [DllImport(DLL)]
         public static extern void uvpacker_destroy(IntPtr handle);

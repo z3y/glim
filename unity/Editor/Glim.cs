@@ -327,7 +327,8 @@ namespace Glim
 
                     bool bruteForce = lightmapGroup.bruteForce;
                     bool holeFilling = lightmapGroup.holeFilling;
-                    var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling);
+                    float worldScaleExponent = lightmapGroup.scaleExponent;
+                    var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling, worldScaleExponent);
                     for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                     {
                         Renderer r = renderers[rendererIndex];

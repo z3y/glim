@@ -43,7 +43,11 @@ namespace Glim
         // public bool ensurePadding = false;
         [NonSerialized] public bool ensurePadding = false;
         public bool holeFilling = false;
+
+        [Tooltip("How much the world space size of a mesh affects the scale of the UVs in the lightmap")]
+        [Range(0.0f, 1.0f)] public float scaleExponent = 0.8f;
         [Range(5, 30)] public uint packingIterations = 5;
+
 
         public bool dilate = true;
         public bool denoise = true;

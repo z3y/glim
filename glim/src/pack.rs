@@ -142,6 +142,7 @@ pub struct UVPacker {
     area: f64,
     brute_force: bool,
     hole_filling: bool,
+    world_scale_exponent: f32,
     pub target: Option<Bitmap>,
     iterations: u32,
 }
@@ -153,6 +154,7 @@ impl UVPacker {
         iterations: u32,
         brute_force: bool,
         hole_filling: bool,
+        world_scale_exponent: f32,
     ) -> Self {
         Self {
             charts: Vec::new(),
@@ -164,6 +166,7 @@ impl UVPacker {
             target: None,
             iterations,
             hole_filling,
+            world_scale_exponent,
         }
     }
 
@@ -207,7 +210,7 @@ impl UVPacker {
 
         let density = chart.calculate_area_multiplier(positions);
 
-        chart.world_scale_multiplier = density.powf(0.8);
+        chart.world_scale_multiplier = density.powf(self.world_scale_exponent);
         chart.uv_area = chart.calculate_uv_area();
         chart.uv_bounds_area = chart.calculate_uv_bounds_area();
 
@@ -225,9 +228,18 @@ impl UVPacker {
         //         .unwrap_or(std::cmp::Ordering::Equal)
         // });
 
+        // self.charts.sort_by(|a, b| {
+        //     b.uv_bounds_area
+        //         .partial_cmp(&a.uv_bounds_area)
+        //         .unwrap_or(std::cmp::Ordering::Equal)
+        // });
+
         self.charts.sort_by(|a, b| {
-            b.uv_bounds_area
-                .partial_cmp(&a.uv_bounds_area)
+            let score_a = a.uv_bounds_area * a.uv_area;
+            let score_b = b.uv_bounds_area * b.uv_area;
+
+            score_b
+                .partial_cmp(&score_a)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -708,6 +720,7 @@ pub unsafe extern "C" fn uvpacker_create(
     iterations: u32,
     brute_force: bool,
     hole_filling: bool,
+    world_scale_exponent: f32,
 ) -> *mut UVPacker {
     Box::into_raw(Box::new(UVPacker::new(
         width,
@@ -715,6 +728,7 @@ pub unsafe extern "C" fn uvpacker_create(
         iterations,
         brute_force,
         hole_filling,
+        world_scale_exponent,
     ))) as *mut UVPacker
 }
 
