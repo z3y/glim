@@ -38,7 +38,8 @@ namespace Glim
 
             [MarshalAs(UnmanagedType.I1)] public readonly bool mis;
 
-            public readonly uint direct_samples;
+            public readonly uint direct_light_samples;
+            public readonly uint direct_emission_samples;
             public readonly uint indirect_samples;
             public readonly uint bounce_count;
             public readonly LightmapMode lightmap_mode;
@@ -48,7 +49,8 @@ namespace Glim
             public readonly float lightprobe_deringing;
 
             public GlimConfig(CoordinateSystem coordinate_system,
-                               uint direct_samples,
+                               uint direct_light_samples,
+                               uint direct_emission_samples,
                                uint indirect_samples,
                                uint bounce_count,
                                bool is_preview,
@@ -75,7 +77,8 @@ namespace Glim
                 this.lightprobes_read_callback = Bake.OnReadbackLightprobes;
                 this.probe_samples = probe_samples;
                 this.probe_bounces = bounce_count;
-                this.direct_samples = direct_samples;
+                this.direct_light_samples = direct_light_samples;
+                this.direct_emission_samples = direct_emission_samples;
                 this.indirect_samples = indirect_samples;
                 this.bounce_count = bounce_count;
                 this.vulkan_validation_layers = false;

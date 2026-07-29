@@ -81,6 +81,7 @@ namespace Glim
                         Bindings.CoordinateSystem.Unity,
                         baker.previewSamples,
                         baker.previewSamples,
+                        baker.previewSamples,
                         baker.previewBounces,
                         true,
                         baker.previewThrottle,
@@ -167,7 +168,8 @@ namespace Glim
 
                     var config = new Bindings.GlimConfig(
                         Bindings.CoordinateSystem.Unity,
-                        baker.directSamples,
+                        baker.directLightSamples,
+                        baker.directEmissionSamples,
                         baker.indirectSamples,
                         baker.bounces,
                         false,

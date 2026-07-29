@@ -46,8 +46,12 @@ namespace Glim
         [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times. Affects lightmaps, light probes and light volumes.")]
         public bool multipleImportanceSampling = false;
 
-        [Tooltip("Number of direct samples, affects direct lights, emissive materials and multiple importance sampling")]
-        public uint directSamples = 512;
+        [Tooltip("Number of direct samples, affects direct lights")]
+        public uint directLightSamples = 64;
+
+        [Tooltip("Number of direct samples, affects emissive materials, multiple importance sampling and skybox")]
+        public uint directEmissionSamples = 512;
+
         [Tooltip("Only affects bounced light")]
         public uint indirectSamples = 256;
         public uint bounces = 5;

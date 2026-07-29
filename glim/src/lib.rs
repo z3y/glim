@@ -1839,34 +1839,7 @@ fn render_lightmaps(app: &mut Glim) {
         app.vk.end_single_use_cmd(cmd);
     }
 
-    let mut bake_direct_light_shader = load_bake_direct_shader(&app.vk, &app.constants, true);
-    update_bake_direct_shader(
-        &app.vk,
-        &bake_direct_light_shader,
-        app.tlas.acceleration_structure(),
-        &albedos,
-        &emissions,
-        app.gpu_mesh.index_buffer.buffer,
-        app.gpu_mesh.vertex_buffer.buffer,
-        app.gpu_lights.buffer,
-        app.emissive_triangles_buffer.buffer,
-        compacted_visibility.buffer,
-        compacted_lightmap.buffer,
-        app.skybox.view(),
-        app.skybox.sampler(),
-    );
-
-    let mut bake_direct_push = BakeDirectPushConstants {
-        compacted_count: compacted_pixels_count,
-        sample_index: 0,
-        max_samples: app.config.direct_light_samples,
-        lights_count: app.cpu_lights.len() as u32,
-    };
-
     let compacted_groups_x = (compacted_pixels_count + 63) / 64;
-
-    let message = format!("Baking Direct Light");
-    (log)(LogMessage::message(&message));
 
     let mut progress = 0.0;
     let progress_max = app.config.direct_emission_samples
@@ -1874,110 +1847,142 @@ fn render_lightmaps(app: &mut Glim) {
         + app.config.indirect_samples * app.config.bounce_count;
     let progress_scale = 1.0 / progress_max as f32;
 
-    for sample_index in 0..bake_direct_push.max_samples {
-        if is_cancelled() {
-            break;
-        }
-        bake_direct_push.sample_index = sample_index;
-        if sample_index % 4 == 0 || sample_index == (bake_direct_push.max_samples - 1) {
-            (log)(LogMessage::progress(progress * progress_scale));
-        }
-        progress += 1.0;
+    if app.cpu_lights.len() > 0 {
+        let mut bake_direct_light_shader = load_bake_direct_shader(&app.vk, &app.constants, true);
+        update_bake_direct_shader(
+            &app.vk,
+            &bake_direct_light_shader,
+            app.tlas.acceleration_structure(),
+            &albedos,
+            &emissions,
+            app.gpu_mesh.index_buffer.buffer,
+            app.gpu_mesh.vertex_buffer.buffer,
+            app.gpu_lights.buffer,
+            app.emissive_triangles_buffer.buffer,
+            compacted_visibility.buffer,
+            compacted_lightmap.buffer,
+            app.skybox.view(),
+            app.skybox.sampler(),
+        );
 
-        let vk = &app.vk.device;
-        let shader = &bake_direct_light_shader;
-        let bake_direct_push_bytes = as_bytes(&bake_direct_push);
-
-        let cmd = app.vk.begin_single_use_cmd();
-        unsafe {
-            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-            vk.cmd_bind_descriptor_sets(
-                cmd,
-                vk::PipelineBindPoint::COMPUTE,
-                shader.pipeline_layout,
-                0,
-                &[shader.descriptor_set],
-                &[],
-            );
-            vk.cmd_push_constants(
-                cmd,
-                shader.pipeline_layout,
-                vk::ShaderStageFlags::COMPUTE,
-                0,
-                &bake_direct_push_bytes,
-            );
-
-            vk.cmd_dispatch(cmd, compacted_groups_x, 1, 1);
+        let mut bake_direct_push = BakeDirectPushConstants {
+            compacted_count: compacted_pixels_count,
+            sample_index: 0,
+            max_samples: app.config.direct_light_samples,
+            lights_count: app.cpu_lights.len() as u32,
         };
-        app.vk.end_single_use_cmd(cmd);
+
+        let message = format!("Baking Direct Light");
+        (log)(LogMessage::message(&message));
+
+        for sample_index in 0..bake_direct_push.max_samples {
+            if is_cancelled() {
+                break;
+            }
+            bake_direct_push.sample_index = sample_index;
+            if sample_index % 4 == 0 || sample_index == (bake_direct_push.max_samples - 1) {
+                (log)(LogMessage::progress(progress * progress_scale));
+            }
+            progress += 1.0;
+
+            let vk = &app.vk.device;
+            let shader = &bake_direct_light_shader;
+            let bake_direct_push_bytes = as_bytes(&bake_direct_push);
+
+            let cmd = app.vk.begin_single_use_cmd();
+            unsafe {
+                vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+                vk.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    shader.pipeline_layout,
+                    0,
+                    &[shader.descriptor_set],
+                    &[],
+                );
+                vk.cmd_push_constants(
+                    cmd,
+                    shader.pipeline_layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &bake_direct_push_bytes,
+                );
+
+                vk.cmd_dispatch(cmd, compacted_groups_x, 1, 1);
+            };
+            app.vk.end_single_use_cmd(cmd);
+        }
+        bake_direct_light_shader.destroy(&app.vk);
     }
-    bake_direct_light_shader.destroy(&app.vk);
 
-    let mut bake_direct_emission_shader = load_bake_direct_shader(&app.vk, &app.constants, false);
-    update_bake_direct_shader(
-        &app.vk,
-        &bake_direct_emission_shader,
-        app.tlas.acceleration_structure(),
-        &albedos,
-        &emissions,
-        app.gpu_mesh.index_buffer.buffer,
-        app.gpu_mesh.vertex_buffer.buffer,
-        app.gpu_lights.buffer,
-        app.emissive_triangles_buffer.buffer,
-        compacted_visibility.buffer,
-        compacted_lightmap.buffer,
-        app.skybox.view(),
-        app.skybox.sampler(),
-    );
+    {
+        let mut bake_direct_emission_shader =
+            load_bake_direct_shader(&app.vk, &app.constants, false);
+        update_bake_direct_shader(
+            &app.vk,
+            &bake_direct_emission_shader,
+            app.tlas.acceleration_structure(),
+            &albedos,
+            &emissions,
+            app.gpu_mesh.index_buffer.buffer,
+            app.gpu_mesh.vertex_buffer.buffer,
+            app.gpu_lights.buffer,
+            app.emissive_triangles_buffer.buffer,
+            compacted_visibility.buffer,
+            compacted_lightmap.buffer,
+            app.skybox.view(),
+            app.skybox.sampler(),
+        );
 
-    let mut bake_direct_push = BakeDirectPushConstants {
-        compacted_count: compacted_pixels_count,
-        sample_index: 0,
-        max_samples: app.config.direct_emission_samples,
-        lights_count: app.cpu_lights.len() as u32,
-    };
-
-    let message = format!("Baking Direct Emission");
-    (log)(LogMessage::message(&message));
-
-    for sample_index in 0..bake_direct_push.max_samples {
-        if is_cancelled() {
-            break;
-        }
-        bake_direct_push.sample_index = sample_index;
-        if sample_index % 4 == 0 || sample_index == (bake_direct_push.max_samples - 1) {
-            (log)(LogMessage::progress(progress * progress_scale));
-        }
-        progress += 1.0;
-
-        let vk = &app.vk.device;
-        let shader = &bake_direct_emission_shader;
-        let bake_direct_push_bytes = as_bytes(&bake_direct_push);
-
-        let cmd = app.vk.begin_single_use_cmd();
-        unsafe {
-            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-            vk.cmd_bind_descriptor_sets(
-                cmd,
-                vk::PipelineBindPoint::COMPUTE,
-                shader.pipeline_layout,
-                0,
-                &[shader.descriptor_set],
-                &[],
-            );
-            vk.cmd_push_constants(
-                cmd,
-                shader.pipeline_layout,
-                vk::ShaderStageFlags::COMPUTE,
-                0,
-                &bake_direct_push_bytes,
-            );
-
-            vk.cmd_dispatch(cmd, compacted_groups_x, 1, 1);
+        let mut bake_direct_push = BakeDirectPushConstants {
+            compacted_count: compacted_pixels_count,
+            sample_index: 0,
+            max_samples: app.config.direct_emission_samples,
+            lights_count: app.cpu_lights.len() as u32,
         };
-        app.vk.end_single_use_cmd(cmd);
+
+        let message = format!("Baking Direct Emission");
+        (log)(LogMessage::message(&message));
+
+        for sample_index in 0..bake_direct_push.max_samples {
+            if is_cancelled() {
+                break;
+            }
+            bake_direct_push.sample_index = sample_index;
+            if sample_index % 4 == 0 || sample_index == (bake_direct_push.max_samples - 1) {
+                (log)(LogMessage::progress(progress * progress_scale));
+            }
+            progress += 1.0;
+
+            let vk = &app.vk.device;
+            let shader = &bake_direct_emission_shader;
+            let bake_direct_push_bytes = as_bytes(&bake_direct_push);
+
+            let cmd = app.vk.begin_single_use_cmd();
+            unsafe {
+                vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+                vk.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    shader.pipeline_layout,
+                    0,
+                    &[shader.descriptor_set],
+                    &[],
+                );
+                vk.cmd_push_constants(
+                    cmd,
+                    shader.pipeline_layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &bake_direct_push_bytes,
+                );
+
+                vk.cmd_dispatch(cmd, compacted_groups_x, 1, 1);
+            };
+            app.vk.end_single_use_cmd(cmd);
+        }
+        bake_direct_emission_shader.destroy(&app.vk);
     }
-    bake_direct_emission_shader.destroy(&app.vk);
 
     let mut group_info_buffer = {
         let mut infos = Vec::with_capacity(app.groups.len());
