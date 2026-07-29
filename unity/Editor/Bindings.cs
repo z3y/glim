@@ -205,7 +205,7 @@ namespace Glim
             public Vector2 area_size;
 
             public Vector3 up;
-            public uint pad;
+            public uint mixed;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 16)]

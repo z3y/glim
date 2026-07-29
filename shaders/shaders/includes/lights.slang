@@ -26,7 +26,7 @@ struct Light
     float2 AreaSize;
 
     float3 up;
-    uint pad;
+    uint mixed;
 };
 
 void CreateOrthoBasis(float3 n, out float3 b1, out float3 b2)

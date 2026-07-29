@@ -302,6 +302,7 @@ fn initialize_render(app: &mut Glim) {
 
     // upload lights
     if app.cpu_lights.len() > 0 {
+        app.cpu_lights.sort_by_key(|x| x.mixed == 1);
         app.gpu_lights = Buffer::new(
             &app.vk,
             String::from("Lights"),

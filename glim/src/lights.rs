@@ -26,7 +26,7 @@ pub struct Light {
     pub area_size: Vector2,
 
     pub up: Vector3,
-    pub pad: u32,
+    pub mixed: u32,
 }
 
 pub fn light_buffer_flags() -> vk::BufferUsageFlags {
@@ -52,7 +52,7 @@ impl Default for Light {
             area_size: Vector2::ZERO,
 
             up: Vector3::UP,
-            pad: 0,
+            mixed: 0,
         }
     }
 }

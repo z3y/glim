@@ -161,11 +161,11 @@ namespace Glim
             var addedLights = new List<Light>();
             foreach (var light in lights)
             {
-                // todo mixed
-                if (light.lightmapBakeType != LightmapBakeType.Baked)
+                if (light.lightmapBakeType == LightmapBakeType.Realtime)
                 {
                     continue;
                 }
+
 
                 var gammaColor = light.color;
                 if (light.useColorTemperature)
@@ -203,8 +203,8 @@ namespace Glim
                     range = light.range,
                     color = color,
                     shadow_radius_or_angle = radiusOrAngle,
+                    mixed = light.lightmapBakeType == LightmapBakeType.Mixed ? 1u : 0u
                 };
-
 
                 if (light.type == LightType.Spot)
                 {
@@ -241,19 +241,28 @@ namespace Glim
                 lightsOutputsProp.arraySize = lightsArray.Length;
                 for (int i = 0; i < lightsArray.Length; i++)
                 {
+                    var light = lightsArray[i];
                     var outputElement = lightsOutputsProp.GetArrayElementAtIndex(i);
                     var ids = lightsProp.GetArrayElementAtIndex(i);
 
                     outputElement.FindPropertyRelative("probeOcclusionLightIndex").intValue = 0;
                     outputElement.FindPropertyRelative("occlusionMaskChannel").intValue = -1;
 
+                    var mixedMode = baker.mixedLights switch
+                    {
+                        MixedLightMode.BakedIndirect => MixedLightingMode.IndirectOnly,
+                        MixedLightMode.Subtractive => MixedLightingMode.Subtractive,
+                        MixedLightMode.Shadowmask => MixedLightingMode.Shadowmask,
+                        _ => MixedLightingMode.IndirectOnly,
+                    };
+
                     var mode = outputElement.FindPropertyRelative("lightmapBakeMode");
-                    mode.FindPropertyRelative("lightmapBakeType").intValue = (int)LightmapBakeType.Baked;
-                    mode.FindPropertyRelative("mixedLightingMode").intValue = (int)MixedLightingMode.Shadowmask;
+                    mode.FindPropertyRelative("lightmapBakeType").intValue = (int)light.lightmapBakeType;
+                    mode.FindPropertyRelative("mixedLightingMode").intValue = (int)mixedMode;
 
                     outputElement.FindPropertyRelative("isBaked").boolValue = true;
 
-                    var soi = LightingData.ObjectToSOI(lightsArray[i]);
+                    var soi = LightingData.ObjectToSOI(light);
 
                     ids.Next(true);
                     ids.longValue = soi.MainLFID;
