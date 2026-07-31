@@ -25,7 +25,7 @@ pub enum ShaderName {
 
 pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
     #[rustfmt::skip]
-    let bytes: &[u8] = match name {
+    let bytes: &'static [u8] = match name {
         ShaderName::CompactionMask => include_bytes!(concat!(env!("OUT_DIR"), "/compaction_mask.spv")),
         ShaderName::CompactVisibility => include_bytes!(concat!(env!("OUT_DIR"), "/compact_visibility.spv")),
         ShaderName::Decompact => include_bytes!(concat!(env!("OUT_DIR"), "/decompact.spv")),

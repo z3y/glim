@@ -18,7 +18,7 @@ struct Shader {
 
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let shader_dir = Path::new("src/shaders");
+    let shader_dir = Path::new("shaders");
 
     println!("cargo:rerun-if-changed=shaders");
 
