@@ -4,8 +4,8 @@ use ash::vk::{self, Handle};
 use shaders::*;
 
 use crate::{
-    as_bytes, math::Vector3, shader_bindings::*, shaders::bake_direct::BakeDirectPushConstants,
-    texture2d::Texture2D, vulkan_context::VulkanContext,
+    as_bytes, math::Vector3, shader_bindings::*, shaders::bake_direct, texture2d::Texture2D,
+    vulkan_context::VulkanContext,
 };
 
 pub struct ComputeShader {
@@ -229,22 +229,6 @@ pub struct SpecializationConstants {
     pub lightprobe_deringing: f32,
 }
 
-// fn create_specialization_constants(
-//     mis: bool,
-//     light_falloff_type: LightFalloffType,
-//     transparent_primitive_offset: u32,
-//     emissive_triangles_count: u32,
-// ) -> [u32; 5] {
-//     let mis: u32 = if mis { 1 } else { 0 };
-//     [
-//         0,
-//         light_falloff_type as u32,
-//         transparent_primitive_offset,
-//         emissive_triangles_count,
-//         mis,
-//     ]
-// }
-
 pub fn load_init_from_camera_shader(
     vk: &VulkanContext,
     constants: &SpecializationConstants,
@@ -400,39 +384,6 @@ pub fn load_preview_shader(
     ComputeShader::new(
         vk,
         &load_shader_bytes(ShaderName::Preview),
-        &bindings,
-        &push_constant_ranges,
-        &specialization_info,
-    )
-}
-
-pub fn load_adjust_samples_shader(
-    vk: &VulkanContext,
-    constants: &SpecializationConstants,
-) -> ComputeShader {
-    let mut bindings = Vec::new();
-
-    bind_tlas(&mut bindings);
-    bind_compacted_visibility_buffer(&mut bindings);
-    bind_indices(&mut bindings);
-    bind_vertices(&mut bindings);
-    bind_albedos(&mut bindings, constants.lightmap_group_count);
-
-    let map_entries = create_specialization_map_entries();
-    let data_bytes = as_bytes(constants);
-    let specialization_info = vk::SpecializationInfo::default()
-        .map_entries(&map_entries)
-        .data(data_bytes);
-
-    let push_constant_ranges = [vk::PushConstantRange {
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        offset: 0,
-        size: std::mem::size_of::<BakeDirectPushConstants>() as u32,
-    }];
-
-    ComputeShader::new(
-        vk,
-        &load_shader_bytes(ShaderName::AdjustSamples),
         &bindings,
         &push_constant_ranges,
         &specialization_info,
@@ -885,6 +836,39 @@ pub fn update_preview_shader(
     descriptor_writes.push(write);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
+}
+
+pub fn load_adjust_samples_shader(
+    vk: &VulkanContext,
+    constants: &SpecializationConstants,
+) -> ComputeShader {
+    let mut bindings = Vec::new();
+
+    bind_tlas(&mut bindings);
+    bind_compacted_visibility_buffer(&mut bindings);
+    bind_indices(&mut bindings);
+    bind_vertices(&mut bindings);
+    bind_albedos(&mut bindings, constants.lightmap_group_count);
+
+    let map_entries = create_specialization_map_entries();
+    let data_bytes = as_bytes(constants);
+    let specialization_info = vk::SpecializationInfo::default()
+        .map_entries(&map_entries)
+        .data(data_bytes);
+
+    let push_constant_ranges = [vk::PushConstantRange {
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        offset: 0,
+        size: std::mem::size_of::<bake_direct::PushConstants>() as u32,
+    }];
+
+    ComputeShader::new(
+        vk,
+        &load_shader_bytes(ShaderName::AdjustSamples),
+        &bindings,
+        &push_constant_ranges,
+        &specialization_info,
+    )
 }
 
 pub fn update_adjust_samples_shader(

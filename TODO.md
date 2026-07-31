@@ -1,7 +1,7 @@
 # Todo
 
 - [ ] Higher resolution alpha
-- [ ] Terrain Support
+- [ ] Terrain Trees Support
 - [ ] Light Cookies
 - [ ] Shadowmask
 - [ ] Subtractive
@@ -17,11 +17,10 @@
 - [ ] MIS for area lights
 - [ ] The manual denoiser setup is not ideal
 - [ ] There is no weight for MIS
-- [ ] Adjust light probe sample positions if inside objects
 
 ## Optimization
 - [ ] Manually build the LightingData asset. This is one of the slowest things that happens before the bake starts becuse it has to start the built in baker (in an empty scene) for light probes tetrahedralization
-- [ ] UV Packer is slow
+- [ ] GPU Denoiser
 
 ## Bugs
 - [ ] Sync scene view fov

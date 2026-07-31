@@ -4,14 +4,14 @@ use shaders::*;
 use crate::{as_bytes, compute_shader::*, shader_bindings::*, vulkan_context::VulkanContext};
 
 #[repr(C)]
-pub struct BakeDirectPushConstants {
+pub struct PushConstants {
     pub compacted_count: u32,
     pub sample_index: u32,
     pub max_samples: u32,
     pub lights_count: u32,
 }
 
-pub fn load_bake_direct_shader(
+pub fn load_shader(
     vk: &VulkanContext,
     constants: &SpecializationConstants,
     lights: bool,
@@ -38,7 +38,7 @@ pub fn load_bake_direct_shader(
     let push_constant_ranges = [vk::PushConstantRange {
         stage_flags: vk::ShaderStageFlags::COMPUTE,
         offset: 0,
-        size: std::mem::size_of::<BakeDirectPushConstants>() as u32,
+        size: std::mem::size_of::<PushConstants>() as u32,
     }];
 
     let shader = match lights {
@@ -55,7 +55,7 @@ pub fn load_bake_direct_shader(
     )
 }
 
-pub fn update_bake_direct_shader(
+pub fn update_shader(
     vk: &VulkanContext,
     shader: &ComputeShader,
     tlas: vk::AccelerationStructureKHR,

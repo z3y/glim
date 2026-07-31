@@ -4,17 +4,14 @@ use shaders::*;
 use crate::{as_bytes, compute_shader::*, shader_bindings::*, vulkan_context::VulkanContext};
 
 #[repr(C)]
-pub struct BakeIndirectPushConstants {
+pub struct PushConstants {
     pub compacted_count: u32,
     pub sample_index: u32,
     pub max_samples: u32,
     pub bounce_index: u32,
 }
 
-pub fn load_bake_indirect_shader(
-    vk: &VulkanContext,
-    constants: &SpecializationConstants,
-) -> ComputeShader {
+pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> ComputeShader {
     let mut bindings = Vec::new();
 
     bind_tlas(&mut bindings);
@@ -35,7 +32,7 @@ pub fn load_bake_indirect_shader(
     let push_constant_ranges = [vk::PushConstantRange {
         stage_flags: vk::ShaderStageFlags::COMPUTE,
         offset: 0,
-        size: std::mem::size_of::<BakeIndirectPushConstants>() as u32,
+        size: std::mem::size_of::<PushConstants>() as u32,
     }];
 
     ComputeShader::new(
@@ -47,7 +44,7 @@ pub fn load_bake_indirect_shader(
     )
 }
 
-pub fn update_bake_indirect_shader(
+pub fn update_shader(
     vk: &VulkanContext,
     shader: &ComputeShader,
     tlas: vk::AccelerationStructureKHR,

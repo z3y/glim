@@ -16,19 +16,8 @@ use crate::lights::light_buffer_flags;
 use crate::math::{Vector2, Vector3};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
-use crate::shaders::bake_direct::{
-    BakeDirectPushConstants, load_bake_direct_shader, update_bake_direct_shader,
-};
-use crate::shaders::bake_indirect::{
-    BakeIndirectPushConstants, load_bake_indirect_shader, update_bake_indirect_shader,
-};
-use crate::shaders::compact_visibility::{
-    load_shader_compact_visibility, update_shader_compact_visibility,
-};
-use crate::shaders::compaction_mask::{
-    CompactionPushConstants, load_shader_compaction_mask, update_shader_compaction_mask,
-};
-use crate::shaders::decompact::{load_shader_decompact, update_shader_decompact};
+
+use crate::shaders::{bake_direct, bake_indirect, compact_visibility, compaction_mask, decompact};
 use crate::skybox::Skybox;
 use crate::texture_array::{TextureArray, TextureDescriptor};
 use crate::{
@@ -1292,7 +1281,7 @@ fn render_lightmaps(app: &mut Glim) {
         app.gpu_mesh.vertex_buffer.buffer,
     );
 
-    let mut compaction_shader = load_shader_compaction_mask(&app.vk, &app.constants);
+    let mut compaction_shader = compaction_mask::load_shader(&app.vk, &app.constants);
     let mut compaction_buffer = Buffer::empty(
         &app.vk,
         "Compaction Mask".to_owned(),
@@ -1303,7 +1292,7 @@ fn render_lightmaps(app: &mut Glim) {
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
-    update_shader_compaction_mask(
+    compaction_mask::update_shader(
         &app.vk,
         &compaction_shader,
         visibility_expanded.view(),
@@ -1349,7 +1338,7 @@ fn render_lightmaps(app: &mut Glim) {
         };
         let visibility_push_bytes = as_bytes(&visibility_push);
 
-        let compaction_push = CompactionPushConstants {
+        let compaction_push = compaction_mask::PushConstants {
             width: group.width,
             height: group.height,
             offset: expanded_group_offset,
@@ -1597,8 +1586,8 @@ fn render_lightmaps(app: &mut Glim) {
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
 
-    let mut compact_visibility_shader = load_shader_compact_visibility(&app.vk, &app.constants);
-    update_shader_compact_visibility(
+    let mut compact_visibility_shader = compact_visibility::load_shader(&app.vk, &app.constants);
+    compact_visibility::update_shader(
         &app.vk,
         &compact_visibility_shader,
         visibility_expanded.view(),
@@ -1640,7 +1629,7 @@ fn render_lightmaps(app: &mut Glim) {
         };
         let visibility_push_bytes = as_bytes(&visibility_push);
 
-        let compaction_push = CompactionPushConstants {
+        let compaction_push = compaction_mask::PushConstants {
             width: group.width,
             height: group.height,
             offset: expanded_groups_start[group_index] as u32,
@@ -1765,7 +1754,7 @@ fn render_lightmaps(app: &mut Glim) {
             app.gpu_mesh.index_buffer.buffer,
             app.gpu_mesh.vertex_buffer.buffer,
         );
-        let push = BakeDirectPushConstants {
+        let push = bake_direct::PushConstants {
             compacted_count: compacted_pixels_count,
             sample_index: 0,
             max_samples: app.config.direct_emission_samples,
@@ -1849,8 +1838,8 @@ fn render_lightmaps(app: &mut Glim) {
     let progress_scale = 1.0 / progress_max as f32;
 
     if app.cpu_lights.len() > 0 {
-        let mut bake_direct_light_shader = load_bake_direct_shader(&app.vk, &app.constants, true);
-        update_bake_direct_shader(
+        let mut bake_direct_light_shader = bake_direct::load_shader(&app.vk, &app.constants, true);
+        bake_direct::update_shader(
             &app.vk,
             &bake_direct_light_shader,
             app.tlas.acceleration_structure(),
@@ -1866,7 +1855,7 @@ fn render_lightmaps(app: &mut Glim) {
             app.skybox.sampler(),
         );
 
-        let mut bake_direct_push = BakeDirectPushConstants {
+        let mut bake_direct_push = bake_direct::PushConstants {
             compacted_count: compacted_pixels_count,
             sample_index: 0,
             max_samples: app.config.direct_light_samples,
@@ -1918,8 +1907,9 @@ fn render_lightmaps(app: &mut Glim) {
 
     {
         let mut bake_direct_emission_shader =
-            load_bake_direct_shader(&app.vk, &app.constants, false);
-        update_bake_direct_shader(
+            bake_direct::load_shader(&app.vk, &app.constants, false);
+
+        bake_direct::update_shader(
             &app.vk,
             &bake_direct_emission_shader,
             app.tlas.acceleration_structure(),
@@ -1935,7 +1925,7 @@ fn render_lightmaps(app: &mut Glim) {
             app.skybox.sampler(),
         );
 
-        let mut bake_direct_push = BakeDirectPushConstants {
+        let mut bake_direct_push = bake_direct::PushConstants {
             compacted_count: compacted_pixels_count,
             sample_index: 0,
             max_samples: app.config.direct_emission_samples,
@@ -2014,16 +2004,16 @@ fn render_lightmaps(app: &mut Glim) {
     };
 
     if app.config.bounce_count > 0 {
-        let mut indirect_shader = load_bake_indirect_shader(&app.vk, &app.constants);
+        let mut indirect_shader = bake_indirect::load_shader(&app.vk, &app.constants);
 
-        let mut push = BakeIndirectPushConstants {
+        let mut push = bake_indirect::PushConstants {
             compacted_count: compacted_pixels_count,
             sample_index: 0,
             max_samples: app.config.indirect_samples,
             bounce_index: 0,
         };
 
-        update_bake_indirect_shader(
+        bake_indirect::update_shader(
             &app.vk,
             &indirect_shader,
             app.tlas.acceleration_structure(),
@@ -2089,7 +2079,7 @@ fn render_lightmaps(app: &mut Glim) {
     let message = format!("Decompacting");
     (log)(LogMessage::message(&message));
 
-    let mut decompact_shader = load_shader_decompact(&app.vk, &app.constants);
+    let mut decompact_shader = decompact::load_shader(&app.vk, &app.constants);
 
     let mut staging_buffer_lightmap = Buffer::empty(
         &app.vk,
@@ -2099,7 +2089,7 @@ fn render_lightmaps(app: &mut Glim) {
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     );
 
-    update_shader_decompact(
+    decompact::update_shader(
         &app.vk,
         &decompact_shader,
         compaction_buffer.buffer,
@@ -2144,7 +2134,7 @@ fn render_lightmaps(app: &mut Glim) {
 
         (log)(LogMessage::progress(post_step as f32 / post_total as f32));
 
-        let mut compaction_push = CompactionPushConstants {
+        let mut push = decompact::PushConstants {
             width: group.width,
             height: group.height,
             offset: expanded_groups_start[group_index] as u32,
@@ -2154,7 +2144,7 @@ fn render_lightmaps(app: &mut Glim) {
             dilate: group.dilate as u32,
             pad2: 0,
         };
-        let decompact_push_bytes = as_bytes(&compaction_push);
+        let decompact_push_bytes = as_bytes(&push);
 
         unsafe {
             let cmd = app.vk.begin_single_use_cmd();
@@ -2170,6 +2160,7 @@ fn render_lightmaps(app: &mut Glim) {
                 &[shader.descriptor_set],
                 &[],
             );
+
             vk.cmd_push_constants(
                 cmd,
                 shader.pipeline_layout,
@@ -2223,8 +2214,8 @@ fn render_lightmaps(app: &mut Glim) {
 
             // encode directional
             if lightmap_type == 1 {
-                compaction_push.encode_type = 2;
-                let decompact_push_bytes = as_bytes(&compaction_push);
+                push.encode_type = 2;
+                let decompact_push_bytes = as_bytes(&push);
 
                 let cmd = app.vk.begin_single_use_cmd();
                 let vk = &app.vk.device;
