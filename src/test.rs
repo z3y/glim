@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_uv_packer() -> std::io::Result<()> {
-        let path = "meshes/packuv.glb";
+        let path = "tests/packuv.glb";
 
         let mut packer = UVPacker::new(1024, 1024, 25, true, true, 1.0);
 
