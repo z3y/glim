@@ -185,6 +185,23 @@ mod tests {
         Ok((width, height, pixels))
     }
 
+    fn quaternion_rotate(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
+        let qv = [q[0], q[1], q[2]];
+        let w = q[3];
+
+        let t = [
+            2.0 * (qv[1] * v[2] - qv[2] * v[1]),
+            2.0 * (qv[2] * v[0] - qv[0] * v[2]),
+            2.0 * (qv[0] * v[1] - qv[1] * v[0]),
+        ];
+
+        [
+            v[0] + w * t[0] + (qv[1] * t[2] - qv[2] * t[1]),
+            v[1] + w * t[1] + (qv[2] * t[0] - qv[0] * t[2]),
+            v[2] + w * t[2] + (qv[0] * t[1] - qv[1] * t[0]),
+        ]
+    }
+
     pub fn load_gltf(
         app: *mut Glim,
         path: &str,
@@ -200,17 +217,18 @@ mod tests {
         for node in document.nodes() {
             if let Some(gltf_light) = node.light() {
                 let (t, r, _s) = node.transform().decomposed();
-                // let q = Quaternion::new(r[0], r[1], r[2], r[3]);
 
                 let position = Vector3::new(t[0], t[1], t[2]);
-                // let forward = q.rotate(Vector3::new(0.0, 0.0, -1.0));
-                // let up = q.rotate(Vector3::new(0.0, 1.0, 0.0));
+                let fwd = quaternion_rotate(r, [0.0, 0.0, -1.0]);
+                let up = quaternion_rotate(r, [0.0, 1.0, 0.0]);
 
                 let c = gltf_light.color();
                 let intensity = gltf_light.intensity();
 
                 let mut light = Light {
                     position: position,
+                    direction: Vector3::new(-fwd[0], -fwd[1], -fwd[2]),
+                    up: Vector3::new(up[0], up[1], up[2]),
                     range: gltf_light.range().unwrap_or(10.0),
                     color: Vector3::new(c[0] * intensity, c[1] * intensity, c[2] * intensity),
                     shadow_radius_or_angle: 0.0,
@@ -234,8 +252,8 @@ mod tests {
                             100.0
                         };
                         light.ty = LightType::Spot;
-                        light.spot_inner_percent = inner_percent;
-                        light.spot_outer = outer_cone_angle;
+                        light.spot_inner_percent = inner_percent * 100.0;
+                        light.spot_outer = outer_cone_angle.to_degrees() * 2.0;
                     }
                 };
 
