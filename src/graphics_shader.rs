@@ -358,8 +358,8 @@ pub fn load_visibility_shader(
 
     let shader = GraphicsShader::new(
         vk,
-        Some(&load_shader_bytes(ShaderName::InitFromBakeVertex)),
-        Some(&load_shader_bytes(ShaderName::InitFromBakeFragment)),
+        Some(&load_shader_bytes(ShaderName::RasterizeVertex)),
+        Some(&load_shader_bytes(ShaderName::RasterizeFragment)),
         None,
         &bindings,
         &push_constant_ranges,

@@ -26,14 +26,8 @@ fn main() {
 
     shaders.push(Shader {
         ty: ShaderType::Compute,
-        src: "test.slang".into(),
-        dst: "test.spv".into(),
-    });
-
-    shaders.push(Shader {
-        ty: ShaderType::Compute,
-        src: "init_from_camera.slang".into(),
-        dst: "init_from_camera.spv".into(),
+        src: "initialize_preview.slang".into(),
+        dst: "initialize_preview.spv".into(),
     });
 
     shaders.push(Shader {
@@ -74,14 +68,14 @@ fn main() {
 
     shaders.push(Shader {
         ty: ShaderType::Vertex,
-        src: "init_from_bake.slang".into(),
-        dst: "init_from_bake_vertex.spv".into(),
+        src: "rasterize.slang".into(),
+        dst: "rasterize_vertex.spv".into(),
     });
 
     shaders.push(Shader {
         ty: ShaderType::Fragment,
-        src: "init_from_bake.slang".into(),
-        dst: "init_from_bake_fragment.spv".into(),
+        src: "rasterize.slang".into(),
+        dst: "rasterize_fragment.spv".into(),
     });
 
     shaders.push(Shader {

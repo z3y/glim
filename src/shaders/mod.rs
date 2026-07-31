@@ -5,14 +5,16 @@ pub mod bake_indirect;
 pub mod compact_visibility;
 pub mod compaction_mask;
 pub mod decompact;
+pub mod initialize_preview;
+pub mod preview;
 
 pub enum ShaderName {
     CompactionMask,
     CompactVisibility,
     Decompact,
-    InitFromBakeVertex,
-    InitFromBakeFragment,
-    InitFromCamera,
+    RasterizeVertex,
+    RasterizeFragment,
+    InitializePreview,
     BakeLightProbes,
     BakeDirectLight,
     BakeIndirect,
@@ -27,9 +29,9 @@ pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
         ShaderName::CompactionMask => include_bytes!(concat!(env!("OUT_DIR"), "/compaction_mask.spv")),
         ShaderName::CompactVisibility => include_bytes!(concat!(env!("OUT_DIR"), "/compact_visibility.spv")),
         ShaderName::Decompact => include_bytes!(concat!(env!("OUT_DIR"), "/decompact.spv")),
-        ShaderName::InitFromBakeVertex => include_bytes!(concat!(env!("OUT_DIR"), "/init_from_bake_vertex.spv")),
-        ShaderName::InitFromBakeFragment => include_bytes!(concat!(env!("OUT_DIR"), "/init_from_bake_fragment.spv")),
-        ShaderName::InitFromCamera => include_bytes!(concat!(env!("OUT_DIR"), "/init_from_camera.spv")),
+        ShaderName::RasterizeVertex => include_bytes!(concat!(env!("OUT_DIR"), "/rasterize_vertex.spv")),
+        ShaderName::RasterizeFragment => include_bytes!(concat!(env!("OUT_DIR"), "/rasterize_fragment.spv")),
+        ShaderName::InitializePreview => include_bytes!(concat!(env!("OUT_DIR"), "/initialize_preview.spv")),
         ShaderName::BakeLightProbes => include_bytes!(concat!(env!("OUT_DIR"), "/bake_sh.spv")),
         ShaderName::BakeIndirect => include_bytes!(concat!(env!("OUT_DIR"), "/bake_indirect.spv")),
         ShaderName::AdjustSamples => include_bytes!(concat!(env!("OUT_DIR"), "/adjust_samples.spv")),

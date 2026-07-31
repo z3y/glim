@@ -19,16 +19,13 @@ use crate::sh::SHProbeL2;
 
 use crate::shaders::{
     SpecializationConstants, bake_direct, bake_indirect, compact_visibility, compaction_mask,
-    decompact,
+    decompact, initialize_preview, preview,
 };
 use crate::skybox::Skybox;
 use crate::texture_array::{TextureArray, TextureDescriptor};
 use crate::{
     camera::Camera,
-    compute_shader::{
-        ComputeShader, PreviewPushConstants, load_init_from_camera_shader, load_preview_shader,
-        update_init_from_camera_shader, update_preview_shader,
-    },
+    compute_shader::ComputeShader,
     graphics_shader::{VisibilityPushConstants, load_visibility_shader},
     lights::Light,
     mesh::{GpuMesh, Mesh, VulkanAs, create_tlas},
@@ -83,7 +80,7 @@ pub struct Glim {
     pub init_from_camera_shader: ComputeShader,
     pub preview_initialized: bool,
 
-    pub preview_push_constants: PreviewPushConstants,
+    pub preview_push_constants: preview::PushConstants,
 
     pub probes: Vec<SHProbeL2>,
 
@@ -264,7 +261,7 @@ fn initialize_render(app: &mut Glim) {
         lightprobe_deringing: config.lightprobe_deringing,
     };
 
-    app.preview_shader = load_preview_shader(&app.vk, &app.constants);
+    app.preview_shader = preview::load_shader(&app.vk, &app.constants);
 
     if app.probes.len() > 0 {
         app.bake_probes_shader = load_bake_light_probes_shader(&app.vk, &app.constants);
@@ -409,14 +406,14 @@ fn render_preview(app: &mut Glim) {
 
     let preview_settings = app.config.preview_settings.clone();
 
-    app.init_from_camera_shader = load_init_from_camera_shader(&app.vk, &app.constants);
+    app.init_from_camera_shader = initialize_preview::load_shader(&app.vk, &app.constants);
 
     update_render_target(app, &preview_settings);
 
     let visibility = &mut app.render_target.visibility;
     let diffuse = &mut app.render_target.diffuse;
 
-    update_preview_shader(
+    preview::update_shader(
         &app.vk,
         &app.preview_shader,
         app.tlas.acceleration_structure(),
@@ -484,7 +481,7 @@ fn render_preview(app: &mut Glim) {
                 let diffuse = &mut app.render_target.diffuse;
                 let visibility = &mut app.render_target.visibility;
 
-                update_preview_shader(
+                preview::update_shader(
                     &app.vk,
                     &app.preview_shader,
                     app.tlas.acceleration_structure(),
@@ -859,7 +856,7 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
 
         let albedos = app.albedo_array.views();
 
-        update_init_from_camera_shader(
+        initialize_preview::update_shader(
             vk,
             shader,
             app.tlas.acceleration_structure(),
@@ -877,7 +874,7 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
     {
         let max_samples = app.config.direct_emission_samples;
         let bounce_count = app.config.bounce_count;
-        app.preview_push_constants = PreviewPushConstants {
+        app.preview_push_constants = preview::PushConstants {
             lights_count: app.cpu_lights.len() as u32,
             sample_index: 0,
             width: width,
@@ -1075,7 +1072,7 @@ impl Glim {
 
         let gpu_lights = Buffer::null();
 
-        let preview_push_constants = PreviewPushConstants {
+        let preview_push_constants = preview::PushConstants {
             lights_count: 0,
             sample_index: 0,
             width: 0,
@@ -2387,7 +2384,7 @@ fn render_lightmaps(app: &mut Glim) {
             app.emissive_triangles_buffer.buffer,
         );
 
-        let mut push = BakeSHPushConstants {
+        let mut push = BakeLightProbesPushConstants {
             lights_count: app.cpu_lights.len() as u32,
             max_samples: app.config.probe_samples,
             sample_index: 0,
