@@ -94,7 +94,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         ray.tMin = 0;
         ray.tMax = RAY_MAX;
         ray.P = positionWS;
-        ray.D = RandomDirectionInHemisphere(normalWS, xiBounce);
+        ray.D = RandomDirectionInHemisphereCosine(normalWS, xiBounce);
 
         Hit bounceHit;
         if (TraceRay(ray, bounceHit))

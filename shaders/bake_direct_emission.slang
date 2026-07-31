@@ -47,7 +47,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     Ray ray;
     ray.P = positionWS;
-    ray.D = RandomDirectionInHemisphere(normalWS, xiBounce);
+    ray.D = RandomDirectionInHemisphereCosine(normalWS, xiBounce);
     ray.tMin = 0;
     ray.tMax = RAY_MAX;
 

@@ -1,7 +1,3 @@
-// SPDX-License-Identifier: MIT
-// Author: pema99
-// https://gist.github.com/pema99/226022f4e78173a2c21c56044e86d4a4
-
 #pragma once
 
 struct SHProbeL2
@@ -27,48 +23,70 @@ static const float A_HAT_0 = float.getPi();
 static const float A_HAT_1 = 2.0 * float.getPi() / 3.0;
 static const float A_HAT_2 = float.getPi() / 4.0;
 
-// SH basis functions
-float Y0() // Basis function l=0
+float Y0()
 {
     return L0_NORMALIZATION;
 }
 
-float Y1_1(float3 dir) // Basis function l=1, m=-1
+float Y1_1(float3 dir)
 {
     return L1_NORMALIZATION * dir.y;
 }
 
-float Y10(float3 dir) // Basis function l=1, m=0
+float Y10(float3 dir)
 {
     return L1_NORMALIZATION * dir.z;
 }
 
-float Y11(float3 dir) // Basis function l=1, m=1
+float Y11(float3 dir)
 {
     return L1_NORMALIZATION * dir.x;
 }
 
-float Y2_2(float3 dir) // Basis function l=2, m=-2
+float Y2_2(float3 dir)
 {
     return L2_2_NORMALIZATION * dir.x * dir.y;
 }
 
-float Y2_1(float3 dir) // Basis function l=2, m=-1
+float Y2_1(float3 dir)
 {
     return L2_2_NORMALIZATION * dir.y * dir.z;
 }
 
-float Y20(float3 dir) // Basis function l=2, m=0
+float Y20(float3 dir)
 {
     return L20_NORMALIZATION * (3.0 * dir.z * dir.z - 1);
 }
 
-float Y21(float3 dir) // Basis function l=2, m=1
+float Y21(float3 dir)
 {
     return L2_2_NORMALIZATION * dir.x * dir.z;
 }
 
-float Y22(float3 dir) // Basis function l=2, m=2
+float Y22(float3 dir)
 {
     return L22_NORMALIZATION * (dir.x * dir.x - dir.y * dir.y);
+}
+
+// https://www.ppsloan.org/publications/shdering.pdf
+float SHLanczos(float l, float w)
+{
+    float v = float.getPi() * l / w;
+    return pow(sin(v) / v, 4.0);
+}
+
+void DeringSHProbeL2(inout SHProbeL2 probe, float w)
+{
+    float w1 = SHLanczos(1.0, w);
+    float w2 = SHLanczos(2.0, w);
+
+    probe.sh[1].xyz *= w1;
+    probe.sh[2].xyz *= w1;
+    probe.sh[3].xyz *= w1;
+
+    probe.sh[4].xyz *= w2;
+    probe.sh[5].xyz *= w2;
+    probe.sh[6].xyz *= w2;
+    probe.sh[7].xyz *= w2;
+    probe.sh[8].xyz *= w2;
 }

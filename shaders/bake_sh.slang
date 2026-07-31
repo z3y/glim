@@ -166,7 +166,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     Ray ray;
     ray.P = probePosition;
-    ray.D = RandomDirectionSphere(xiBounce);
+    ray.D = RandomDirectionInSphere(xiBounce);
     ray.tMin = 0;
     ray.tMax = RAY_MAX;
 

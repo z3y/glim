@@ -99,6 +99,9 @@ uint hash_uint2(const uint kx, const uint ky)
     return c;
 }
 
+#undef final
+#undef rot
+
 uint InterleaveWithZero(uint x)
 {
     x &= 0x0000ffff;

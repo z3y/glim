@@ -74,7 +74,7 @@ mod tests {
         config
     }
 
-    fn test_render(mut config: GlimConfig) {
+    fn test_render(config: GlimConfig) {
         // config.camera_position = Vector3 {
         //     x: 1.829,
         //     y: 1.11498,
@@ -263,7 +263,7 @@ mod tests {
                 app_add_light(app, light);
             }
 
-            if let Some(camera) = node.camera() {
+            if let Some(_camera) = node.camera() {
                 {
                     let app = unsafe { &mut *app };
                     app.camera.set_forward(Vector3::new(fwd[0], fwd[1], fwd[2]));

@@ -99,24 +99,7 @@ float CalculateTriangleArea(uint primitiveID)
     return area;
 }
 
-float2 Hammersley(uint i, uint N)
-{
-    uint bits = reversebits(i);
-    float radicalInverse = float(bits) * 2.3283064365386963e-10;
-    return float2(float(i) / float(N), radicalInverse);
-}
-
-float3 RandomPointOnSphere(float3 center, float radius, float2 xi)
-{
-    float z = 1.0 - 2.0 * xi.x;
-    float r = sqrt(max(0.0, 1.0 - z * z));
-    float phi = 2.0 * float.getPi() * xi.y;
-
-    float3 dir = float3(r * cos(phi), r * sin(phi), z);
-    return center + dir * radius;
-}
-
-float3 RandomDirectionSphere(float2 xi)
+float3 RandomDirectionInSphere(float2 xi)
 {
     float z = 1.0 - 2.0 * xi.x;
     float phi = 2.0 * float.getPi() * xi.y;
@@ -126,7 +109,7 @@ float3 RandomDirectionSphere(float2 xi)
     return float3(r * cos(phi), r * sin(phi), z);
 }
 
-float3 RandomDirectionInHemisphere(float3 normal, float2 rand)
+float3 RandomDirectionInHemisphereCosine(float3 normal, float2 rand)
 {
     // rand.x and rand.y are random numbers in [0,1)
     float phi = 2.0 * float.getPi() * rand.x;
@@ -157,28 +140,6 @@ void AccumulateColor(inout float4 previous, uint sampleIndex, float4 color)
         float4 accumulatedColor = lerp(previous, color, weight);
         previous = accumulatedColor;
     }
-}
-
-// https://www.ppsloan.org/publications/shdering.pdf
-float SHLanczos(float l, float w)
-{
-    float v = float.getPi() * l / w;
-    return pow(sin(v) / v, 4.0);
-}
-void DeringSHProbeL2(inout SHProbeL2 probe, float w)
-{
-    float w1 = SHLanczos(1.0, w);
-    float w2 = SHLanczos(2.0, w);
-
-    probe.sh[1].xyz *= w1;
-    probe.sh[2].xyz *= w1;
-    probe.sh[3].xyz *= w1;
-
-    probe.sh[4].xyz *= w2;
-    probe.sh[5].xyz *= w2;
-    probe.sh[6].xyz *= w2;
-    probe.sh[7].xyz *= w2;
-    probe.sh[8].xyz *= w2;
 }
 
 void AccumulateL2(inout SHProbeL2 previous, uint sampleIndex, float3 color, float3 wi)
@@ -281,49 +242,6 @@ bool UseSmoothPosition(Surface surface)
     return false;
 }
 
-float2 BaryFromUV(uint primitiveID, float2 uv)
-{
-    uint i0 = Indices[primitiveID * 3 + 0];
-    uint i1 = Indices[primitiveID * 3 + 1];
-    uint i2 = Indices[primitiveID * 3 + 2];
-
-    Vertex v0 = Vertices[i0];
-    Vertex v1 = Vertices[i1];
-    Vertex v2 = Vertices[i2];
-
-    float2 uv0 = v0.GetUV();
-    float2 uv1 = v1.GetUV();
-    float2 uv2 = v2.GetUV();
-
-    float2 e0 = uv1 - uv0;
-    float2 e1 = uv2 - uv0;
-    float2 p = uv - uv0;
-
-    float det = e0.x * e1.y - e0.y * e1.x;
-
-    if (abs(det) < 1e-8)
-    {
-        return float2(0.0, 0.0);
-    }
-
-    float invDet = 1.0 / det;
-
-    float b1 = (p.x * e1.y - p.y * e1.x) * invDet;
-    float b2 = (-p.x * e0.y + p.y * e0.x) * invDet;
-    float b0 = 1.0 - b1 - b2;
-
-    return float2(b1, b2);
-
-    // float2 bary = saturate(float2(b1, b2));
-    // float sum = bary.x + bary.y;
-    // if (sum > 1.0)
-    // {
-    //     bary /= sum;
-    // }
-
-    // return bary;
-}
-
 // uv already multiplied with resolution
 uint GetCompactedIndex(float2 uv, uint lightmapGroup, bool flipY = true)
 {
@@ -367,6 +285,7 @@ float MISWeight(float pdf1, float pdf2)
     float denom = 1.0 + ratio * ratio;
     return 1.0 / denom;
 }
+
 float Luminance(float3 rgb)
 {
     return dot(rgb, float3(0.2126, 0.7152, 0.0722));
