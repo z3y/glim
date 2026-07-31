@@ -223,13 +223,15 @@ mod tests {
 
             if let Some(gltf_light) = node.light() {
                 let c = gltf_light.color();
-                let intensity = gltf_light.intensity();
+                let mut intensity = gltf_light.intensity();
+
+                intensity *= 1.0 / f32::consts::PI;
 
                 let mut light = Light {
                     position: position,
                     direction: Vector3::new(-fwd[0], -fwd[1], -fwd[2]),
                     up: Vector3::new(up[0], up[1], up[2]),
-                    range: gltf_light.range().unwrap_or(10.0),
+                    range: gltf_light.range().unwrap_or(25.0),
                     color: Vector3::new(c[0] * intensity, c[1] * intensity, c[2] * intensity),
                     shadow_radius_or_angle: 0.0,
                     ..Default::default()
@@ -257,7 +259,7 @@ mod tests {
                     }
                 };
 
-                // println!("{:#?}", light);
+                // println!("Creating Light:\n{:#?}", light);
                 app_add_light(app, light);
             }
 
