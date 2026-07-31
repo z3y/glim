@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lights.slang"
+#include "light.slang"
 #include "mesh.slang"
 #include "sh.slang"
 
@@ -110,10 +110,9 @@ enum LightmapMode : uint
     NonDirectional = 0,
     DominantDirection = 1,
     CombinedSH = 3,
-}
+};
 
-float4
-SampleAlbedo(float2 uv, uint lightmapGroup)
+float4 SampleAlbedo(float2 uv, uint lightmapGroup)
 {
     uint index = LIGHTMAP_GROUP_COUNT <= 1 ? 0 : NonUniformResourceIndex(lightmapGroup);
     Texture2D tex = Albedo[index];

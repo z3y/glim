@@ -1,4 +1,4 @@
-#define PREVIEW_SHADER
+#include "includes/bindings.slang"
 #include "includes/core.slang"
 
 [[vk::push_constant]]
@@ -11,6 +11,25 @@ struct PushConstants
 
     float3 cameraDirection;
     float pad0;
+}
+
+float4 EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP, bool hitSkybox)
+{
+    uint encoded = 0;
+    if (isVisible)
+    {
+        encoded |= 0x1 << 0;
+    }
+    if (useSmoothP)
+    {
+        encoded |= 0x1 << 1;
+    }
+    if (hitSkybox)
+    {
+        encoded |= 0x1 << 2;
+    }
+
+    return float4(bary, asfloat(primitiveID), asfloat(encoded));
 }
 
 [shader("compute")]

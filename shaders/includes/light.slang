@@ -1,14 +1,10 @@
-#pragma once
-
-#include "bindings.slang"
-
-enum LightType : uint32_t
+enum LightType : uint
 {
     Directional = 0,
     Point = 1,
     Spot = 2,
     Area = 3,
-}
+};
 
 struct Light
 {
@@ -42,12 +38,10 @@ float3 GetDirectionalLightAngle(float3 L, float angle, float2 xi)
 {
     float cosThetaMax = cos(angle);
 
-    // Uniformly sample the spherical cap (cone)
     float cosTheta = (1.0 - xi.x) + xi.x * cosThetaMax;
     float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
-    float phi = xi.y * 6.28318530718; // 2 * PI
+    float phi = xi.y * float.getPi() * 2.0;
 
-    // T and B form the tangent space around the light vector L
     float3 T, B;
     CreateOrthoBasis(normalize(L), T, B);
 
@@ -61,7 +55,7 @@ float3 GetDirectionalLightAngle(float3 L, float angle, float2 xi)
 
 // thanks to error.mdl
 // https://discord.com/channels/419351657743253524/443155141235834881/1429649996084416572
-float GetUnityBuiltInAttenuation(float distanceSquare, float invRangeSq)
+float UnityBuiltInLightAttenuation(float distanceSquare, float invRangeSq)
 {
     float rangeFraction = distanceSquare * invRangeSq;
     float hyperbolaFalloff = (0.04 / (rangeFraction + 0.04));
@@ -71,9 +65,9 @@ float GetUnityBuiltInAttenuation(float distanceSquare, float invRangeSq)
     return unityLightFalloff;
 }
 
-float LightFalloff(float distanceSquare, float invRangeSq)
+float LightFalloff(float distanceSquare, float invRangeSq, uint falloffType)
 {
-    if (LIGHT_FALLOFF_TYPE == 0)
+    if (falloffType == 0)
     {
         // return 1.0 / distanceSquare;
         float factor = distanceSquare * invRangeSq;
@@ -82,7 +76,7 @@ float LightFalloff(float distanceSquare, float invRangeSq)
     }
     else
     {
-        return GetUnityBuiltInAttenuation(distanceSquare, invRangeSq);
+        return UnityBuiltInLightAttenuation(distanceSquare, invRangeSq);
     }
 }
 
@@ -106,14 +100,14 @@ float3 RandomPointOnOrientedDisk(float3 center, float radius, float3 positionWS,
     return center + (lightRight * diskPoint.x + lightUp * diskPoint.y) * radius;
 }
 
-float GetSpotAngleAttenuation(float3 spotForward, float3 l, float spotScale, float spotOffset)
+float SpotLightAngleAttenuation(float3 spotForward, float3 l, float spotScale, float spotOffset)
 {
     float cd = dot(-spotForward, l);
     float attenuation = saturate(cd * spotScale + spotOffset);
     return attenuation * attenuation;
 }
 
-void GetSpotScaleOffset(float outerAngle, float innerAnglePercent, out float spotScale, out float spotOffset)
+void SpotLightScaleOffset(float outerAngle, float innerAnglePercent, out float spotScale, out float spotOffset)
 {
     float innerAngle = outerAngle / 100 * innerAnglePercent;
     innerAngle = innerAngle / 360 * float.getPi();

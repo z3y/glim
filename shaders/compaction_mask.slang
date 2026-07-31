@@ -21,7 +21,7 @@ void main(uint3 threadID: SV_DispatchThreadID, uint3 groupID: SV_GroupID)
 
     if (threadID.x < resolution.x * resolution.y)
     {
-        uint2 coords = IndexToUV(threadID.x);
+        uint2 coords = MortonDecode(threadID.x);
 
         float4 visibility = VisibilityBuffer[coords];
         visible = asuint(visibility.x) != uint::maxValue;

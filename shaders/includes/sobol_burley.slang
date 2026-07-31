@@ -182,7 +182,7 @@ uint RNGPixelInit(uint2 coords, SamplingPattern pattern)
     //
     // Based on:
     // https://psychopath.io/post/2022_07_24_owen_scrambling_based_dithered_blue_noise_sampling.
-    return nested_uniform_scramble_base4(MortonEncode(coords.x, coords.y), seed);
+    return nested_uniform_scramble_base4(MortonEncode(coords), seed);
 }
 
 uint RNGPixelInit1D(uint index)

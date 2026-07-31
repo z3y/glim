@@ -1,4 +1,3 @@
-#define PREVIEW_SHADER
 #include "includes/core.slang"
 #include "includes/sobol_burley.slang"
 

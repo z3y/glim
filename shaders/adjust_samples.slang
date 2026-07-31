@@ -1,5 +1,16 @@
 #include "includes/core.slang"
 
+[[vk::push_constant]]
+PushConstants Push;
+
+struct PushConstants
+{
+    uint compactedCount;
+    uint sampleIndex;
+    uint maxSamples;
+    uint lightCount;
+};
+
 float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
 {
     float3 positionWS = surface.P;
@@ -68,17 +79,6 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
 
     return positionWS;
 }
-
-[[vk::push_constant]]
-PushConstants Push;
-
-struct PushConstants
-{
-    uint compactedCount;
-    uint sampleIndex;
-    uint maxSamples;
-    uint lightCount;
-};
 
 [shader("compute")]
 [numthreads(64, 1, 1)]

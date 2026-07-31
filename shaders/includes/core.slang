@@ -1,45 +1,6 @@
-#pragma once
-
 #include "bindings.slang"
+#include "ray.slang"
 #include "util.slang"
-
-static const float RAY_MAX = 10000.0;
-
-struct Ray
-{
-    float3 P;
-    float tMin;
-    float3 D;
-    float tMax;
-}
-
-struct Hit
-{
-    float2 bary;
-    float t;
-    uint primitiveID;
-    bool frontFace;
-}
-
-float4
-EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP, bool hitSkybox)
-{
-    uint encoded = 0;
-    if (isVisible)
-    {
-        encoded |= 0x1 << 0;
-    }
-    if (useSmoothP)
-    {
-        encoded |= 0x1 << 1;
-    }
-    if (hitSkybox)
-    {
-        encoded |= 0x1 << 2;
-    }
-
-    return float4(bary, asfloat(primitiveID), asfloat(encoded));
-}
 
 void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 {
@@ -65,10 +26,10 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
     }
 }
 
-// hit is not always initialized
-#pragma warning(disable: 41018)
 bool TraceRay(Ray ray, out Hit hit)
 {
+    hit = {};
+
     RayDesc rayDesc;
     rayDesc.Origin = ray.P;
     rayDesc.Direction = ray.D;
@@ -99,7 +60,6 @@ bool TraceRay(Ray ray, out Hit hit)
 
     return false;
 }
-#pragma warning(default: 41018)
 
 bool TraceShadowRay(Ray ray)
 {
@@ -118,29 +78,6 @@ bool TraceShadowRay(Ray ray)
     }
 
     return query.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
-}
-
-// "A Fast and Robust Method for Avoiding Self-Intersection" (Carsten Wächter and Nikolaus Binder)
-float3 RayOffset(float3 P, float3 Ng)
-{
-    const float origin = 1.0 / 32.0;
-    const float floatScale = 1.0 / 65536.0;
-    const float intScale = 256.0;
-
-    // Use int3 for integer vector
-    int3 of_i = (int3)float3(intScale * Ng.x, intScale * Ng.y, intScale * Ng.z);
-
-    // Reinterpret bits and offset based on sign
-    float3 p_i = float3(
-        asfloat(asint(P.x) + ((P.x < 0.0) ? -of_i.x : of_i.x)),
-        asfloat(asint(P.y) + ((P.y < 0.0) ? -of_i.y : of_i.y)),
-        asfloat(asint(P.z) + ((P.z < 0.0) ? -of_i.z : of_i.z)));
-
-    // Choose between integer-bit offset or small float-scale offset
-    return float3(
-        abs(P.x) < origin ? P.x + floatScale * Ng.x : p_i.x,
-        abs(P.y) < origin ? P.y + floatScale * Ng.y : p_i.y,
-        abs(P.z) < origin ? P.z + floatScale * Ng.z : p_i.z);
 }
 
 float CalculateTriangleArea(uint primitiveID)
@@ -541,14 +478,14 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
 
         float rangeSq = light.range * light.range;
 
-        falloff = LightFalloff(distanceSquare, 1.0 / rangeSq);
+        falloff = LightFalloff(distanceSquare, 1.0 / rangeSq, LIGHT_FALLOFF_TYPE);
 
         if (light.type == LightType::Spot)
         {
             float spotScale;
             float spotOffset;
-            GetSpotScaleOffset(light.SpotOuter, light.SpotInnerPercent, spotScale, spotOffset);
-            float spotAttenuation = GetSpotAngleAttenuation(light.direction, L, spotScale, spotOffset);
+            SpotLightScaleOffset(light.SpotOuter, light.SpotInnerPercent, spotScale, spotOffset);
+            float spotAttenuation = SpotLightAngleAttenuation(light.direction, L, spotScale, spotOffset);
 
             falloff *= spotAttenuation;
         }

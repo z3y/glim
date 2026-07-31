@@ -52,21 +52,6 @@ uint3 HashPcg3d(uint3 v)
     return v;
 }
 
-uint Part1By1(uint x)
-{
-    x &= 0x0000ffff;
-    x = (x ^ (x << 8)) & 0x00ff00ff;
-    x = (x ^ (x << 4)) & 0x0f0f0f0f;
-    x = (x ^ (x << 2)) & 0x33333333;
-    x = (x ^ (x << 1)) & 0x55555555;
-    return x;
-}
-
-uint MortonEncode(uint x, uint y)
-{
-    return Part1By1(x) | (Part1By1(y) << 1);
-}
-
 #define rot(x, k) (((x) << (k)) | ((x) >> (32 - (k))))
 
 #define final(a, b, c)   \
@@ -114,26 +99,32 @@ uint hash_uint2(const uint kx, const uint ky)
     return c;
 }
 
-uint InterleaveWithZero(uint word)
+uint InterleaveWithZero(uint x)
 {
-    word = (word ^ (word << 8)) & 0x00ff00ff;
-    word = (word ^ (word << 4)) & 0x0f0f0f0f;
-    word = (word ^ (word << 2)) & 0x33333333;
-    word = (word ^ (word << 1)) & 0x55555555;
-    return word;
+    x &= 0x0000ffff;
+    x = (x ^ (x << 8)) & 0x00ff00ff;
+    x = (x ^ (x << 4)) & 0x0f0f0f0f;
+    x = (x ^ (x << 2)) & 0x33333333;
+    x = (x ^ (x << 1)) & 0x55555555;
+    return x;
 }
 
-uint DeinterleaveWithZero(uint word)
+uint DeinterleaveWithZero(uint x)
 {
-    word &= 0x55555555;
-    word = (word | (word >> 1)) & 0x33333333;
-    word = (word | (word >> 2)) & 0x0f0f0f0f;
-    word = (word | (word >> 4)) & 0x00ff00ff;
-    word = (word | (word >> 8)) & 0x0000ffff;
-    return word;
+    x &= 0x55555555;
+    x = (x ^ (x >> 1)) & 0x33333333;
+    x = (x ^ (x >> 2)) & 0x0f0f0f0f;
+    x = (x ^ (x >> 4)) & 0x00ff00ff;
+    x = (x ^ (x >> 8)) & 0x0000ffff;
+    return x;
 }
 
-uint2 IndexToUV(uint index)
+uint MortonEncode(uint2 coord)
+{
+    return InterleaveWithZero(coord.x) | (InterleaveWithZero(coord.y) << 1);
+}
+
+uint2 MortonDecode(uint index)
 {
     return uint2(DeinterleaveWithZero(index), DeinterleaveWithZero(index >> 1));
 }

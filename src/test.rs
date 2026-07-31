@@ -14,7 +14,7 @@ mod tests {
     use crate::pack::UVPacker;
     use crate::*;
 
-    const TEST_NAME: &str = "monkey";
+    const TEST_NAME: &str = "monkey_2";
 
     const DIRECT_LIGHT_SAMPLES: u32 = 64;
     const DIRECT_EMISSION_SAMPLES: u32 = 512;
