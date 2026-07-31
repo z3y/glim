@@ -215,13 +215,13 @@ mod tests {
             gltf::import(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         for node in document.nodes() {
+            let (t, r, _s) = node.transform().decomposed();
+
+            let position = Vector3::new(t[0], t[1], t[2]);
+            let fwd = quaternion_rotate(r, [0.0, 0.0, -1.0]);
+            let up = quaternion_rotate(r, [0.0, 1.0, 0.0]);
+
             if let Some(gltf_light) = node.light() {
-                let (t, r, _s) = node.transform().decomposed();
-
-                let position = Vector3::new(t[0], t[1], t[2]);
-                let fwd = quaternion_rotate(r, [0.0, 0.0, -1.0]);
-                let up = quaternion_rotate(r, [0.0, 1.0, 0.0]);
-
                 let c = gltf_light.color();
                 let intensity = gltf_light.intensity();
 
@@ -257,8 +257,16 @@ mod tests {
                     }
                 };
 
-                println!("{:#?}", light);
+                // println!("{:#?}", light);
                 app_add_light(app, light);
+            }
+
+            if let Some(camera) = node.camera() {
+                {
+                    let app = unsafe { &mut *app };
+                    app.camera.set_forward(Vector3::new(fwd[0], fwd[1], fwd[2]));
+                    app.camera.position = position;
+                }
             }
         }
 
