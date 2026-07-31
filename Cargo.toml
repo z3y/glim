@@ -17,7 +17,7 @@ half = { version = "2.7.1", default-features = false }
 
 [dev-dependencies]
 image = "0.25.10"
-gltf = { version = "1.4.1", default-features = false, features = ["import", "utils"] }
+gltf = { version = "1.4.1", default-features = false, features = ["import", "utils", "KHR_lights_punctual"] }
 
 [build-dependencies]
 cc = "1.2.62"

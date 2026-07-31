@@ -391,8 +391,9 @@ impl VulkanContext {
 
         let memory_type_index = self.find_memory_type(mem_reqs.memory_type_bits, properties);
 
-        let mb = mem_reqs.size as f64 / (1024.0 * 1024.0);
-        println!("creating empty buffer of size {:.3} MiB", mb);
+        // todo reduce small allocations
+        // let mb = mem_reqs.size as f64 / (1024.0 * 1024.0);
+        // println!("creating empty buffer of size {:.3} MiB", mb);
 
         let mut allocate_info = vk::MemoryAllocateInfo {
             allocation_size: mem_reqs.size,

@@ -3,6 +3,7 @@ use ash::vk::{self};
 use crate::math::{Vector2, Vector3};
 
 #[repr(u32)]
+#[derive(Debug)]
 pub enum LightType {
     Directional = 0,
     Point = 1,
@@ -11,6 +12,7 @@ pub enum LightType {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct Light {
     pub position: Vector3,
     pub ty: LightType,

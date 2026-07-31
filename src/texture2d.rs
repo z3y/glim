@@ -276,7 +276,7 @@ impl Texture2D {
             "pixel type size doesn't match image format"
         );
 
-        let start_time = std::time::Instant::now();
+        // let start_time = std::time::Instant::now();
 
         let staging_buffer = staging.buffer;
 
@@ -391,7 +391,7 @@ impl Texture2D {
 
         vk.end_single_use_cmd(cmd);
 
-        println!("set pixels in {}s", start_time.elapsed().as_secs_f32());
+        // println!("set pixels in {}s", start_time.elapsed().as_secs_f32());
     }
 
     pub fn read_pixels(&mut self, vk: &VulkanContext, dst: &mut Vec<f32>, staging: &Buffer) {

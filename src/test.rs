@@ -14,6 +14,17 @@ mod tests {
     use crate::pack::UVPacker;
     use crate::*;
 
+    const TEST_NAME: &str = "monkey";
+
+    const DIRECT_LIGHT_SAMPLES: u32 = 64;
+    const DIRECT_EMISSION_SAMPLES: u32 = 512;
+    const INDIRECT_SAMPLES: u32 = 256;
+    const LIGHT_PROBE_SAMPLES: u32 = 4096;
+    const BOUNCE_COUNT: u32 = 5;
+    const DENOISE: bool = false;
+    const DILATE: bool = false;
+    const FIX_SEAMS: bool = false;
+
     #[test]
     fn test_preview() {
         let mut config = make_config();
@@ -27,15 +38,6 @@ mod tests {
         config.is_preview = false;
         test_render(config);
     }
-
-    const DIRECT_LIGHT_SAMPLES: u32 = 64;
-    const DIRECT_EMISSION_SAMPLES: u32 = 512;
-    const INDIRECT_SAMPLES: u32 = 256;
-    const LIGHT_PROBE_SAMPLES: u32 = 4096;
-    const BOUNCE_COUNT: u32 = 5;
-    const DENOISE: bool = false;
-    const DILATE: bool = false;
-    const FIX_SEAMS: bool = false;
 
     fn make_config() -> GlimConfig {
         let preview_settings = LightmapSettings {
@@ -73,23 +75,25 @@ mod tests {
     }
 
     fn test_render(mut config: GlimConfig) {
-        config.camera_position = Vector3 {
-            x: 1.829,
-            y: 1.11498,
-            z: 0.195829,
-        };
-        config.camera_forward = Vector3 {
-            x: -0.8777,
-            y: -0.4029,
-            z: 0.2595,
-        };
+        // config.camera_position = Vector3 {
+        //     x: 1.829,
+        //     y: 1.11498,
+        //     z: 0.195829,
+        // };
+        // config.camera_forward = Vector3 {
+        //     x: -0.8777,
+        //     y: -0.4029,
+        //     z: 0.2595,
+        // };
 
         let output_dir = FfiString::new("temp");
         let app = app_new(config, output_dir);
 
-        add_mesh(
+        let mesh_path = format!("tests/{}.glb", TEST_NAME);
+
+        load_gltf(
             app,
-            "meshes/noisy.glb",
+            &mesh_path,
             false,
             false,
             Vector3::new(0.0, 0.0, 0.0),
@@ -97,8 +101,12 @@ mod tests {
             false,
         )
         .expect("failed to load mesh");
-        let (w, h, emission_pixels) = load_tga_f32("textures/noisy.tga").unwrap();
-        let albedo_pixels = vec![255; (w * h * 4) as usize];
+
+        let emission_path = format!("tests/{}_emission.tga", TEST_NAME);
+        let albedo_path = format!("tests/{}_albedo.tga", TEST_NAME);
+
+        let (_, _, emission_pixels) = load_tga_f32(&emission_path).unwrap();
+        let (w, h, albedo_pixels) = load_tga_u8(&albedo_path).unwrap();
 
         let settings = LightmapSettings {
             width: w,
@@ -177,7 +185,7 @@ mod tests {
         Ok((width, height, pixels))
     }
 
-    pub fn add_mesh(
+    pub fn load_gltf(
         app: *mut Glim,
         path: &str,
         flip_uv: bool,
@@ -188,6 +196,53 @@ mod tests {
     ) -> std::io::Result<()> {
         let (document, buffers, _) =
             gltf::import(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        for node in document.nodes() {
+            if let Some(gltf_light) = node.light() {
+                let (t, r, _s) = node.transform().decomposed();
+                // let q = Quaternion::new(r[0], r[1], r[2], r[3]);
+
+                let position = Vector3::new(t[0], t[1], t[2]);
+                // let forward = q.rotate(Vector3::new(0.0, 0.0, -1.0));
+                // let up = q.rotate(Vector3::new(0.0, 1.0, 0.0));
+
+                let c = gltf_light.color();
+                let intensity = gltf_light.intensity();
+
+                let mut light = Light {
+                    position: position,
+                    range: gltf_light.range().unwrap_or(10.0),
+                    color: Vector3::new(c[0] * intensity, c[1] * intensity, c[2] * intensity),
+                    shadow_radius_or_angle: 0.0,
+                    ..Default::default()
+                };
+
+                match gltf_light.kind() {
+                    gltf::khr_lights_punctual::Kind::Directional => {
+                        light.ty = LightType::Directional;
+                    }
+                    gltf::khr_lights_punctual::Kind::Point => {
+                        light.ty = LightType::Point;
+                    }
+                    gltf::khr_lights_punctual::Kind::Spot {
+                        inner_cone_angle,
+                        outer_cone_angle,
+                    } => {
+                        let inner_percent = if outer_cone_angle > 0.0 {
+                            inner_cone_angle / outer_cone_angle
+                        } else {
+                            100.0
+                        };
+                        light.ty = LightType::Spot;
+                        light.spot_inner_percent = inner_percent;
+                        light.spot_outer = outer_cone_angle;
+                    }
+                };
+
+                println!("{:#?}", light);
+                app_add_light(app, light);
+            }
+        }
 
         for mesh in document.meshes() {
             for primitive in mesh.primitives() {
