@@ -282,8 +282,6 @@ fn initialize_render(app: &mut Glim) {
 
     // clamp samples and bounces to supported limits
     app.config.probe_samples = clamp_samples(app.config.probe_samples);
-    app.config.probe_bounces = clamp_bounces(app.config.probe_bounces);
-
     app.config.direct_emission_samples = clamp_samples(app.config.direct_emission_samples);
     app.config.indirect_samples = clamp_samples(app.config.indirect_samples);
     app.config.bounce_count = clamp_bounces(app.config.bounce_count);

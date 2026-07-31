@@ -34,7 +34,6 @@ pub struct GlimConfig {
     pub lightprobes_read_callback: LightprobesReadCallback,
 
     pub probe_samples: u32,
-    pub probe_bounces: u32,
     pub light_falloff: LightFalloffType,
 
     pub mis: bool,

@@ -18,15 +18,24 @@ mod tests {
     fn test_preview() {
         let mut config = make_config();
         config.is_preview = true;
-        test_render(config, false);
+        test_render(config);
     }
 
     #[test]
     fn test_bake() {
         let mut config = make_config();
         config.is_preview = false;
-        test_render(config, true);
+        test_render(config);
     }
+
+    const DIRECT_LIGHT_SAMPLES: u32 = 64;
+    const DIRECT_EMISSION_SAMPLES: u32 = 512;
+    const INDIRECT_SAMPLES: u32 = 256;
+    const LIGHT_PROBE_SAMPLES: u32 = 4096;
+    const BOUNCE_COUNT: u32 = 5;
+    const DENOISE: bool = false;
+    const DILATE: bool = false;
+    const FIX_SEAMS: bool = false;
 
     fn make_config() -> GlimConfig {
         let preview_settings = LightmapSettings {
@@ -48,14 +57,13 @@ mod tests {
             camera_forward: Vector3::FORWARD,
             log_callback: log_callback,
             lightprobes_read_callback: test_probes_callback,
-            probe_samples: 4096,
-            probe_bounces: 64,
+            probe_samples: LIGHT_PROBE_SAMPLES,
             light_falloff: LightFalloffType::InverseSquare,
             mis: true,
-            direct_light_samples: 64,
-            direct_emission_samples: 512,
-            indirect_samples: 256,
-            bounce_count: 5,
+            direct_light_samples: DIRECT_LIGHT_SAMPLES,
+            direct_emission_samples: DIRECT_EMISSION_SAMPLES,
+            indirect_samples: INDIRECT_SAMPLES,
+            bounce_count: BOUNCE_COUNT,
             lightmap_mode: LightmapMode::DominantDirection,
             skybox_intensity: 1.0,
             indirect_intensity: 1.0,
@@ -64,20 +72,7 @@ mod tests {
         config
     }
 
-    fn test_render(mut config: GlimConfig, test_probes: bool) {
-        // config.camera_forward = Vector3 {
-        //     x: -0.42446527,
-        //     y: -0.4595601,
-        //     z: -0.7801498,
-        // };
-
-        // config.camera_position = Vector3 {
-        //     x: 1.890761,
-        //     y: 0.4439021,
-        //     z: 1.685063,
-        // };
-
-        // noisy
+    fn test_render(mut config: GlimConfig) {
         config.camera_position = Vector3 {
             x: 1.829,
             y: 1.11498,
@@ -92,192 +87,6 @@ mod tests {
         let output_dir = FfiString::new("temp");
         let app = app_new(config, output_dir);
 
-        // let mut offset = 0.0;
-        // for _ in 0..1 {
-        // {
-        // add_mesh(
-        //     app,
-        //     "meshes/monkey.glb",
-        //     false,
-        //     false,
-        //     Vector3::ZERO,
-        //     0,
-        //     false,
-        // )
-        // .expect("failed to load mesh");
-        // add_mesh(
-        //     app,
-        //     "meshes/random.glb",
-        //     false,
-        //     false,
-        //     Vector3::ZERO,
-        //     0,
-        //     false,
-        // )
-        // .expect("failed to load mesh");
-        // let (w, h, emission_pixels) = load_tga_f32("textures/emission_cute.tga").unwrap();
-        // let (w, h, emission_pixels) =
-        //     load_tga_f32("textures/emission_cute_wall_only.tga").unwrap();
-        // let w = 512;
-        // let h = 512;
-        // let emission_pixels = vec![0.0; (w * h * 4) as usize];
-        // let albedo_pixels = vec![255; (w * h * 4) as usize];
-        // }
-
-        // app_add_light(
-        //     app,
-        //     Light {
-        //         ty: LightType::Point,
-        //         position: Vector3 {
-        //             x: 0.0,
-        //             y: 1.0,
-        //             z: 0.0,
-        //         },
-        //         direction: Vector3::ZERO,
-        //         range: 5.0,
-        //         color: Vector3::new(1.0, 1.0, 1.0) * 3.0,
-        //         shadow_radius_or_angle: 0.1,
-        //     },
-        // );
-
-        //     offset += 5.0;
-        //     for m in &mut mesh.vertices {
-        //         m.position.x += 5.0;
-        //     }
-        // }
-
-        // app_add_light(
-        //     app,
-        //     Light {
-        //         ty: LightType::Point,
-        //         position: Vector3 {
-        //             x: 1.5,
-        //             y: -0.3,
-        //             z: -1.5,
-        //         },
-        //         direction: Vector3::ZERO,
-        //         range: 5.0,
-        //         color: Vector3::new(1.0, 1.0, 1.0),
-        //         shadow_radius_or_angle: 0.0,
-        //         spot_inner_percent: 0.0,
-        //         spot_outer: 0.0,
-        //         pad0: 0,
-        //         pad1: 0,
-        //     },
-        // );
-
-        // app_add_light(
-        //     app,
-        //     Light {
-        //         ty: LightType::Point,
-        //         position: Vector3 {
-        //             x: 1.5,
-        //             y: 0.3,
-        //             z: -1.5,
-        //         },
-        //         direction: Vector3::ZERO,
-        //         range: 5.0,
-        //         color: Vector3::new(1.0, 1.0, 1.0),
-        //         shadow_radius_or_angle: 0.1,
-        //         ..Default::default()
-        //     },
-        // );
-
-        // app_add_light(
-        //     app,
-        //     Light {
-        //         ty: LightType::Area,
-        //         position: Vector3 {
-        //             x: 0.5,
-        //             y: 0.3,
-        //             z: -0.5,
-        //         },
-        //         direction: Vector3::new(1.0, 0.0, -1.0).normalize(),
-        //         range: 5.0,
-        //         color: Vector3::new(1.0, 1.0, 1.0),
-        //         shadow_radius_or_angle: 0.01,
-        //         spot_inner_percent: 80.0,
-        //         spot_outer: 50.0,
-        //         area_size: Vector2::new(0.5, 0.5),
-        //         up: Vector3::UP,
-        //         ..Default::default()
-        //     },
-        // );
-
-        // app_add_light(
-        //     app,
-        //     Light {
-        //         ty: LightType::Point,
-        //         position: Vector3 {
-        //             x: 0.5,
-        //             y: 0.3,
-        //             z: -0.5,
-        //         },
-        //         direction: Vector3::ZERO,
-        //         range: 5.0,
-        //         color: Vector3::new(1.0, 1.0, 1.0),
-        //         shadow_radius_or_angle: 0.0,
-        //     },
-        // );
-
-        // app_add_light(
-        //     app,
-        //     Light {
-        //         ty: lights::LightType::Directional,
-        //         position: Vector3 {
-        //             x: 0.0,
-        //             y: 1.0,
-        //             z: 0.0,
-        //         },
-        //         direction: Vector3::new(0.5, -1.0, 0.5).normalize(),
-        //         range: 0.0,
-        //         color: Vector3::new(1.0, 1.0, 1.0),
-        //         shadow_radius_or_angle: 0.01,
-        //     },
-        // );
-
-        // let settings = LightmapSettings {
-        //     width: w,
-        //     height: h,
-        //     bounce_count: 5,
-        //     max_samples: 2048,
-        //     denoise: true,
-        //     dilate: true,
-        //     fix_seams: false,
-        // };
-
-        // app_add_lightmap_group(
-        //     app,
-        //     settings.clone(),
-        //     albedo_pixels.as_ptr(),
-        //     albedo_pixels.len() as u32,
-        //     emission_pixels.as_ptr(),
-        //     emission_pixels.len() as u32,
-        // );
-
-        // flower
-        // add_mesh(
-        //     app,
-        //     "meshes/flower.glb",
-        //     true,
-        //     true,
-        //     Vector3::new(0.0, -1.05, 0.0),
-        //     1,
-        //     true,
-        // )
-        // .expect("failed to load mesh");
-        // let (w, h, albedo_pixels) = load_tga_u8("textures/flower.tga").unwrap();
-        // let emission_pixels = vec![0.0; (w * h * 4) as usize];
-        // app_add_lightmap_group(
-        //     app,
-        //     settings,
-        //     albedo_pixels.as_ptr(),
-        //     albedo_pixels.len() as u32,
-        //     emission_pixels.as_ptr(),
-        //     emission_pixels.len() as u32,
-        // );
-
-        // noisy
         add_mesh(
             app,
             "meshes/noisy.glb",
@@ -288,21 +97,15 @@ mod tests {
             false,
         )
         .expect("failed to load mesh");
-        let (w, h, mut emission_pixels) = load_tga_f32("textures/noisy.tga").unwrap();
-        for pixel in &mut emission_pixels {
-            *pixel *= f32::consts::PI;
-        }
-        // let w = 512;
-        // let h = 512;
-        // let emission_pixels = vec![0.0; (w * h * 4) as usize];
-
+        let (w, h, emission_pixels) = load_tga_f32("textures/noisy.tga").unwrap();
         let albedo_pixels = vec![255; (w * h * 4) as usize];
+
         let settings = LightmapSettings {
             width: w,
             height: h,
-            denoise: false,
-            dilate: false,
-            fix_seams: false,
+            denoise: DENOISE,
+            dilate: DILATE,
+            fix_seams: FIX_SEAMS,
         };
 
         app_add_lightmap_group(
@@ -314,18 +117,10 @@ mod tests {
             emission_pixels.len() as u32,
         );
 
-        if test_probes {
-            let mut offset = 0.1;
-            for _ in 0..5 {
-                app_add_probe(app, Vector3::new(0.0, offset, 0.0), 0.0);
-                offset += 0.1;
-            }
+        {
+            let app = unsafe { &mut *app };
+            app.skybox = Skybox::solid(&app.vk, 8, 8, Vector3::new(0.00, 0.00, 0.00));
         }
-
-        // {
-        //     let app = unsafe { &mut *app };
-        //     app.skybox = Skybox::solid(&app.vk, 8, 8, Vector3::new(0.05, 0.05, 0.05));
-        // }
 
         app_run(app);
 
@@ -483,7 +278,6 @@ mod tests {
     #[test]
     fn test_uv_packer() -> std::io::Result<()> {
         let path = "meshes/packuv.glb";
-        // let path = "meshes/plane.glb";
 
         let mut packer = UVPacker::new(1024, 1024, 25, true, true, 1.0);
 
