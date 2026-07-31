@@ -1,14 +1,8 @@
 use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
-use shaders::*;
 
-use crate::{
-    as_bytes,
-    compute_shader::{SpecializationConstants, create_specialization_map_entries},
-    texture2d::Texture2D,
-    vulkan_context::VulkanContext,
-};
+use crate::{as_bytes, shaders::*, texture2d::Texture2D, vulkan_context::VulkanContext};
 
 pub struct GraphicsShader {
     vertex_module: vk::ShaderModule,

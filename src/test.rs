@@ -89,7 +89,7 @@ mod tests {
             z: 0.2595,
         };
 
-        let output_dir = FfiString::new("../temp");
+        let output_dir = FfiString::new("temp");
         let app = app_new(config, output_dir);
 
         // let mut offset = 0.0;
@@ -97,7 +97,7 @@ mod tests {
         // {
         // add_mesh(
         //     app,
-        //     "../meshes/monkey.glb",
+        //     "meshes/monkey.glb",
         //     false,
         //     false,
         //     Vector3::ZERO,
@@ -107,7 +107,7 @@ mod tests {
         // .expect("failed to load mesh");
         // add_mesh(
         //     app,
-        //     "../meshes/random.glb",
+        //     "meshes/random.glb",
         //     false,
         //     false,
         //     Vector3::ZERO,
@@ -115,9 +115,9 @@ mod tests {
         //     false,
         // )
         // .expect("failed to load mesh");
-        // let (w, h, emission_pixels) = load_tga_f32("../textures/emission_cute.tga").unwrap();
+        // let (w, h, emission_pixels) = load_tga_f32("textures/emission_cute.tga").unwrap();
         // let (w, h, emission_pixels) =
-        //     load_tga_f32("../textures/emission_cute_wall_only.tga").unwrap();
+        //     load_tga_f32("textures/emission_cute_wall_only.tga").unwrap();
         // let w = 512;
         // let h = 512;
         // let emission_pixels = vec![0.0; (w * h * 4) as usize];
@@ -258,7 +258,7 @@ mod tests {
         // flower
         // add_mesh(
         //     app,
-        //     "../meshes/flower.glb",
+        //     "meshes/flower.glb",
         //     true,
         //     true,
         //     Vector3::new(0.0, -1.05, 0.0),
@@ -266,7 +266,7 @@ mod tests {
         //     true,
         // )
         // .expect("failed to load mesh");
-        // let (w, h, albedo_pixels) = load_tga_u8("../textures/flower.tga").unwrap();
+        // let (w, h, albedo_pixels) = load_tga_u8("textures/flower.tga").unwrap();
         // let emission_pixels = vec![0.0; (w * h * 4) as usize];
         // app_add_lightmap_group(
         //     app,
@@ -280,7 +280,7 @@ mod tests {
         // noisy
         add_mesh(
             app,
-            "../meshes/noisy.glb",
+            "meshes/noisy.glb",
             false,
             false,
             Vector3::new(0.0, 0.0, 0.0),
@@ -288,7 +288,7 @@ mod tests {
             false,
         )
         .expect("failed to load mesh");
-        let (w, h, mut emission_pixels) = load_tga_f32("../textures/noisy.tga").unwrap();
+        let (w, h, mut emission_pixels) = load_tga_f32("textures/noisy.tga").unwrap();
         for pixel in &mut emission_pixels {
             *pixel *= f32::consts::PI;
         }
@@ -482,8 +482,8 @@ mod tests {
 
     #[test]
     fn test_uv_packer() -> std::io::Result<()> {
-        let path = "../meshes/packuv.glb";
-        // let path = "../meshes/plane.glb";
+        let path = "meshes/packuv.glb";
+        // let path = "meshes/plane.glb";
 
         let mut packer = UVPacker::new(1024, 1024, 25, true, true, 1.0);
 
@@ -542,14 +542,14 @@ mod tests {
         packer.pack();
 
         for (i, chart) in packer.charts().iter().enumerate() {
-            let file_name = format!("../temp/char{}.bmp", i);
+            let file_name = format!("temp/char{}.bmp", i);
             println!("scale_offset {:#?}", packer.get_scale_offset(i));
             chart.bitmap().save_bmp(&file_name);
         }
 
         match packer.target {
             Some(bm) => {
-                let file_name = "../temp/atlas.bmp";
+                let file_name = "temp/atlas.bmp";
                 bm.save_bmp(&file_name);
             }
             None => {

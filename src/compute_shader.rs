@@ -1,11 +1,9 @@
 use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
-use shaders::*;
 
 use crate::{
-    as_bytes, math::Vector3, shader_bindings::*, shaders::bake_direct, texture2d::Texture2D,
-    vulkan_context::VulkanContext,
+    as_bytes, math::Vector3, shaders::*, texture2d::Texture2D, vulkan_context::VulkanContext,
 };
 
 pub struct ComputeShader {
@@ -145,88 +143,12 @@ pub struct BakeSHPushConstants {
     pub probes_count: u32,
 }
 
-pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 11] {
-    let size = std::mem::size_of::<u32>();
-
-    [
-        vk::SpecializationMapEntry {
-            constant_id: 0,
-            offset: 0 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 1,
-            offset: 1 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 2,
-            offset: 2 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 3,
-            offset: 3 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 4,
-            offset: 4 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 5,
-            offset: 5 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 6,
-            offset: 6 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 7,
-            offset: 7 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 8,
-            offset: 8 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 9,
-            offset: 9 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 10,
-            offset: 10 * size as u32,
-            size,
-        },
-    ]
-}
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct LightmapInfo {
     pub resolution: [u32; 2],
     pub compaction_offset: u32,
     pub pad: u32,
-}
-
-pub struct SpecializationConstants {
-    pub use_camera: u32, // unused
-    pub light_falloff_type: u32,
-    pub transparent_primitive_offset: u32,
-    pub emissive_triangles_count: u32,
-    pub multiple_importance_sampling: u32,
-    pub lightmap_group_count: u32,
-    pub lightmap_mode: u32,
-    pub coordinate_system: u32,
-    pub skybox_intensity: f32,
-    pub indirect_intensity: f32,
-    pub lightprobe_deringing: f32,
 }
 
 pub fn load_init_from_camera_shader(

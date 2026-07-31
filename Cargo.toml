@@ -1,6 +1,23 @@
-[workspace]
-resolver = "3"
-members = ["shaders","glim"]
+[package]
+name = "glim"
+version = "0.1.0"
+edition = "2024"
 
-[profile.release]
-strip = true
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ash = { version = "0.38", default-features = false, features = ["loaded", "std", "debug"] }
+glfw-sys = { version = "8", default-features = false, features = ["src-build", "prebuilt-libs", "native-handles", "x11", "wayland"] }
+libloading = "0.9.0"
+rayon = { version = "1.12", default-features = false }
+exr = { version = "1.74.2", default-features = false }
+half = { version = "2.7.1", default-features = false }
+
+
+[dev-dependencies]
+image = "0.25.10"
+gltf = { version = "1.4.1", default-features = false, features = ["import", "utils"] }
+
+[build-dependencies]
+cc = "1.2.62"

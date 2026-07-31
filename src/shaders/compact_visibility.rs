@@ -1,7 +1,12 @@
 use ash::vk;
-use shaders::*;
 
-use crate::{as_bytes, compute_shader::*, shader_bindings::*, vulkan_context::VulkanContext};
+use crate::{
+    as_bytes,
+    compute_shader::*,
+    shaders::*,
+    shaders::{SpecializationConstants, create_specialization_map_entries},
+    vulkan_context::VulkanContext,
+};
 
 #[repr(C)]
 pub struct PushConstants {
@@ -19,11 +24,11 @@ pub struct PushConstants {
 pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> ComputeShader {
     let mut bindings = Vec::new();
 
+    bind_visibility(&mut bindings);
     bind_compaction_buffer(&mut bindings);
-    bind_decompact_target(&mut bindings);
-    bind_compacted_lightmap(&mut bindings);
     bind_compacted_visibility_buffer(&mut bindings);
-    bind_lightmap_info(&mut bindings);
+    bind_indices(&mut bindings);
+    bind_vertices(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
@@ -37,7 +42,7 @@ pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> C
         size: std::mem::size_of::<PushConstants>() as u32,
     }];
 
-    let bytes = load_shader_bytes(shaders::ShaderName::Decompact);
+    let bytes = load_shader_bytes(ShaderName::CompactVisibility);
 
     ComputeShader::new(
         vk,
@@ -51,13 +56,28 @@ pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> C
 pub fn update_shader(
     vk: &VulkanContext,
     shader: &ComputeShader,
+    visibility: vk::ImageView,
     compaction: vk::Buffer,
-    decompact_target: vk::Buffer,
-    compacted_lightmap: vk::Buffer,
     compacted_visibility: vk::Buffer,
-    lightmap_info: vk::Buffer,
+    indices: vk::Buffer,
+    vertices: vk::Buffer,
 ) {
     let mut descriptor_writes = Vec::new();
+
+    // VisibilityBuffer
+    let info = [vk::DescriptorImageInfo {
+        image_view: visibility,
+        image_layout: vk::ImageLayout::GENERAL,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 2,
+        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    descriptor_writes.push(write);
 
     // CompactionBuffer
     let info = [vk::DescriptorBufferInfo {
@@ -68,36 +88,6 @@ pub fn update_shader(
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
         dst_binding: 15,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // DecompactTarget
-    let info = [vk::DescriptorBufferInfo {
-        buffer: decompact_target,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 17,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // CompactedLightmap
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compacted_lightmap,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 18,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
@@ -119,16 +109,31 @@ pub fn update_shader(
     write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
-    // LightmapInfo
+    // Indices
     let info = [vk::DescriptorBufferInfo {
-        buffer: lightmap_info,
+        buffer: indices,
         offset: 0,
         range: vk::WHOLE_SIZE,
     }];
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: 19,
-        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+        dst_binding: 8,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        ..Default::default()
+    };
+    write = write.buffer_info(&info);
+    descriptor_writes.push(write);
+
+    // Vertices
+    let info = [vk::DescriptorBufferInfo {
+        buffer: vertices,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: 9,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
     write = write.buffer_info(&info);

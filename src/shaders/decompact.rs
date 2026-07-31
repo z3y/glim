@@ -1,26 +1,33 @@
 use ash::vk;
-use shaders::*;
 
-use crate::{as_bytes, compute_shader::*, shader_bindings::*, vulkan_context::VulkanContext};
+use crate::{
+    as_bytes,
+    compute_shader::*,
+    shaders::*,
+    shaders::{SpecializationConstants, create_specialization_map_entries},
+    vulkan_context::VulkanContext,
+};
 
 #[repr(C)]
 pub struct PushConstants {
+    pub width: u32,
+    pub height: u32,
+    pub offset: u32,
     pub compacted_count: u32,
-    pub sample_index: u32,
-    pub max_samples: u32,
-    pub bounce_index: u32,
+
+    pub encode_type: u32,
+    pub group_index: u32,
+    pub dilate: u32,
+    pub pad2: u32,
 }
 
 pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> ComputeShader {
     let mut bindings = Vec::new();
 
-    bind_tlas(&mut bindings);
-    bind_albedos(&mut bindings, constants.lightmap_group_count);
-    bind_indices(&mut bindings);
-    bind_vertices(&mut bindings);
+    bind_compaction_buffer(&mut bindings);
+    bind_decompact_target(&mut bindings);
     bind_compacted_lightmap(&mut bindings);
     bind_compacted_visibility_buffer(&mut bindings);
-    bind_compaction_buffer(&mut bindings);
     bind_lightmap_info(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
@@ -35,9 +42,11 @@ pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> C
         size: std::mem::size_of::<PushConstants>() as u32,
     }];
 
+    let bytes = load_shader_bytes(ShaderName::Decompact);
+
     ComputeShader::new(
         vk,
-        &load_shader_bytes(ShaderName::BakeIndirect),
+        &bytes,
         &bindings,
         &push_constant_ranges,
         &specialization_info,
@@ -47,72 +56,38 @@ pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> C
 pub fn update_shader(
     vk: &VulkanContext,
     shader: &ComputeShader,
-    tlas: vk::AccelerationStructureKHR,
-    compacted_visibility: vk::Buffer,
-    albedos: &[vk::ImageView],
-    indices: vk::Buffer,
-    vertices: vk::Buffer,
-    compacted_lightmap: vk::Buffer,
     compaction: vk::Buffer,
+    decompact_target: vk::Buffer,
+    compacted_lightmap: vk::Buffer,
+    compacted_visibility: vk::Buffer,
     lightmap_info: vk::Buffer,
 ) {
     let mut descriptor_writes = Vec::new();
 
-    // TopLevelAS
-    let tlas = [tlas];
-    let mut info =
-        vk::WriteDescriptorSetAccelerationStructureKHR::default().acceleration_structures(&tlas);
-    let write = vk::WriteDescriptorSet::default()
-        .push_next(&mut info)
-        .dst_set(shader.descriptor_set)
-        .dst_binding(0)
-        .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
-        .descriptor_count(1);
-    descriptor_writes.push(write);
-
-    // Albedo
-    let infos: Vec<vk::DescriptorImageInfo> = albedos
-        .iter()
-        .map(|tex| vk::DescriptorImageInfo {
-            image_view: *tex,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            ..Default::default()
-        })
-        .collect();
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 3,
-        dst_array_element: 0,
-        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-        ..Default::default()
-    };
-    write = write.image_info(&infos);
-    descriptor_writes.push(write);
-
-    // Indices
+    // CompactionBuffer
     let info = [vk::DescriptorBufferInfo {
-        buffer: indices,
+        buffer: compaction,
         offset: 0,
         range: vk::WHOLE_SIZE,
     }];
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: 8,
+        dst_binding: 15,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
     write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
-    // Vertices
+    // DecompactTarget
     let info = [vk::DescriptorBufferInfo {
-        buffer: vertices,
+        buffer: decompact_target,
         offset: 0,
         range: vk::WHOLE_SIZE,
     }];
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: 9,
+        dst_binding: 17,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
@@ -134,15 +109,15 @@ pub fn update_shader(
     write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
-    // CompactionBuffer
+    // CompactedVisibility
     let info = [vk::DescriptorBufferInfo {
-        buffer: compaction,
+        buffer: compacted_visibility,
         offset: 0,
         range: vk::WHOLE_SIZE,
     }];
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: 15,
+        dst_binding: 16,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
@@ -159,21 +134,6 @@ pub fn update_shader(
         dst_set: shader.descriptor_set,
         dst_binding: 19,
         descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // CompactedVisibility
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compacted_visibility,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 16,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
     write = write.buffer_info(&info);

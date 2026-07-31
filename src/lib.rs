@@ -17,7 +17,10 @@ use crate::math::{Vector2, Vector3};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
-use crate::shaders::{bake_direct, bake_indirect, compact_visibility, compaction_mask, decompact};
+use crate::shaders::{
+    SpecializationConstants, bake_direct, bake_indirect, compact_visibility, compaction_mask,
+    decompact,
+};
 use crate::skybox::Skybox;
 use crate::texture_array::{TextureArray, TextureDescriptor};
 use crate::{
@@ -47,7 +50,6 @@ mod oidn;
 mod pack;
 mod seams;
 mod sh;
-mod shader_bindings;
 mod shaders;
 mod skybox;
 mod test;

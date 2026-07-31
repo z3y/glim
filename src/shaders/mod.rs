@@ -1,5 +1,127 @@
 use ash::vk;
 
+pub mod bake_direct;
+pub mod bake_indirect;
+pub mod compact_visibility;
+pub mod compaction_mask;
+pub mod decompact;
+
+pub enum ShaderName {
+    CompactionMask,
+    CompactVisibility,
+    Decompact,
+    InitFromBakeVertex,
+    InitFromBakeFragment,
+    InitFromCamera,
+    BakeLightProbes,
+    BakeDirectLight,
+    BakeIndirect,
+    BakeDirectEmission,
+    AdjustSamples,
+    Preview,
+}
+
+pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
+    #[rustfmt::skip]
+    let bytes: &[u8] = match name {
+        ShaderName::CompactionMask => include_bytes!(concat!(env!("OUT_DIR"), "/compaction_mask.spv")),
+        ShaderName::CompactVisibility => include_bytes!(concat!(env!("OUT_DIR"), "/compact_visibility.spv")),
+        ShaderName::Decompact => include_bytes!(concat!(env!("OUT_DIR"), "/decompact.spv")),
+        ShaderName::InitFromBakeVertex => include_bytes!(concat!(env!("OUT_DIR"), "/init_from_bake_vertex.spv")),
+        ShaderName::InitFromBakeFragment => include_bytes!(concat!(env!("OUT_DIR"), "/init_from_bake_fragment.spv")),
+        ShaderName::InitFromCamera => include_bytes!(concat!(env!("OUT_DIR"), "/init_from_camera.spv")),
+        ShaderName::BakeLightProbes => include_bytes!(concat!(env!("OUT_DIR"), "/bake_sh.spv")),
+        ShaderName::BakeIndirect => include_bytes!(concat!(env!("OUT_DIR"), "/bake_indirect.spv")),
+        ShaderName::AdjustSamples => include_bytes!(concat!(env!("OUT_DIR"), "/adjust_samples.spv")),
+        ShaderName::Preview => include_bytes!(concat!(env!("OUT_DIR"), "/preview.spv")),
+        ShaderName::BakeDirectLight => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_light.spv")),
+        ShaderName::BakeDirectEmission => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_emission.spv")),
+    };
+
+    let aligned = bytes
+        .chunks_exact(4)
+        .map(|b| u32::from_ne_bytes(b.try_into().unwrap()))
+        .collect();
+
+    aligned
+}
+
+pub struct SpecializationConstants {
+    pub use_camera: u32, // unused
+    pub light_falloff_type: u32,
+    pub transparent_primitive_offset: u32,
+    pub emissive_triangles_count: u32,
+    pub multiple_importance_sampling: u32,
+    pub lightmap_group_count: u32,
+    pub lightmap_mode: u32,
+    pub coordinate_system: u32,
+    pub skybox_intensity: f32,
+    pub indirect_intensity: f32,
+    pub lightprobe_deringing: f32,
+}
+
+pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 11] {
+    let size = std::mem::size_of::<u32>();
+
+    [
+        vk::SpecializationMapEntry {
+            constant_id: 0,
+            offset: 0 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 1,
+            offset: 1 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 2,
+            offset: 2 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 3,
+            offset: 3 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 4,
+            offset: 4 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 5,
+            offset: 5 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 6,
+            offset: 6 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 7,
+            offset: 7 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 8,
+            offset: 8 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 9,
+            offset: 9 * size as u32,
+            size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 10,
+            offset: 10 * size as u32,
+            size,
+        },
+    ]
+}
+
 pub fn bind_tlas(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
     bindings.push(vk::DescriptorSetLayoutBinding {
         binding: 0,
