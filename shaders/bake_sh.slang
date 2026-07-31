@@ -51,8 +51,8 @@ const static float3 ProbeRayDirections[26] = {
 };
 
 [shader("compute")]
-    [numthreads(64, 1, 1)] void
-    main(uint3 threadID : SV_DispatchThreadID)
+[numthreads(64, 1, 1)]
+void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint probeIndex = threadID.x;
 
@@ -68,7 +68,8 @@ const static float3 ProbeRayDirections[26] = {
     uint lightCount = Push.lightCount;
 
     // todo temp move to separate shader
-    [branch] if (sampleIndex == 0)
+    [branch]
+    if (sampleIndex == 0)
     {
         Ray ray;
         ray.tMin = 0;
@@ -82,7 +83,8 @@ const static float3 ProbeRayDirections[26] = {
 
         bool jitter = true;
 
-        [loop] for (int i = 0; i < 26; i++)
+        [loop]
+        for (int i = 0; i < 26; i++)
         {
             ray.D = ProbeRayDirections[i];
 

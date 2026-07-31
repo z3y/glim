@@ -13,8 +13,8 @@ struct PushConstants
 };
 
 [shader("compute")]
-    [numthreads(64, 1, 1)] void
-    main(uint3 threadID : SV_DispatchThreadID)
+[numthreads(64, 1, 1)]
+void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint index = threadID.x;
 
@@ -43,7 +43,7 @@ struct PushConstants
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
-    SHProbeL2 sh = SHProbeL2::new ();
+    SHProbeL2 sh = SHProbeL2::zero();
 
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {

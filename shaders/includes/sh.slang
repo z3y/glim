@@ -10,9 +10,9 @@ struct SHProbeL2
     float radius;
     float4 sh[9];
 
-    static SHProbeL2 new()
+    static SHProbeL2 zero()
     {
-        SHProbeL2 probe = (SHProbeL2)0;
+        SHProbeL2 probe = {};
         return probe;
     }
 };

@@ -66,7 +66,7 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 }
 
 // hit is not always initialized
-#pragma warning(disable : 41018)
+#pragma warning(disable: 41018)
 bool TraceRay(Ray ray, out Hit hit)
 {
     RayDesc rayDesc;
@@ -99,7 +99,7 @@ bool TraceRay(Ray ray, out Hit hit)
 
     return false;
 }
-#pragma warning(default : 41018)
+#pragma warning(default: 41018)
 
 bool TraceShadowRay(Ray ray)
 {
@@ -481,7 +481,8 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
         visible *= NoL;
     }
 
-    [branch] if (visible > 0.0)
+    [branch]
+    if (visible > 0.0)
     {
         if (TraceShadowRay(shadowRay))
         {
@@ -574,7 +575,8 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
         visible *= NoL;
     }
 
-    [branch] if (visible > 0.0)
+    [branch]
+    if (visible > 0.0)
     {
         if (TraceShadowRay(shadowRay))
         {

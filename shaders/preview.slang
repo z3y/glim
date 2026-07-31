@@ -17,8 +17,8 @@ struct PushConstants
 };
 
 [shader("compute")]
-    [numthreads(8, 8, 1)] void
-    main(uint3 threadID : SV_DispatchThreadID)
+[numthreads(8, 8, 1)]
+void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint2 coords = threadID.xy;
     uint2 resolution = uint2(Push.width, Push.height);

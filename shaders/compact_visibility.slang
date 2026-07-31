@@ -11,8 +11,8 @@ struct PushConstants
     uint pad0;
 };
 
-[numthreads(8, 8, 1)] void
-main(uint3 threadID : SV_DispatchThreadID)
+[numthreads(8, 8, 1)]
+void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint2 coords = threadID.xy;
 

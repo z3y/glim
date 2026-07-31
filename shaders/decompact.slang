@@ -33,9 +33,11 @@ void DilateLightmap(int2 coords, uint compactedOffset, inout float4 original)
     float4 colorSum = 0.0;
     float weightSum = 0.0;
 
-    [loop] for (int dy = -DILATE_RADIUS; dy <= DILATE_RADIUS; dy++)
+    [loop]
+    for (int dy = -DILATE_RADIUS; dy <= DILATE_RADIUS; dy++)
     {
-        [loop] for (int dx = -DILATE_RADIUS; dx <= DILATE_RADIUS; dx++)
+        [loop]
+        for (int dx = -DILATE_RADIUS; dx <= DILATE_RADIUS; dx++)
         {
             if (dx == 0 && dy == 0)
             {
@@ -97,7 +99,8 @@ float3 EncodeCombinedSH(float3 L0, float3 L1)
     return saturate(mad(L1, 0.5, 0.5));
 }
 
-[numthreads(8, 8, 1)] void main(uint3 threadID : SV_DispatchThreadID)
+[numthreads(8, 8, 1)]
+void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint2 coords = threadID.xy;
 

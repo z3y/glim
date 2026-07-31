@@ -12,8 +12,8 @@ struct PushConstants
 };
 
 [WaveSize(32)]
-    [numthreads(32, 1, 1)] void
-    main(uint3 threadID : SV_DispatchThreadID, uint3 groupID : SV_GroupID)
+[numthreads(32, 1, 1)]
+void main(uint3 threadID: SV_DispatchThreadID, uint3 groupID: SV_GroupID)
 {
     uint2 resolution = Push.resolution;
 

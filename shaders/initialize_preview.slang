@@ -13,9 +13,9 @@ struct PushConstants
     float pad0;
 }
 
-    [shader("compute")]
-    [numthreads(8, 8, 1)] void
-    main(uint3 threadID : SV_DispatchThreadID)
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint2 coords = threadID.xy;
 

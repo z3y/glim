@@ -53,9 +53,10 @@ struct Varyings
     float2 bary : BARY;
 };
 
-static const float2 barys[3] = {float2(0, 0), float2(1, 0), float2(0, 1)};
+static const float2 barys[3] = { float2(0, 0), float2(1, 0), float2(0, 1) };
 
-[shader("vertex")] Varyings vertex(uint vertexID : SV_VulkanVertexID, uint instanceID : SV_VulkanInstanceID)
+[shader("vertex")]
+Varyings vertex(uint vertexID: SV_VulkanVertexID, uint instanceID: SV_VulkanInstanceID)
 {
     Varyings o;
 
@@ -104,7 +105,8 @@ static const float2 barys[3] = {float2(0, 0), float2(1, 0), float2(0, 1)};
     return o;
 }
 
-    [shader("fragment")] float4 fragment(Varyings varyings)
+[shader("fragment")]
+float4 fragment(Varyings varyings)
     : SV_Target
 {
     float3 bary = float3(varyings.bary, 1.0 - varyings.bary.x - varyings.bary.y);

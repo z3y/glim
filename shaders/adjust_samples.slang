@@ -34,7 +34,7 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
 
     float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
     float3 v = normalize(worldTexelV - dot(worldTexelV, surface.Ng) * surface.Ng);
-    float3 rayDirs[4] = {u, -u, v, -v};
+    float3 rayDirs[4] = { u, -u, v, -v };
 
     Ray leakRay;
     leakRay.P = RayOffset(surface.P, surface.Ng);
@@ -42,7 +42,8 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
     leakRay.tMax = rayLength;
     Hit leakHit;
 
-    [loop] for (int i = 0; i < 4; i++)
+    [loop]
+    for (int i = 0; i < 4; i++)
     {
         leakRay.D = rayDirs[i];
 
@@ -80,8 +81,8 @@ struct PushConstants
 };
 
 [shader("compute")]
-    [numthreads(64, 1, 1)] void
-    main(uint3 threadID : SV_DispatchThreadID)
+[numthreads(64, 1, 1)]
+void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint index = threadID.x;
 
