@@ -79,7 +79,11 @@ namespace Glim
                 this.direct_emission_samples = direct_emission_samples;
                 this.indirect_samples = indirect_samples;
                 this.bounce_count = bounce_count;
+#if GLIM_DEV
+                this.vulkan_validation_layers = true;
+#else
                 this.vulkan_validation_layers = false;
+#endif
                 this.seams_debug = false;
                 this.mis = mis;
                 this.lightmap_mode = lightmap_mode;

@@ -111,19 +111,22 @@ namespace Glim
             return depth;
         }
 
-        public BakeContext(GlimLightmapper baker, Bindings.GlimConfig config)
+        public BakeContext(GlimLightmapper lightmapper, Bindings.GlimConfig config)
         {
-            this.lightmapMode = baker.lightmapMode;
-            this.reflectionProbesSuperSampling = baker.reflectionProbesSuperSampling;
-            this.reflectionProbesSpecular = baker.reflectionProbesSpecular;
+            this.lightmapMode = lightmapper.lightmapMode;
+            this.reflectionProbesSuperSampling = lightmapper.reflectionProbesSuperSampling;
+            this.reflectionProbesSpecular = lightmapper.reflectionProbesSpecular;
             this.isPreview = config.is_preview;
-            this.bakeReflectionProbes = baker.bakeReflectionProbes;
+            this.bakeReflectionProbes = lightmapper.bakeReflectionProbes;
 
             this.skyboxPixels = SkyboxCapture.Capture(SceneManager.GetActiveScene());
+
+            var bakerId = GlobalObjectId.GetGlobalObjectIdSlow(lightmapper);
 
             SerializedObject lda;
             if (!config.is_preview)
             {
+                // scene reopened, references lost here
                 storage = LightingData.CreateAsset(SceneManager.GetActiveScene());
                 lda = new SerializedObject(storage);
                 LightingData.InspectorModeObject.SetValue(lda, InspectorMode.DebugInternal);
@@ -134,8 +137,8 @@ namespace Glim
             }
 
             scene = SceneManager.GetActiveScene();
-
             var rootObjects = scene.GetRootGameObjects().Where(x => x.activeInHierarchy);
+            lightmapper = (GlimLightmapper)GlobalObjectId.GlobalObjectIdentifierToObjectSlow(bakerId);
 
             this.outputDir = Path.Combine(Path.GetDirectoryName(scene.path), scene.name);
             if (!AssetDatabase.IsValidFolder(this.outputDir))
@@ -149,10 +152,13 @@ namespace Glim
                 // bakery is breaking directional lightmaps, need to remove this from scene
                 // bakery always creates this object just by having the "Render Lightmap" window open
                 // so make sure to close it and reopen the scene
-                Debug.Log("Removing Bakery !ftraceLightmap GameObject");
-                GameObject.DestroyImmediate(ftraceLightmaps.gameObject);
-                EditorSceneManager.MarkSceneDirty(scene);
-                rootObjects = scene.GetRootGameObjects().Where(x => x.activeInHierarchy);
+                bool confirmed = EditorUtility.DisplayDialog("Remove bakery script", "Remove the hidden Bakery !ftraceLightmaps GameObject to prevent conflicts.", "Continue");
+                if (confirmed)
+                {
+                    GameObject.DestroyImmediate(ftraceLightmaps.gameObject);
+                    EditorSceneManager.MarkSceneDirty(scene);
+                    rootObjects = scene.GetRootGameObjects().Where(x => x.activeInHierarchy);
+                }
             }
 
             var lights = rootObjects.SelectMany(x => x.GetComponentsInChildren<Light>(false)).ToArray();
@@ -248,7 +254,7 @@ namespace Glim
                     outputElement.FindPropertyRelative("probeOcclusionLightIndex").intValue = 0;
                     outputElement.FindPropertyRelative("occlusionMaskChannel").intValue = -1;
 
-                    var mixedMode = baker.mixedLights switch
+                    var mixedMode = lightmapper.mixedLights switch
                     {
                         MixedLightMode.BakedIndirect => MixedLightingMode.IndirectOnly,
                         MixedLightMode.Subtractive => MixedLightingMode.Subtractive,
@@ -317,7 +323,7 @@ namespace Glim
                     unclaimedRenderers.Add(r);
                 }
             }
-            var globalGroup = baker.group == null ? ScriptableObject.CreateInstance<GlimLightmapGroup>() : baker.group;
+            var globalGroup = lightmapper.group == null ? ScriptableObject.CreateInstance<GlimLightmapGroup>() : lightmapper.group;
             if (unclaimedRenderers.Count > 0)
             {
                 groupMap[globalGroup] = unclaimedRenderers;
@@ -331,7 +337,7 @@ namespace Glim
 
                 var newHash = MeshHash.FromLightmapUV(rendererArray);
 
-                bool changed = baker.lightmapUVHash != newHash;
+                bool changed = lightmapper.lightmapUVHash != newHash;
                 if (changed)
                 {
 
@@ -398,8 +404,8 @@ namespace Glim
                         float coverage = UVPacking.uvpacker_get_coverage(packer);
                         Debug.Log($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
 
-                        baker.lightmapUVHash = newHash;
-                        EditorUtility.SetDirty(baker);
+                        lightmapper.lightmapUVHash = newHash;
+                        EditorUtility.SetDirty(lightmapper);
 
                         UVPacking.uvpacker_destroy(packer);
                     }
@@ -531,12 +537,12 @@ namespace Glim
                 throw new InvalidOperationException("No lightmap groups found.");
             }
 
-            if (!baker.group)
+            if (!lightmapper.group)
             {
                 ScriptableObject.DestroyImmediate(globalGroup);
             }
 
-            float defaultProbeRadius = baker.lightProbeRadius;
+            float defaultProbeRadius = lightmapper.lightProbeRadius;
 
             if (!config.is_preview)
             {
