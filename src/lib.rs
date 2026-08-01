@@ -509,6 +509,12 @@ fn render_preview(app: &mut Glim) {
             previous_time = now;
         }
     }
+
+    unsafe {
+        glfwPollEvents();
+        glfw_sys::glfwDestroyWindow(window);
+        // glfw_sys::glfwTerminate();
+    };
 }
 
 fn render_sample_camera(app: &mut Glim) -> bool {
