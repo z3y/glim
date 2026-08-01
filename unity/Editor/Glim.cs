@@ -335,9 +335,10 @@ namespace Glim
             {
                 var rendererArray = renderers.ToArray();
 
-                var newHash = MeshHash.FromLightmapUV(rendererArray);
+                var newHash = MeshHash.FromLightmapUV(rendererArray, (uint)lightmapGroup.resolution);
 
                 bool changed = lightmapper.lightmapUVHash != newHash;
+                changed = true; // todo implement proper hash for all settings
                 if (changed)
                 {
 
