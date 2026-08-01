@@ -329,77 +329,91 @@ namespace Glim
             {
                 var rendererArray = renderers.ToArray();
 
-                if (lightmapGroup.packingType == UVPackingType.ScaleOffset)
+                var newHash = MeshHash.FromLightmapUV(rendererArray);
+
+                bool changed = baker.lightmapUVHash != newHash;
+                if (changed)
                 {
-                    var sw = new Stopwatch();
-                    sw.Start();
 
-                    bool bruteForce = lightmapGroup.bruteForce;
-                    bool holeFilling = lightmapGroup.holeFilling;
-                    float worldScaleExponent = lightmapGroup.scaleExponent;
-                    var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling, worldScaleExponent);
-                    for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
+                    if (lightmapGroup.packingType == UVPackingType.ScaleOffset)
                     {
-                        Renderer r = renderers[rendererIndex];
-                        var mf = r.GetComponent<MeshFilter>();
-                        var t = r.GetComponent<Transform>();
+                        var sw = new Stopwatch();
+                        sw.Start();
 
-                        var mesh = mf.sharedMesh;
-
-                        bool hasUv0 = mesh.HasVertexAttribute(VertexAttribute.TexCoord0);
-                        bool hasUv1 = mesh.HasVertexAttribute(VertexAttribute.TexCoord1);
-
-                        var positions = mesh.vertices;
-                        t.TransformPoints(positions); // todo slow, verts are transformed again later
-                        var uvs = hasUv1 ? mesh.uv2 : mesh.uv;
-                        var indices = mesh.triangles;
-                        float scale = 1.0f;
-                        if (r is MeshRenderer mr)
+                        bool bruteForce = lightmapGroup.bruteForce;
+                        bool holeFilling = lightmapGroup.holeFilling;
+                        float worldScaleExponent = lightmapGroup.scaleExponent;
+                        var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling, worldScaleExponent);
+                        for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                         {
-                            scale = mr.scaleInLightmap;
-                        }
+                            Renderer r = renderers[rendererIndex];
+                            var mf = r.GetComponent<MeshFilter>();
+                            var t = r.GetComponent<Transform>();
 
-                        unsafe
-                        {
-                            fixed (Vector3* p = positions)
-                            fixed (Vector2* uv = uvs)
-                            fixed (int* i = indices)
+                            var mesh = mf.sharedMesh;
+
+                            bool hasUv0 = mesh.HasVertexAttribute(VertexAttribute.TexCoord0);
+                            bool hasUv1 = mesh.HasVertexAttribute(VertexAttribute.TexCoord1);
+
+                            var positions = mesh.vertices;
+                            t.TransformPoints(positions); // todo slow, verts are transformed again later
+                            var uvs = hasUv1 ? mesh.uv2 : mesh.uv;
+                            var indices = mesh.triangles;
+                            float scale = 1.0f;
+                            if (r is MeshRenderer mr)
                             {
-                                UVPacking.uvpacker_add_mesh(packer, p, (uint)positions.Length, uv, (uint)uvs.Length, i, (uint)indices.Length, scale, (uint)rendererIndex);
+                                scale = mr.scaleInLightmap;
+                            }
+
+                            unsafe
+                            {
+                                fixed (Vector3* p = positions)
+                                fixed (Vector2* uv = uvs)
+                                fixed (int* i = indices)
+                                {
+                                    UVPacking.uvpacker_add_mesh(packer, p, (uint)positions.Length, uv, (uint)uvs.Length, i, (uint)indices.Length, scale, (uint)rendererIndex);
+                                }
                             }
                         }
+
+                        bool success = UVPacking.uvpacker_pack(packer);
+
+                        if (!success)
+                        {
+                            throw new Exception("UV Packing failed, try increasing lightmap resolution, packing iteration count or brute force mode or disable ensure padding");
+                        }
+
+                        sw.Stop();
+                        var elapsed = sw.ElapsedMilliseconds;
+
+                        for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
+                        {
+                            Renderer r = renderers[rendererIndex];
+
+                            var so = UVPacking.uvpacker_get_scale_offset(packer, (uint)rendererIndex);
+                            r.lightmapScaleOffset = so;
+                            EditorUtility.SetDirty(r);
+                        }
+
+                        float coverage = UVPacking.uvpacker_get_coverage(packer);
+                        Debug.Log($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
+
+                        baker.lightmapUVHash = newHash;
+                        EditorUtility.SetDirty(baker);
+
+                        UVPacking.uvpacker_destroy(packer);
                     }
-
-                    bool success = UVPacking.uvpacker_pack(packer);
-
-                    if (!success)
+                    else
                     {
-                        throw new Exception("UV Packing failed, try increasing lightmap resolution, packing iteration count or brute force mode or disable ensure padding");
+                        foreach (var r in renderers)
+                        {
+                            r.lightmapScaleOffset = new Vector4(1, 1, 0, 0);
+                        }
                     }
-
-                    sw.Stop();
-                    var elapsed = sw.ElapsedMilliseconds;
-
-                    for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
-                    {
-                        Renderer r = renderers[rendererIndex];
-
-                        var so = UVPacking.uvpacker_get_scale_offset(packer, (uint)rendererIndex);
-                        r.lightmapScaleOffset = so;
-                        EditorUtility.SetDirty(r);
-                    }
-
-                    float coverage = UVPacking.uvpacker_get_coverage(packer);
-                    Debug.Log($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
-
-                    UVPacking.uvpacker_destroy(packer);
                 }
                 else
                 {
-                    foreach (var r in renderers)
-                    {
-                        r.lightmapScaleOffset = new Vector4(1, 1, 0, 0);
-                    }
+                    Debug.Log($"Group {groupIndex} using cached lightmap UVs");
                 }
 
                 if (!config.is_preview)

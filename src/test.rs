@@ -75,17 +75,6 @@ mod tests {
     }
 
     fn test_render(config: GlimConfig) {
-        // config.camera_position = Vector3 {
-        //     x: 1.829,
-        //     y: 1.11498,
-        //     z: 0.195829,
-        // };
-        // config.camera_forward = Vector3 {
-        //     x: -0.8777,
-        //     y: -0.4029,
-        //     z: 0.2595,
-        // };
-
         let output_dir = FfiString::new("temp");
         let app = app_new(config, output_dir);
 
