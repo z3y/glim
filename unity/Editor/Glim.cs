@@ -111,19 +111,22 @@ namespace Glim
             return depth;
         }
 
-        public BakeContext(GlimLightmapper baker, Bindings.GlimConfig config)
+        public BakeContext(GlimLightmapper lightmapper, Bindings.GlimConfig config)
         {
-            this.lightmapMode = baker.lightmapMode;
-            this.reflectionProbesSuperSampling = baker.reflectionProbesSuperSampling;
-            this.reflectionProbesSpecular = baker.reflectionProbesSpecular;
+            this.lightmapMode = lightmapper.lightmapMode;
+            this.reflectionProbesSuperSampling = lightmapper.reflectionProbesSuperSampling;
+            this.reflectionProbesSpecular = lightmapper.reflectionProbesSpecular;
             this.isPreview = config.is_preview;
-            this.bakeReflectionProbes = baker.bakeReflectionProbes;
+            this.bakeReflectionProbes = lightmapper.bakeReflectionProbes;
 
             this.skyboxPixels = SkyboxCapture.Capture(SceneManager.GetActiveScene());
+
+            var bakerId = GlobalObjectId.GetGlobalObjectIdSlow(lightmapper);
 
             SerializedObject lda;
             if (!config.is_preview)
             {
+                // scene reopened, references lost here
                 storage = LightingData.CreateAsset(SceneManager.GetActiveScene());
                 lda = new SerializedObject(storage);
                 LightingData.InspectorModeObject.SetValue(lda, InspectorMode.DebugInternal);
@@ -134,8 +137,8 @@ namespace Glim
             }
 
             scene = SceneManager.GetActiveScene();
-
             var rootObjects = scene.GetRootGameObjects().Where(x => x.activeInHierarchy);
+            lightmapper = (GlimLightmapper)GlobalObjectId.GlobalObjectIdentifierToObjectSlow(bakerId);
 
             this.outputDir = Path.Combine(Path.GetDirectoryName(scene.path), scene.name);
             if (!AssetDatabase.IsValidFolder(this.outputDir))
@@ -149,10 +152,13 @@ namespace Glim
                 // bakery is breaking directional lightmaps, need to remove this from scene
                 // bakery always creates this object just by having the "Render Lightmap" window open
                 // so make sure to close it and reopen the scene
-                Debug.Log("Removing Bakery !ftraceLightmap GameObject");
-                GameObject.DestroyImmediate(ftraceLightmaps.gameObject);
-                EditorSceneManager.MarkSceneDirty(scene);
-                rootObjects = scene.GetRootGameObjects().Where(x => x.activeInHierarchy);
+                bool confirmed = EditorUtility.DisplayDialog("Remove bakery script", "Remove the hidden Bakery !ftraceLightmaps GameObject to prevent conflicts.", "Continue");
+                if (confirmed)
+                {
+                    GameObject.DestroyImmediate(ftraceLightmaps.gameObject);
+                    EditorSceneManager.MarkSceneDirty(scene);
+                    rootObjects = scene.GetRootGameObjects().Where(x => x.activeInHierarchy);
+                }
             }
 
             var lights = rootObjects.SelectMany(x => x.GetComponentsInChildren<Light>(false)).ToArray();
@@ -161,11 +167,11 @@ namespace Glim
             var addedLights = new List<Light>();
             foreach (var light in lights)
             {
-                // todo mixed
-                if (light.lightmapBakeType != LightmapBakeType.Baked)
+                if (light.lightmapBakeType == LightmapBakeType.Realtime)
                 {
                     continue;
                 }
+
 
                 var gammaColor = light.color;
                 if (light.useColorTemperature)
@@ -203,8 +209,8 @@ namespace Glim
                     range = light.range,
                     color = color,
                     shadow_radius_or_angle = radiusOrAngle,
+                    mixed = light.lightmapBakeType == LightmapBakeType.Mixed ? 1u : 0u
                 };
-
 
                 if (light.type == LightType.Spot)
                 {
@@ -241,19 +247,28 @@ namespace Glim
                 lightsOutputsProp.arraySize = lightsArray.Length;
                 for (int i = 0; i < lightsArray.Length; i++)
                 {
+                    var light = lightsArray[i];
                     var outputElement = lightsOutputsProp.GetArrayElementAtIndex(i);
                     var ids = lightsProp.GetArrayElementAtIndex(i);
 
                     outputElement.FindPropertyRelative("probeOcclusionLightIndex").intValue = 0;
                     outputElement.FindPropertyRelative("occlusionMaskChannel").intValue = -1;
 
+                    var mixedMode = lightmapper.mixedLights switch
+                    {
+                        MixedLightMode.BakedIndirect => MixedLightingMode.IndirectOnly,
+                        MixedLightMode.Subtractive => MixedLightingMode.Subtractive,
+                        MixedLightMode.Shadowmask => MixedLightingMode.Shadowmask,
+                        _ => MixedLightingMode.IndirectOnly,
+                    };
+
                     var mode = outputElement.FindPropertyRelative("lightmapBakeMode");
-                    mode.FindPropertyRelative("lightmapBakeType").intValue = (int)LightmapBakeType.Baked;
-                    mode.FindPropertyRelative("mixedLightingMode").intValue = (int)MixedLightingMode.Shadowmask;
+                    mode.FindPropertyRelative("lightmapBakeType").intValue = (int)light.lightmapBakeType;
+                    mode.FindPropertyRelative("mixedLightingMode").intValue = (int)mixedMode;
 
                     outputElement.FindPropertyRelative("isBaked").boolValue = true;
 
-                    var soi = LightingData.ObjectToSOI(lightsArray[i]);
+                    var soi = LightingData.ObjectToSOI(light);
 
                     ids.Next(true);
                     ids.longValue = soi.MainLFID;
@@ -308,7 +323,7 @@ namespace Glim
                     unclaimedRenderers.Add(r);
                 }
             }
-            var globalGroup = baker.group == null ? ScriptableObject.CreateInstance<GlimLightmapGroup>() : baker.group;
+            var globalGroup = lightmapper.group == null ? ScriptableObject.CreateInstance<GlimLightmapGroup>() : lightmapper.group;
             if (unclaimedRenderers.Count > 0)
             {
                 groupMap[globalGroup] = unclaimedRenderers;
@@ -320,77 +335,91 @@ namespace Glim
             {
                 var rendererArray = renderers.ToArray();
 
-                if (lightmapGroup.packingType == UVPackingType.ScaleOffset)
+                var newHash = MeshHash.FromLightmapUV(rendererArray);
+
+                bool changed = lightmapper.lightmapUVHash != newHash;
+                if (changed)
                 {
-                    var sw = new Stopwatch();
-                    sw.Start();
 
-                    bool bruteForce = lightmapGroup.bruteForce;
-                    bool holeFilling = lightmapGroup.holeFilling;
-                    float worldScaleExponent = lightmapGroup.scaleExponent;
-                    var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling, worldScaleExponent);
-                    for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
+                    if (lightmapGroup.packingType == UVPackingType.ScaleOffset)
                     {
-                        Renderer r = renderers[rendererIndex];
-                        var mf = r.GetComponent<MeshFilter>();
-                        var t = r.GetComponent<Transform>();
+                        var sw = new Stopwatch();
+                        sw.Start();
 
-                        var mesh = mf.sharedMesh;
-
-                        bool hasUv0 = mesh.HasVertexAttribute(VertexAttribute.TexCoord0);
-                        bool hasUv1 = mesh.HasVertexAttribute(VertexAttribute.TexCoord1);
-
-                        var positions = mesh.vertices;
-                        t.TransformPoints(positions); // todo slow, verts are transformed again later
-                        var uvs = hasUv1 ? mesh.uv2 : mesh.uv;
-                        var indices = mesh.triangles;
-                        float scale = 1.0f;
-                        if (r is MeshRenderer mr)
+                        bool bruteForce = lightmapGroup.bruteForce;
+                        bool holeFilling = lightmapGroup.holeFilling;
+                        float worldScaleExponent = lightmapGroup.scaleExponent;
+                        var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling, worldScaleExponent);
+                        for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                         {
-                            scale = mr.scaleInLightmap;
-                        }
+                            Renderer r = renderers[rendererIndex];
+                            var mf = r.GetComponent<MeshFilter>();
+                            var t = r.GetComponent<Transform>();
 
-                        unsafe
-                        {
-                            fixed (Vector3* p = positions)
-                            fixed (Vector2* uv = uvs)
-                            fixed (int* i = indices)
+                            var mesh = mf.sharedMesh;
+
+                            bool hasUv0 = mesh.HasVertexAttribute(VertexAttribute.TexCoord0);
+                            bool hasUv1 = mesh.HasVertexAttribute(VertexAttribute.TexCoord1);
+
+                            var positions = mesh.vertices;
+                            t.TransformPoints(positions); // todo slow, verts are transformed again later
+                            var uvs = hasUv1 ? mesh.uv2 : mesh.uv;
+                            var indices = mesh.triangles;
+                            float scale = 1.0f;
+                            if (r is MeshRenderer mr)
                             {
-                                UVPacking.uvpacker_add_mesh(packer, p, (uint)positions.Length, uv, (uint)uvs.Length, i, (uint)indices.Length, scale, (uint)rendererIndex);
+                                scale = mr.scaleInLightmap;
+                            }
+
+                            unsafe
+                            {
+                                fixed (Vector3* p = positions)
+                                fixed (Vector2* uv = uvs)
+                                fixed (int* i = indices)
+                                {
+                                    UVPacking.uvpacker_add_mesh(packer, p, (uint)positions.Length, uv, (uint)uvs.Length, i, (uint)indices.Length, scale, (uint)rendererIndex);
+                                }
                             }
                         }
+
+                        bool success = UVPacking.uvpacker_pack(packer);
+
+                        if (!success)
+                        {
+                            throw new Exception("UV Packing failed, try increasing lightmap resolution, packing iteration count or brute force mode or disable ensure padding");
+                        }
+
+                        sw.Stop();
+                        var elapsed = sw.ElapsedMilliseconds;
+
+                        for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
+                        {
+                            Renderer r = renderers[rendererIndex];
+
+                            var so = UVPacking.uvpacker_get_scale_offset(packer, (uint)rendererIndex);
+                            r.lightmapScaleOffset = so;
+                            EditorUtility.SetDirty(r);
+                        }
+
+                        float coverage = UVPacking.uvpacker_get_coverage(packer);
+                        Debug.Log($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
+
+                        lightmapper.lightmapUVHash = newHash;
+                        EditorUtility.SetDirty(lightmapper);
+
+                        UVPacking.uvpacker_destroy(packer);
                     }
-
-                    bool success = UVPacking.uvpacker_pack(packer);
-
-                    if (!success)
+                    else
                     {
-                        throw new Exception("UV Packing failed, try increasing lightmap resolution, packing iteration count or brute force mode or disable ensure padding");
+                        foreach (var r in renderers)
+                        {
+                            r.lightmapScaleOffset = new Vector4(1, 1, 0, 0);
+                        }
                     }
-
-                    sw.Stop();
-                    var elapsed = sw.ElapsedMilliseconds;
-
-                    for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
-                    {
-                        Renderer r = renderers[rendererIndex];
-
-                        var so = UVPacking.uvpacker_get_scale_offset(packer, (uint)rendererIndex);
-                        r.lightmapScaleOffset = so;
-                        EditorUtility.SetDirty(r);
-                    }
-
-                    float coverage = UVPacking.uvpacker_get_coverage(packer);
-                    Debug.Log($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
-
-                    UVPacking.uvpacker_destroy(packer);
                 }
                 else
                 {
-                    foreach (var r in renderers)
-                    {
-                        r.lightmapScaleOffset = new Vector4(1, 1, 0, 0);
-                    }
+                    Debug.Log($"Group {groupIndex} using cached lightmap UVs");
                 }
 
                 if (!config.is_preview)
@@ -508,12 +537,12 @@ namespace Glim
                 throw new InvalidOperationException("No lightmap groups found.");
             }
 
-            if (!baker.group)
+            if (!lightmapper.group)
             {
                 ScriptableObject.DestroyImmediate(globalGroup);
             }
 
-            float defaultProbeRadius = baker.lightProbeRadius;
+            float defaultProbeRadius = lightmapper.lightProbeRadius;
 
             if (!config.is_preview)
             {

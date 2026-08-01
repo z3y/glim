@@ -33,7 +33,6 @@ namespace Glim
             public readonly ReadbackProbesCallback lightprobes_read_callback;
 
             public readonly uint probe_samples;
-            public readonly uint probe_bounces;
             public readonly uint light_falloff;
 
             [MarshalAs(UnmanagedType.I1)] public readonly bool mis;
@@ -76,12 +75,15 @@ namespace Glim
                 this.log_callback = Bake.OnLogCalback;
                 this.lightprobes_read_callback = Bake.OnReadbackLightprobes;
                 this.probe_samples = probe_samples;
-                this.probe_bounces = bounce_count;
                 this.direct_light_samples = direct_light_samples;
                 this.direct_emission_samples = direct_emission_samples;
                 this.indirect_samples = indirect_samples;
                 this.bounce_count = bounce_count;
+#if GLIM_DEV
+                this.vulkan_validation_layers = true;
+#else
                 this.vulkan_validation_layers = false;
+#endif
                 this.seams_debug = false;
                 this.mis = mis;
                 this.lightmap_mode = lightmap_mode;
@@ -205,7 +207,7 @@ namespace Glim
             public Vector2 area_size;
 
             public Vector3 up;
-            public uint pad;
+            public uint mixed;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 16)]

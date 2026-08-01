@@ -1,7 +1,7 @@
 # Todo
 
 - [ ] Higher resolution alpha
-- [ ] Terrain Support
+- [ ] Terrain Trees Support
 - [ ] Light Cookies
 - [ ] Shadowmask
 - [ ] Subtractive
@@ -17,19 +17,17 @@
 - [ ] MIS for area lights
 - [ ] The manual denoiser setup is not ideal
 - [ ] There is no weight for MIS
-- [ ] Adjust light probe sample positions if inside objects
 
 ## Optimization
 - [ ] Manually build the LightingData asset. This is one of the slowest things that happens before the bake starts becuse it has to start the built in baker (in an empty scene) for light probes tetrahedralization
-- [ ] UV Packer is slow
+- [ ] GPU Denoiser
 
 ## Bugs
 - [ ] Sync scene view fov
 - [ ] Emissive triangles only detect opaque meshes
 - [ ] Backface GI and Transparent flags are set for entire renderer instead of per submesh
 - [ ] Can only bake one currently loaded scene
-- [ ] Preview crashes when closing the window on linux
-- [ ] Preview window doesnt work on KDE Wayland (Fedora) in certain cases
+- [ ] Preview window doesnt work on some linux distros (maybe fixed)
 - [ ] The slang extension complains about errors in IDE even though it all compiles
 - [ ] Bake reflection probes button starts the built-in baker if the lighting is not baked which could cause confusion
 - [ ] Double sided global illumination doesnt work?
