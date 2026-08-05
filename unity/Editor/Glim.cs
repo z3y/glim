@@ -335,10 +335,21 @@ namespace Glim
             {
                 var rendererArray = renderers.ToArray();
 
-                var newHash = MeshHash.FromLightmapUV(rendererArray, (uint)lightmapGroup.resolution);
+                var hashData = new uint[4];
+                hashData[0] = (uint)lightmapGroup.resolution;
+                hashData[1] = lightmapGroup.holeFilling ? 1u : 0u;
+                hashData[2] = lightmapGroup.packingIterations;
+                hashData[3] = (uint)BitConverter.SingleToInt32Bits(lightmapGroup.scaleExponent);
 
-                bool changed = lightmapper.lightmapUVHash != newHash;
-                changed = true; // todo implement proper hash for all settings
+                var newHash = MeshHash.FromLightmapUV(rendererArray, hashData);
+
+                bool changed = lightmapGroup.lightmapUVHash != newHash;
+
+                if (!lightmapper.enableUVCache)
+                {
+                    changed = true;
+                }
+
                 if (changed)
                 {
 
@@ -405,7 +416,7 @@ namespace Glim
                         float coverage = UVPacking.uvpacker_get_coverage(packer);
                         Debug.Log($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
 
-                        lightmapper.lightmapUVHash = newHash;
+                        lightmapGroup.lightmapUVHash = newHash;
                         EditorUtility.SetDirty(lightmapper);
 
                         UVPacking.uvpacker_destroy(packer);

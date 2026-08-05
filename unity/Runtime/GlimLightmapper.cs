@@ -94,7 +94,8 @@ Automatically applied to light volumes based on texel size."
         [Header("Default Group")]
         public GlimLightmapGroup group;
 
-        [HideInInspector] public uint lightmapUVHash = 0;
+        [Tooltip("(Experimental)\nHashes mesh data in order to skip uv packing if no changes are detected.")]
+        public bool enableUVCache = false;
 
         [MenuItem("Glim/Bake")]
         public static void CreateLightmapBaker()

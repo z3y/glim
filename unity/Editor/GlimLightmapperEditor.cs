@@ -12,7 +12,7 @@ using UnityEngine.UIElements;
 namespace Glim
 {
     [CustomEditor(typeof(GlimLightmapper))]
-    public class LightmapBakerEditor : Editor
+    public class GlimLightmapperEditor : Editor
     {
         SerializedObject _nestedSO;
 
@@ -57,9 +57,6 @@ namespace Glim
                 };
                 root.Add(element);
             }
-
-
-
 
             {
                 Button button = new()
@@ -130,7 +127,27 @@ namespace Glim
                 button.clicked += () =>
                 {
                     Lightmapping.lightingDataAsset = null;
-                    EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+
+                    var scene = EditorSceneManager.GetActiveScene();
+                    var selectors = scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<LightmapGroupSelector>(true));
+
+                    foreach (var selector in selectors)
+                    {
+                        if (selector.group == null)
+                        {
+                            continue;
+                        }
+                        selector.group.lightmapUVHash = 0;
+                        EditorUtility.SetDirty(selector.group);
+                    }
+
+                    if (baker.group)
+                    {
+                        baker.group.lightmapUVHash = 0;
+                        EditorUtility.SetDirty(baker.group);
+                    }
+
+                    EditorSceneManager.MarkSceneDirty(scene);
                 };
                 root.Add(button);
             }

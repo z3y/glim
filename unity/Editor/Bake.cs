@@ -354,7 +354,7 @@ namespace Glim
 
                 if (_context.bakeReflectionProbes)
                 {
-                    LightmapBakerEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1, _context.reflectionProbesSpecular);
+                    GlimLightmapperEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1, _context.reflectionProbesSpecular);
                 }
             }
             finally
