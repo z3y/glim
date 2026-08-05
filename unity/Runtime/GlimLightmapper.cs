@@ -41,7 +41,7 @@ namespace Glim
   Bakes an additional directional lightmap that stores the dominant incoming light direction.
   Supports normal maps and improves directional lighting.
 
-• Combined SH
+• Combined SH (Mono SH)
   Bakes two textures:
   - L0: L0 Spherical Harmonics
   - L1: Monochromatic luminance encoded into L1 Spherical Harmonics.
