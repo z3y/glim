@@ -48,7 +48,7 @@ namespace Glim
   Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it."
 )]
         public LightmapMode lightmapMode = LightmapMode.NonDirectional;
-        public MixedLightMode mixedLights = MixedLightMode.BakedIndirect;
+        [HideInInspector] public MixedLightMode mixedLights = MixedLightMode.BakedIndirect;
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
         [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times. Affects lightmaps, light probes and light volumes.")]
         public bool multipleImportanceSampling = false;

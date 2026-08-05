@@ -164,7 +164,7 @@ namespace Glim
             var lights = rootObjects.SelectMany(x => x.GetComponentsInChildren<Light>(false)).ToArray();
             var builtIn = GraphicsSettings.currentRenderPipeline == null;
 
-            var addedLights = new List<Light>();
+            var addedLights = new List<Light>(lights.Length);
             foreach (var light in lights)
             {
                 if (light.lightmapBakeType == LightmapBakeType.Realtime)
@@ -172,6 +172,13 @@ namespace Glim
                     continue;
                 }
 
+                bool mixed = light.lightmapBakeType == LightmapBakeType.Mixed;
+
+                if (mixed)
+                {
+                    Debug.LogError($"Mixed lights currently not implemented {light.gameObject.name}");
+                    continue;
+                }
 
                 var gammaColor = light.color;
                 if (light.useColorTemperature)
