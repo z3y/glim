@@ -28,7 +28,6 @@ jobs:
           Remove-Item slang.zip
 
       - name: Build
-        working-directory: glim
         run: cargo build --release
 
       - name: Upload DLL
@@ -61,7 +60,6 @@ jobs:
           rm slang.tar.gz
 
       - name: Build
-        working-directory: glim
         run: cargo build --release
 
       - name: Upload SO
