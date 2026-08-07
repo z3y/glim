@@ -276,26 +276,52 @@ pub fn find_seams(
     seams
 }
 
-struct Mip {
-    pixels: Vec<f32>,
-    w: usize,
-    h: usize,
+enum Mip<'a> {
+    Borrowed {
+        w: usize,
+        h: usize,
+        pixels: &'a mut [f32],
+    },
+    Owned {
+        w: usize,
+        h: usize,
+        pixels: Vec<f32>,
+    },
+}
+
+impl<'a> Mip<'a> {
+    fn pixels(&self) -> &[f32] {
+        match self {
+            Mip::Borrowed { pixels, .. } => pixels,
+            Mip::Owned { pixels, .. } => pixels,
+        }
+    }
+
+    fn size(&self) -> (usize, usize) {
+        match self {
+            Mip::Borrowed { w, h, .. } => (*w, *h),
+            Mip::Owned { w, h, .. } => (*w, *h),
+        }
+    }
 }
 
 pub fn dilate(pixels: &mut [f32], width: u32, height: u32, alpha_threshold: f32) {
     let w = width as usize;
     let h = height as usize;
 
-    // todo skip this copy here
-    let mut mips = vec![Mip {
-        pixels: pixels.to_vec(),
+    let mut mips = vec![Mip::Borrowed {
+        pixels: pixels,
         w,
         h,
     }];
-    while mips.last().unwrap().w > 1 || mips.last().unwrap().h > 1 {
+
+    while mips.last().unwrap().size().0 > 1 || mips.last().unwrap().size().1 > 1 {
         let prev = mips.last().unwrap();
-        let nw = (prev.w / 2).max(1);
-        let nh = (prev.h / 2).max(1);
+        let prev_pixels = prev.pixels();
+        let prev_size = prev.size();
+
+        let nw = (prev_size.0 / 2).max(1);
+        let nh = (prev_size.1 / 2).max(1);
         let mut next = vec![0.0f32; nw * nh * 4];
 
         for y in 0..nh {
@@ -303,13 +329,13 @@ pub fn dilate(pixels: &mut [f32], width: u32, height: u32, alpha_threshold: f32)
                 let (mut r, mut g, mut b, mut cov) = (0.0, 0.0, 0.0, 0.0);
                 for dy in 0..2 {
                     for dx in 0..2 {
-                        let sx = (x * 2 + dx).min(prev.w - 1);
-                        let sy = (y * 2 + dy).min(prev.h - 1);
-                        let idx = (sy * prev.w + sx) * 4;
-                        let a = prev.pixels[idx + 3].max(0.0);
-                        r += prev.pixels[idx] * a;
-                        g += prev.pixels[idx + 1] * a;
-                        b += prev.pixels[idx + 2] * a;
+                        let sx = (x * 2 + dx).min(prev_size.0 - 1);
+                        let sy = (y * 2 + dy).min(prev_size.1 - 1);
+                        let idx = (sy * prev_size.0 + sx) * 4;
+                        let a = prev_pixels[idx + 3].max(0.0);
+                        r += prev_pixels[idx] * a;
+                        g += prev_pixels[idx + 1] * a;
+                        b += prev_pixels[idx + 2] * a;
                         cov += a;
                     }
                 }
@@ -322,12 +348,16 @@ pub fn dilate(pixels: &mut [f32], width: u32, height: u32, alpha_threshold: f32)
                 next[idx + 3] = cov / 4.0;
             }
         }
-        mips.push(Mip {
-            pixels: next,
+        mips.push(Mip::Owned {
             w: nw,
             h: nh,
+            pixels: next,
         });
     }
+
+    let Mip::Borrowed { pixels, w, h } = mips.remove(0) else {
+        unreachable!();
+    };
 
     for y in 0..h {
         for x in 0..w {
@@ -340,11 +370,14 @@ pub fn dilate(pixels: &mut [f32], width: u32, height: u32, alpha_threshold: f32)
             let u = (x as f32 + 0.5) / w as f32;
             let v = (y as f32 + 0.5) / h as f32;
 
-            for level in 1..mips.len() {
+            for level in 0..mips.len() {
                 let mip = &mips[level];
 
-                let fx = u * mip.w as f32 - 0.5;
-                let fy = v * mip.h as f32 - 0.5;
+                let mip_pixels = mip.pixels();
+                let mip_size = mip.size();
+
+                let fx = u * mip_size.0 as f32 - 0.5;
+                let fy = v * mip_size.1 as f32 - 0.5;
 
                 let cx = fx.round() as isize;
                 let cy = fy.round() as isize;
@@ -357,17 +390,21 @@ pub fn dilate(pixels: &mut [f32], width: u32, height: u32, alpha_threshold: f32)
                         let sx = cx + ox;
                         let sy = cy + oy;
 
-                        if sx < 0 || sy < 0 || sx >= mip.w as isize || sy >= mip.h as isize {
+                        if sx < 0
+                            || sy < 0
+                            || sx >= mip_size.0 as isize
+                            || sy >= mip_size.1 as isize
+                        {
                             continue;
                         }
 
-                        let i = ((sy as usize * mip.w + sx as usize) * 4) as usize;
+                        let i = ((sy as usize * mip_size.0 + sx as usize) * 4) as usize;
 
-                        if mip.pixels[i + 3] > 0.5 {
-                            rgba[0] += mip.pixels[i];
-                            rgba[1] += mip.pixels[i + 1];
-                            rgba[2] += mip.pixels[i + 2];
-                            rgba[3] += mip.pixels[i + 3];
+                        if mip_pixels[i + 3] > 0.5 {
+                            rgba[0] += mip_pixels[i];
+                            rgba[1] += mip_pixels[i + 1];
+                            rgba[2] += mip_pixels[i + 2];
+                            rgba[3] += mip_pixels[i + 3];
                             count += 1;
                         }
                     }

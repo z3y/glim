@@ -305,8 +305,6 @@ impl UVPacker {
     }
 
     pub fn get_scale_offset(&self, mesh_id: usize) -> (Vector2, Vector2) {
-        // let chart = self.charts.iter().find(|c| c.mesh_id == mesh_id); // todo hash
-
         let Some(lookup) = &self.charts_lookup else {
             return (Vector2::ONE, Vector2::ZERO);
         };

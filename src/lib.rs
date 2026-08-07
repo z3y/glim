@@ -360,14 +360,12 @@ fn initialize_render(app: &mut Glim) {
     let mut albedo_array = TextureArray::new(&app.vk, albedos);
     let mut emission_array = TextureArray::new(&app.vk, emissions);
 
-    let staging_resolution = 1024;
-
-    // todo remove
+    const STAGING_RESOLUTION: u64 = 1024;
     let mut staging_buffer = Buffer::empty(
         &app.vk,
         String::from("Staging Buffer"),
-        staging_resolution
-            * staging_resolution
+        STAGING_RESOLUTION
+            * STAGING_RESOLUTION
             * 4
             * std::mem::size_of::<f32>() as u64 as vk::DeviceSize, // 16 MB
         vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
