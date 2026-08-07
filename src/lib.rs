@@ -89,8 +89,6 @@ pub struct Glim {
 
     pub adjust_samples_shader: ComputeShader,
 
-    pub staging_buffer: Buffer,
-
     pub render_target: RenderTarget,
 
     pub constants: SpecializationConstants,
@@ -107,10 +105,6 @@ impl Drop for Glim {
     fn drop(&mut self) {
         self.albedo_array.destroy(&self.vk);
         self.emission_array.destroy(&self.vk);
-
-        if !self.staging_buffer.buffer.is_null() {
-            self.staging_buffer.destroy(&self.vk);
-        }
 
         let rt = &mut self.render_target;
 
@@ -366,16 +360,28 @@ fn initialize_render(app: &mut Glim) {
     let mut albedo_array = TextureArray::new(&app.vk, albedos);
     let mut emission_array = TextureArray::new(&app.vk, emissions);
 
+    let staging_resolution = 1024;
+
+    // todo remove
+    let mut staging_buffer = Buffer::empty(
+        &app.vk,
+        String::from("Staging Buffer"),
+        staging_resolution
+            * staging_resolution
+            * 4
+            * std::mem::size_of::<f32>() as u64 as vk::DeviceSize, // 16 MB
+        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    );
+
     for index in 0..app.groups.len() {
         let group = &app.groups[index];
 
-        albedo_array.textures[index].set_pixels(&app.vk, &group.albedo_pixels, &app.staging_buffer);
-        emission_array.textures[index].set_pixels(
-            &app.vk,
-            &group.emission_pixels,
-            &app.staging_buffer,
-        );
+        albedo_array.textures[index].set_pixels(&app.vk, &group.albedo_pixels, &staging_buffer);
+        emission_array.textures[index].set_pixels(&app.vk, &group.emission_pixels, &staging_buffer);
     }
+
+    staging_buffer.destroy(&app.vk);
 
     // free
     for index in 0..app.groups.len() {
@@ -1101,21 +1107,6 @@ impl Glim {
             diffuse: Texture2D::null(),
         };
 
-        let staging_width = 1024;
-        let staging_height = 1024;
-
-        // todo remove
-        let staging_buffer = Buffer::empty(
-            &vk,
-            String::from("Staging Buffer"),
-            staging_width
-                * staging_height
-                * 4
-                * std::mem::size_of::<f32>() as u64 as vk::DeviceSize, // 16 MB
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        );
-
         let constants = SpecializationConstants {
             use_camera: 0,
             light_falloff_type: 0,
@@ -1129,8 +1120,6 @@ impl Glim {
             indirect_intensity: config.indirect_intensity,
             lightprobe_deringing: config.lightprobe_deringing,
         };
-
-        let skybox = Skybox::null();
 
         Self {
             vk,
@@ -1155,11 +1144,10 @@ impl Glim {
             seams: Vec::new(),
             emissive_triangles: Vec::new(),
             emissive_triangles_buffer: Buffer::null(),
-            staging_buffer,
             adjust_samples_shader: ComputeShader::null(),
             constants,
             output_dir,
-            skybox,
+            skybox: Skybox::null(),
             albedo_array: TextureArray::null(),
             emission_array: TextureArray::null(),
         }
