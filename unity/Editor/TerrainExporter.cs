@@ -12,7 +12,7 @@ namespace Glim
         /// step=1 uses full heightmap resolution (can be huge, e.g. 513x513 -> ~263k verts).
         /// Increase step to downsample (2, 4, 8...) for lightmap-baking purposes.
         /// </summary>
-        public static Mesh GenerateMesh(TerrainData data, int step = 2)
+        public static Mesh GenerateMesh(TerrainData data, Vector3 position, int step = 2)
         {
             int hmRes = data.heightmapResolution; // e.g. 513
             var heights = data.GetHeights(0, 0, hmRes, hmRes); // indexed [z, x]
@@ -36,7 +36,7 @@ namespace Glim
                     float worldY = heights[hz, hx] * size.y;
 
                     int idx = z * vertsX + x;
-                    vertices[idx] = new Vector3(worldX, worldY, worldZ);
+                    vertices[idx] = new Vector3(worldX, worldY, worldZ) + position;
                     // This matches the UV space terrain shaders already use (splatmap/control-texture space),
                     // which is convenient: it's already a 0..1 footprint over the whole terrain.
                     uvs[idx] = new Vector2(worldX / size.x, worldZ / size.z);
@@ -83,7 +83,7 @@ namespace Glim
             mesh.uv = uvs;
             mesh.triangles = triangles.ToArray();
             mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
+            // mesh.RecalculateBounds();
             return mesh;
         }
     }

@@ -500,7 +500,9 @@ namespace Glim
                 terrain.lightmapScaleOffset = scaleOffset;
                 EditorUtility.SetDirty(terrain);
 
-                var mesh = TerrainExporter.GenerateMesh(data, step: 4);
+                Vector3 position = terrain.transform.position;
+
+                var mesh = TerrainExporter.GenerateMesh(data, position, step: 4);
 
                 var terrainGroup = ScriptableObject.CreateInstance<GlimLightmapGroup>();
                 terrainGroup.packingType = UVPackingType.None;
