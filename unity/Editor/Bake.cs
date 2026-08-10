@@ -29,6 +29,8 @@ namespace Glim
         static volatile bool _isComplete = false;
         static volatile bool _running = false;
         static int _progressID = -1;
+        static int _ambientProbeIndex = 0;
+
         static BakeContext _context = null;
 
         static volatile float _progress = 0f;
@@ -322,13 +324,23 @@ namespace Glim
                 CreateLightVolumeTextures(_context, _context.outputDir);
 #endif
 
+                var ambientProbe = _bakeProbesResults[_ambientProbeIndex];
+                sh[0, 0] = ambientProbe.L0.x; sh[0, 1] = ambientProbe.L1_1.x; sh[0, 2] = ambientProbe.L10.x; sh[0, 3] = ambientProbe.L11.x; sh[0, 4] = ambientProbe.L2_2.x; sh[0, 5] = ambientProbe.L2_1.x; sh[0, 6] = ambientProbe.L20.x; sh[0, 7] = ambientProbe.L21.x; sh[0, 8] = ambientProbe.L22.x;
+                sh[1, 0] = ambientProbe.L0.y; sh[1, 1] = ambientProbe.L1_1.y; sh[1, 2] = ambientProbe.L10.y; sh[1, 3] = ambientProbe.L11.y; sh[1, 4] = ambientProbe.L2_2.y; sh[1, 5] = ambientProbe.L2_1.y; sh[1, 6] = ambientProbe.L20.y; sh[1, 7] = ambientProbe.L21.y; sh[1, 8] = ambientProbe.L22.y;
+                sh[2, 0] = ambientProbe.L0.z; sh[2, 1] = ambientProbe.L1_1.z; sh[2, 2] = ambientProbe.L10.z; sh[2, 3] = ambientProbe.L11.z; sh[2, 4] = ambientProbe.L2_2.z; sh[2, 5] = ambientProbe.L2_1.z; sh[2, 6] = ambientProbe.L20.z; sh[2, 7] = ambientProbe.L21.z; sh[2, 8] = ambientProbe.L22.z;
+
                 // apply new asset
                 var newLda = AssetDatabase.LoadAssetAtPath<LightingDataAsset>(destPath);
                 using var lda2 = new SerializedObject(newLda);
+
+                newLda.SetAmbientProbe(sh);
+
                 lda2.FindProperty("m_Name").stringValue = ldaName;
                 lda2.ApplyModifiedPropertiesWithoutUndo();
                 Lightmapping.lightingDataAsset = newLda;
                 EditorSceneManager.MarkSceneDirty(_context.scene);
+
+
 
                 LightmapSettings.lightmaps = lightmapDatas.ToArray();
                 LightmapSettings.lightmapsMode = hasDirectional ? LightmapsMode.CombinedDirectional : LightmapsMode.NonDirectional;
@@ -529,6 +541,10 @@ namespace Glim
             EditorApplication.update += PollBakeComplete;
 
             var ctx = new BakeContext(baker, config);
+
+            // Ambient Light Probe
+            _ambientProbeIndex = ctx.probePositions.Count;
+            ctx.probePositions.Add(new Vector4(10000.0f, 10000.0f, 10000.0f, 0.0f));
 
 #if VRC_LIGHT_VOLUMES
             AddLightProbeVolumes(baker, ctx);
