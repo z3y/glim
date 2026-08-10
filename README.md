@@ -28,7 +28,10 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
 - Currently requires a GPU with the `VK_KHR_ray_query` extension, however it will support any GPU with a software BVH in the future. Check GPU support here `https://vulkan.gpuinfo.org/listdevices.php`, most modern GPUs should work.
 - While the lightmapper is fully working, it is still in early stages, theres room for improvement and it might lack some features (Check the [TODO](./TODO.md) list)
+
+## Support
 - If you'd like to see it further improved, consider supporting on [Patreon](https://patreon.com/z3y)
+- Alternatively you can consider buying some of my assets on [Booth](https://z3y.booth.pm/)
 
 ### Denoiser Setup
 
@@ -49,6 +52,8 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
 ### Lightmapper Setup
 
+Make sure to also read [Updating](#updating) ⚠️
+
 #### VPM Package
  - Install with the [VRChat Creator Companion](https://z3y.github.io/vpm-package-listing/)
 
@@ -68,7 +73,7 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
 ### Updating
 
-- Close and reopen Unity to unload all currently loaded assemblies.
+- Make sure to close Unity first before updating to unload all currently loaded assemblies.
 - Import the new package.
 
 #### Lightmap Groups
