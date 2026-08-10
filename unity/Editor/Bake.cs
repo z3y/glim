@@ -309,6 +309,33 @@ namespace Glim
                     EditorUtility.SetDirty(obj);
                 }
 
+                // skybox probe
+                {
+                    var ambientProbe = _bakeProbesResults[_ambientProbeIndex];
+                    sh[0, 0] = ambientProbe.L0.x; sh[0, 1] = ambientProbe.L1_1.x; sh[0, 2] = ambientProbe.L10.x; sh[0, 3] = ambientProbe.L11.x; sh[0, 4] = ambientProbe.L2_2.x; sh[0, 5] = ambientProbe.L2_1.x; sh[0, 6] = ambientProbe.L20.x; sh[0, 7] = ambientProbe.L21.x; sh[0, 8] = ambientProbe.L22.x;
+                    sh[1, 0] = ambientProbe.L0.y; sh[1, 1] = ambientProbe.L1_1.y; sh[1, 2] = ambientProbe.L10.y; sh[1, 3] = ambientProbe.L11.y; sh[1, 4] = ambientProbe.L2_2.y; sh[1, 5] = ambientProbe.L2_1.y; sh[1, 6] = ambientProbe.L20.y; sh[1, 7] = ambientProbe.L21.y; sh[1, 8] = ambientProbe.L22.y;
+                    sh[2, 0] = ambientProbe.L0.z; sh[2, 1] = ambientProbe.L1_1.z; sh[2, 2] = ambientProbe.L10.z; sh[2, 3] = ambientProbe.L11.z; sh[2, 4] = ambientProbe.L2_2.z; sh[2, 5] = ambientProbe.L2_1.z; sh[2, 6] = ambientProbe.L20.z; sh[2, 7] = ambientProbe.L21.z; sh[2, 8] = ambientProbe.L22.z;
+                    var ambientProbeProp = lda.FindProperty("m_BakedAmbientProbeInLinear");
+                    var child = ambientProbeProp.Copy();
+                    var end = child.GetEndProperty();
+
+                    int coefficient = 0;
+
+                    if (child.Next(true))
+                    {
+                        do
+                        {
+                            if (child.propertyType == SerializedPropertyType.Float)
+                            {
+                                child.floatValue = sh[coefficient / 9, coefficient % 9];
+                                coefficient++;
+                            }
+                        }
+                        while (child.Next(false) &&
+                               !SerializedProperty.EqualContents(child, end));
+                    }
+                }
+
                 lda.ApplyModifiedPropertiesWithoutUndo();
                 string ldaName = "LightingData";
 
@@ -333,13 +360,10 @@ namespace Glim
                 lda2.FindProperty("m_Name").stringValue = ldaName;
                 lda2.ApplyModifiedPropertiesWithoutUndo();
                 Lightmapping.lightingDataAsset = newLda;
-                EditorSceneManager.MarkSceneDirty(_context.scene);
 
-                var ambientProbe = _bakeProbesResults[_ambientProbeIndex];
-                sh[0, 0] = ambientProbe.L0.x; sh[0, 1] = ambientProbe.L1_1.x; sh[0, 2] = ambientProbe.L10.x; sh[0, 3] = ambientProbe.L11.x; sh[0, 4] = ambientProbe.L2_2.x; sh[0, 5] = ambientProbe.L2_1.x; sh[0, 6] = ambientProbe.L20.x; sh[0, 7] = ambientProbe.L21.x; sh[0, 8] = ambientProbe.L22.x;
-                sh[1, 0] = ambientProbe.L0.y; sh[1, 1] = ambientProbe.L1_1.y; sh[1, 2] = ambientProbe.L10.y; sh[1, 3] = ambientProbe.L11.y; sh[1, 4] = ambientProbe.L2_2.y; sh[1, 5] = ambientProbe.L2_1.y; sh[1, 6] = ambientProbe.L20.y; sh[1, 7] = ambientProbe.L21.y; sh[1, 8] = ambientProbe.L22.y;
-                sh[2, 0] = ambientProbe.L0.z; sh[2, 1] = ambientProbe.L1_1.z; sh[2, 2] = ambientProbe.L10.z; sh[2, 3] = ambientProbe.L11.z; sh[2, 4] = ambientProbe.L2_2.z; sh[2, 5] = ambientProbe.L2_1.z; sh[2, 6] = ambientProbe.L20.z; sh[2, 7] = ambientProbe.L21.z; sh[2, 8] = ambientProbe.L22.z;
-                RenderSettings.ambientProbe = sh;
+
+
+                EditorSceneManager.MarkSceneDirty(_context.scene);
 
                 LightmapSettings.lightmaps = lightmapDatas.ToArray();
                 LightmapSettings.lightmapsMode = hasDirectional ? LightmapsMode.CombinedDirectional : LightmapsMode.NonDirectional;
