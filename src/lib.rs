@@ -268,7 +268,7 @@ fn initialize_render(app: &mut Glim) {
             &app.vk,
             String::from("Lights"),
             &app.cpu_lights,
-            light_buffer_flags(),
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
     } else {
@@ -276,7 +276,7 @@ fn initialize_render(app: &mut Glim) {
             &app.vk,
             String::from("Lights"),
             std::mem::size_of::<Light>() as vk::DeviceSize,
-            light_buffer_flags(),
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
     }
@@ -392,6 +392,8 @@ fn initialize_render(app: &mut Glim) {
         compacted_lightmap_address: 0,
         lightmaps_info_address: 0,
         compacted_visiblity_address: 0,
+        lights_address: app.gpu_lights.gpu_address,
+        pad1: 0,
     };
 
     app.preview_shader = preview::load_shader(&app.vk, &app.constants);
@@ -1129,6 +1131,8 @@ impl Glim {
             compacted_lightmap_address: 0,
             lightmaps_info_address: 0,
             compacted_visiblity_address: 0,
+            lights_address: 0,
+            pad1: 0,
         };
 
         Self {

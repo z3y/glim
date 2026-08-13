@@ -8,10 +8,6 @@
 [[vk::binding(0, 0)]]
 RaytracingAccelerationStructure TopLevelAS;
 #else
-[[vk::binding(0, 0)]]
-StructuredBuffer<float4> CWBVHNodes;
-[[vk::binding(1, 0)]]
-StructuredBuffer<float4> CWBVHTriangles;
 #endif
 
 [[vk::binding(2, 0)]]
@@ -30,9 +26,6 @@ RWTexture2D<float4> LightmapDiffuse;
 
 [[vk::binding(7, 0)]]
 RWStructuredBuffer<SHProbeL2> SHProbes;
-
-[[vk::binding(10, 0)]]
-StructuredBuffer<Light> Lights;
 
 [[vk::binding(14, 0)]]
 RWStructuredBuffer<float> DominantDirection;
@@ -99,6 +92,10 @@ static let LightmapsInfo = Ptr<LightmapInfo, Access.Read>(LIGHTMAPS_INFO_ADDRESS
 [vk::constant_id(16)]
 const uint64_t COMPACTED_VISIBILITY_ADDRESS;
 static let CompactedVisibility = Ptr<float4, Access.ReadWrite>(COMPACTED_VISIBILITY_ADDRESS);
+
+[vk::constant_id(17)]
+const uint64_t LIGHTS_ADDRESS;
+static let Lights = Ptr<Light, Access.Read>(LIGHTS_ADDRESS);
 
 enum LightmapMode : uint
 {
