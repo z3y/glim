@@ -26,6 +26,7 @@ pub struct Buffer {
     pub address: vk::DeviceAddress,
 
     pub ptr: *mut c_void,
+    pub gpu_address: u64,
 
     pub bytes: u64,
     pub name: String,
@@ -40,6 +41,7 @@ impl Buffer {
             bytes: 0,
             name: String::new(),
             ptr: ptr::null_mut(),
+            gpu_address: 0,
         }
     }
 
@@ -130,6 +132,12 @@ impl Buffer {
             ptr::null_mut()
         };
 
+        let address_info = vk::BufferDeviceAddressInfo {
+            buffer: buffer,
+            ..Default::default()
+        };
+        let gpu_address = unsafe { vk.device.get_buffer_device_address(&address_info) };
+
         Self {
             buffer,
             memory,
@@ -137,6 +145,7 @@ impl Buffer {
             bytes: size,
             name,
             ptr,
+            gpu_address,
         }
     }
 

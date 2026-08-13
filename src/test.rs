@@ -16,8 +16,8 @@ mod tests {
 
     const TEST_NAME: &str = "monkey_2";
 
-    const DIRECT_LIGHT_SAMPLES: u32 = 64;
-    const DIRECT_EMISSION_SAMPLES: u32 = 512;
+    const DIRECT_LIGHT_SAMPLES: u32 = 256 * 4;
+    const DIRECT_EMISSION_SAMPLES: u32 = 1024 * 4;
     const INDIRECT_SAMPLES: u32 = 256;
     const LIGHT_PROBE_SAMPLES: u32 = 4096;
     const BOUNCE_COUNT: u32 = 5;

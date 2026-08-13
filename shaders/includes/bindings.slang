@@ -31,12 +31,6 @@ RWTexture2D<float4> LightmapDiffuse;
 [[vk::binding(7, 0)]]
 RWStructuredBuffer<SHProbeL2> SHProbes;
 
-[[vk::binding(8, 0)]]
-StructuredBuffer<uint> Indices;
-
-[[vk::binding(9, 0)]]
-StructuredBuffer<Vertex> Vertices;
-
 [[vk::binding(10, 0)]]
 StructuredBuffer<Light> Lights;
 
@@ -104,6 +98,14 @@ const float SKYBOX_INTENSITY;
 const float INDIRECT_INTENSITY;
 [vk::constant_id(10)]
 const float LIGHTPROBE_DERINGING;
+
+[vk::constant_id(11)]
+const uint64_t VERTEX_ADDRESS;
+[vk::constant_id(12)]
+const uint64_t INDICES_ADDRESS;
+
+static uint *Indices = (uint *)INDICES_ADDRESS;
+static Vertex *Vertices = (Vertex *)VERTEX_ADDRESS;
 
 enum LightmapMode : uint
 {

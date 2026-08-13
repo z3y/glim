@@ -48,22 +48,29 @@ pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
     aligned
 }
 
+#[repr(C)]
 pub struct SpecializationConstants {
     pub use_camera: u32, // unused
     pub light_falloff_type: u32,
     pub transparent_primitive_offset: u32,
     pub emissive_triangles_count: u32,
+
     pub multiple_importance_sampling: u32,
     pub lightmap_group_count: u32,
     pub lightmap_mode: u32,
     pub coordinate_system: u32,
+
     pub skybox_intensity: f32,
     pub indirect_intensity: f32,
     pub lightprobe_deringing: f32,
+    pub pad0: u32,
+
+    pub vertex_address: u64,
+    pub indices_address: u64,
 }
 
-pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 11] {
-    let size = std::mem::size_of::<u32>();
+pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 13] {
+    let size = size_of::<u32>();
 
     [
         vk::SpecializationMapEntry {
@@ -120,6 +127,16 @@ pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 11] {
             constant_id: 10,
             offset: 10 * size as u32,
             size,
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 11,
+            offset: 12 * size as u32,
+            size: size_of::<u64>(),
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 12,
+            offset: 14 * size as u32,
+            size: size_of::<u64>(),
         },
     ]
 }
@@ -183,26 +200,6 @@ pub fn bind_emissions(
 pub fn bind_probe_sh(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
     bindings.push(vk::DescriptorSetLayoutBinding {
         binding: 7,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-}
-
-pub fn bind_indices(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-}
-
-pub fn bind_vertices(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 9,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         descriptor_count: 1,
         stage_flags: vk::ShaderStageFlags::COMPUTE,
