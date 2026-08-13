@@ -425,7 +425,7 @@ fn render_preview(app: &mut Glim) {
     preview::update_shader(
         &app.vk,
         &app.preview_shader,
-        app.tlas.acceleration_structure(),
+        app.tlas.acceleration_structure,
         visibility.view(),
         &albedos,
         &emissions,
@@ -493,7 +493,7 @@ fn render_preview(app: &mut Glim) {
                 preview::update_shader(
                     &app.vk,
                     &app.preview_shader,
-                    app.tlas.acceleration_structure(),
+                    app.tlas.acceleration_structure,
                     visibility.view(),
                     &albedos,
                     &emissions,
@@ -874,7 +874,7 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
         initialize_preview::update_shader(
             vk,
             shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             &visibility,
             app.gpu_mesh.index_buffer.buffer,
             app.gpu_mesh.vertex_buffer.buffer,
@@ -1755,7 +1755,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         update_adjust_samples_shader(
             &app.vk,
             &adjust_sample_shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             compacted_visibility.buffer,
             &albedos,
             app.gpu_mesh.index_buffer.buffer,
@@ -1850,7 +1850,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         bake_direct::update_shader(
             &app.vk,
             &bake_direct_light_shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             &albedos,
             &emissions,
             app.gpu_mesh.index_buffer.buffer,
@@ -1920,7 +1920,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         bake_direct::update_shader(
             &app.vk,
             &bake_direct_emission_shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             &albedos,
             &emissions,
             app.gpu_mesh.index_buffer.buffer,
@@ -2025,7 +2025,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         bake_indirect::update_shader(
             &app.vk,
             &indirect_shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             compacted_visibility.buffer,
             &albedos,
             app.gpu_mesh.index_buffer.buffer,
@@ -2384,7 +2384,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         update_bake_light_probes_shader(
             &app.vk,
             &shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             app.probes_buffer.buffer,
             &albedos,
             &emissions,

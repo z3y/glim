@@ -12,6 +12,10 @@ struct PushConstants
     uint maxSamples;
     uint sampleIndex;
     uint probeCount;
+
+    uint64_t shProbesAddress;
+    uint pad0;
+    uint pad1;
 };
 
 const static float3 ProbeRayDirections[26] = {
@@ -60,6 +64,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     {
         return;
     }
+
+    let SHProbes = Ptr<SHProbeL2, Access.ReadWrite>(Push.shProbesAddress);
 
     SHProbeL2 probe = SHProbes[probeIndex];
 

@@ -146,23 +146,19 @@ impl Mesh {
 }
 
 pub struct VulkanAs {
-    acceleration_structure: vk::AccelerationStructureKHR,
-    buffer: vk::Buffer,
-    memory: vk::DeviceMemory,
-    address: vk::DeviceAddress,
+    pub acceleration_structure: vk::AccelerationStructureKHR,
+    pub buffer: vk::Buffer,
+    pub memory: vk::DeviceMemory,
+    pub gpu_address: vk::DeviceAddress,
 }
 
 impl VulkanAs {
-    pub fn acceleration_structure(&self) -> vk::AccelerationStructureKHR {
-        self.acceleration_structure
-    }
-
     pub fn null() -> Self {
         Self {
             acceleration_structure: vk::AccelerationStructureKHR::null(),
             buffer: vk::Buffer::null(),
             memory: vk::DeviceMemory::null(),
-            address: 0,
+            gpu_address: 0,
         }
     }
 
@@ -182,7 +178,7 @@ impl VulkanAs {
             as_device.destroy_acceleration_structure(self.acceleration_structure, None);
         };
 
-        self.address = 0;
+        self.gpu_address = 0;
         self.memory = vk::DeviceMemory::null();
         self.buffer = vk::Buffer::null();
         self.acceleration_structure = vk::AccelerationStructureKHR::null();
@@ -435,7 +431,7 @@ impl GpuMesh {
             acceleration_structure: blas,
             buffer: blas_buffer,
             memory: blas_memory,
-            address: blas_address,
+            gpu_address: blas_address,
         }
     }
 
@@ -477,7 +473,7 @@ pub fn create_tlas(vk: &VulkanContext, blas: &VulkanAs) -> VulkanAs {
             vk::GeometryInstanceFlagsKHR::TRIANGLE_FACING_CULL_DISABLE.as_raw() as u8,
         ),
         acceleration_structure_reference: vk::AccelerationStructureReferenceKHR {
-            device_handle: blas.address,
+            device_handle: blas.gpu_address,
         },
     };
 
@@ -607,6 +603,6 @@ pub fn create_tlas(vk: &VulkanContext, blas: &VulkanAs) -> VulkanAs {
         acceleration_structure: tlas,
         buffer: tlas_buffer,
         memory: tlas_mem,
-        address: tlas_address,
+        gpu_address: tlas_address,
     }
 }

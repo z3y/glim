@@ -24,12 +24,6 @@ Texture2D<float4> Emission[];
 [[vk::image_format("rgba32f")]]
 RWTexture2D<float4> LightmapDiffuse;
 
-[[vk::binding(7, 0)]]
-RWStructuredBuffer<SHProbeL2> SHProbes;
-
-[[vk::binding(14, 0)]]
-RWStructuredBuffer<float> DominantDirection;
-
 [[vk::binding(20, 0)]]
 [[vk::image_format("rgba32f")]]
 TextureCube<float4> Skybox;
