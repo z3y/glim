@@ -2404,6 +2404,8 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             max_samples: app.config.probe_samples,
             sample_index: 0,
             probes_count: app.probes.len() as u32,
+            sh_probes_address: app.probes_buffer.gpu_address,
+            pad0: 0,
         };
 
         let probes_count = app.probes.len() as u32;

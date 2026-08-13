@@ -119,6 +119,9 @@ pub struct BakeLightProbesPushConstants {
     pub max_samples: u32,
     pub sample_index: u32,
     pub probes_count: u32,
+
+    pub sh_probes_address: u64,
+    pub pad0: u64,
 }
 
 #[repr(C)]
