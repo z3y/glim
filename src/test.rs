@@ -24,6 +24,7 @@ mod tests {
     const DENOISE: bool = false;
     const DILATE: bool = false;
     const FIX_SEAMS: bool = false;
+    const MIS: bool = true;
 
     #[test]
     fn test_preview() {
@@ -61,7 +62,7 @@ mod tests {
             lightprobes_read_callback: test_probes_callback,
             probe_samples: LIGHT_PROBE_SAMPLES,
             light_falloff: LightFalloffType::InverseSquare,
-            mis: true,
+            mis: MIS,
             direct_light_samples: DIRECT_LIGHT_SAMPLES,
             direct_emission_samples: DIRECT_EMISSION_SAMPLES,
             indirect_samples: INDIRECT_SAMPLES,

@@ -34,13 +34,6 @@ RWStructuredBuffer<SHProbeL2> SHProbes;
 [[vk::binding(10, 0)]]
 StructuredBuffer<Light> Lights;
 
-[[vk::binding(11, 0)]]
-[[vk::image_format("rgba32f")]]
-RWTexture2D<float4> NormalsBuffer;
-
-[[vk::binding(12, 0)]]
-StructuredBuffer<uint> EmissiveTriangles;
-
 [[vk::binding(14, 0)]]
 RWStructuredBuffer<float> DominantDirection;
 
@@ -103,9 +96,12 @@ const float LIGHTPROBE_DERINGING;
 const uint64_t VERTEX_ADDRESS;
 [vk::constant_id(12)]
 const uint64_t INDICES_ADDRESS;
+[vk::constant_id(13)]
+const uint64_t EMISSIVE_TRIANGLES_ADDRESS;
 
-static uint *Indices = (uint *)INDICES_ADDRESS;
-static Vertex *Vertices = (Vertex *)VERTEX_ADDRESS;
+static let Indices = Ptr<uint, Access.Read>(INDICES_ADDRESS);
+static let Vertices = Ptr<Vertex, Access.Read>(VERTEX_ADDRESS);
+static let EmissiveTriangles = Ptr<uint, Access.Read>(EMISSIVE_TRIANGLES_ADDRESS);
 
 enum LightmapMode : uint
 {

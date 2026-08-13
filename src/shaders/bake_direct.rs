@@ -27,7 +27,6 @@ pub fn load_shader(
     bind_albedos(&mut bindings, constants.lightmap_group_count);
     bind_emissions(&mut bindings, constants.lightmap_group_count);
     bind_lights(&mut bindings);
-    bind_emissive_triangles(&mut bindings);
     bind_compacted_visibility_buffer(&mut bindings);
     bind_compacted_lightmap(&mut bindings);
     bind_skybox(&mut bindings);
@@ -134,21 +133,6 @@ pub fn update_shader(
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
         dst_binding: 10,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // EmissiveTriangles
-    let info = [vk::DescriptorBufferInfo {
-        buffer: emissive_triangles,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 12,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };

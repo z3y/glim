@@ -67,9 +67,12 @@ pub struct SpecializationConstants {
 
     pub vertex_address: u64,
     pub indices_address: u64,
+
+    pub emissive_triangles_address: u64,
+    pub pad1: u64,
 }
 
-pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 13] {
+pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 14] {
     let size = size_of::<u32>();
 
     [
@@ -136,6 +139,11 @@ pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 13] {
         vk::SpecializationMapEntry {
             constant_id: 12,
             offset: 14 * size as u32,
+            size: size_of::<u64>(),
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 13,
+            offset: 16 * size as u32,
             size: size_of::<u64>(),
         },
     ]
@@ -210,16 +218,6 @@ pub fn bind_probe_sh(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
 pub fn bind_lights(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
     bindings.push(vk::DescriptorSetLayoutBinding {
         binding: 10,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-}
-
-pub fn bind_emissive_triangles(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 12,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         descriptor_count: 1,
         stage_flags: vk::ShaderStageFlags::COMPUTE,

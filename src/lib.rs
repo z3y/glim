@@ -385,9 +385,11 @@ fn initialize_render(app: &mut Glim) {
         skybox_intensity: config.skybox_intensity,
         indirect_intensity: config.indirect_intensity,
         lightprobe_deringing: config.lightprobe_deringing,
+        pad0: 0,
         vertex_address: app.gpu_mesh.vertex_buffer.gpu_address,
         indices_address: app.gpu_mesh.index_buffer.gpu_address,
-        pad0: 0,
+        emissive_triangles_address: app.emissive_triangles_buffer.gpu_address,
+        pad1: 0,
     };
 
     app.preview_shader = preview::load_shader(&app.vk, &app.constants);
@@ -1121,6 +1123,8 @@ impl Glim {
             pad0: 0,
             vertex_address: 0,
             indices_address: 0,
+            emissive_triangles_address: 0,
+            pad1: 0,
         };
 
         Self {
