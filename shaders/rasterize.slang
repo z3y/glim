@@ -56,15 +56,15 @@ struct Varyings
 static const float2 barys[3] = { float2(0, 0), float2(1, 0), float2(0, 1) };
 
 [shader("vertex")]
-Varyings vertex(uint vertexID: SV_VulkanVertexID, uint instanceID: SV_VulkanInstanceID)
+Varyings vertex(uint indexID: SV_VulkanVertexID, uint instanceID: SV_VulkanInstanceID)
 {
     Varyings o;
 
-    uint primitiveID = vertexID / 3;
-    uint index = vertexID % 3;
+    uint primitiveID = indexID / 3;
+    uint index = indexID % 3;
 
-    uint vIndex = Indices[primitiveID * 3 + index];
-    Vertex v = Vertices[vIndex];
+    uint vertexID = Indices[indexID];
+    Vertex v = Vertices[vertexID];
 
     float2 resolution = float2(Push.resolution);
     float2 texelSize = 1.0 / resolution;

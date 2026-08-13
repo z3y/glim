@@ -1365,7 +1365,7 @@ fn render_lightmaps(app: &mut Glim) {
                 0,
                 &visibility_push_bytes,
             );
-            vk.cmd_draw(cmd, mesh.index_len * 3, 1, 0, 0);
+            vk.cmd_draw(cmd, mesh.index_len, 1, 0, 0);
 
             // non conservative
             let visibility_push = VisibilityPushConstants {
@@ -1399,7 +1399,7 @@ fn render_lightmaps(app: &mut Glim) {
                 0,
                 &visibility_push_bytes,
             );
-            vk.cmd_draw(cmd, mesh.index_len * 3, 25, 0, 0);
+            vk.cmd_draw(cmd, mesh.index_len, 25, 0, 0);
 
             vk.cmd_end_render_pass(cmd);
             // AttachmentDescription final_layout: vk::ImageLayout::GENERAL
@@ -1657,7 +1657,7 @@ fn render_lightmaps(app: &mut Glim) {
                 &visibility_push_bytes,
             );
 
-            vk.cmd_draw(cmd, mesh.index_len * 3, 1, 0, 0);
+            vk.cmd_draw(cmd, mesh.index_len, 1, 0, 0);
 
             // non conservative
             let visibility_push = VisibilityPushConstants {
@@ -1691,7 +1691,7 @@ fn render_lightmaps(app: &mut Glim) {
                 0,
                 &visibility_push_bytes,
             );
-            vk.cmd_draw(cmd, mesh.index_len * 3, 25, 0, 0);
+            vk.cmd_draw(cmd, mesh.index_len, 25, 0, 0);
 
             vk.cmd_end_render_pass(cmd);
             // AttachmentDescription final_layout: vk::ImageLayout::GENERAL
