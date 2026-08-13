@@ -43,9 +43,6 @@ RWStructuredBuffer<uint2> CompactionBuffer;
 [[vk::binding(16, 0)]]
 RWStructuredBuffer<float4> CompactedVisibility;
 
-[[vk::binding(17, 0)]]
-RWStructuredBuffer<float4> DecompactTarget;
-
 [[vk::binding(20, 0)]]
 [[vk::image_format("rgba32f")]]
 TextureCube<float4> Skybox;

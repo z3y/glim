@@ -2150,6 +2150,9 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             group_index: group_index as u32,
             dilate: group.dilate as u32,
             pad2: 0,
+            decompact_target_address: staging_buffer_lightmap.gpu_address,
+            pad3: 0,
+            pad4: 0,
         };
         let decompact_push_bytes = as_bytes(&push);
 

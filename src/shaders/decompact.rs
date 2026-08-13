@@ -19,13 +19,16 @@ pub struct PushConstants {
     pub group_index: u32,
     pub dilate: u32,
     pub pad2: u32,
+
+    pub decompact_target_address: u64,
+    pub pad3: u32,
+    pub pad4: u32,
 }
 
 pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> ComputeShader {
     let mut bindings = Vec::new();
 
     bind_compaction_buffer(&mut bindings);
-    bind_decompact_target(&mut bindings);
     bind_compacted_visibility_buffer(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
@@ -71,21 +74,6 @@ pub fn update_shader(
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
         dst_binding: 15,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // DecompactTarget
-    let info = [vk::DescriptorBufferInfo {
-        buffer: decompact_target,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 17,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
