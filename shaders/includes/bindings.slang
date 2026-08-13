@@ -30,9 +30,6 @@ RWStructuredBuffer<SHProbeL2> SHProbes;
 [[vk::binding(14, 0)]]
 RWStructuredBuffer<float> DominantDirection;
 
-[[vk::binding(15, 0)]]
-RWStructuredBuffer<uint2> CompactionBuffer;
-
 [[vk::binding(20, 0)]]
 [[vk::image_format("rgba32f")]]
 TextureCube<float4> Skybox;
@@ -96,6 +93,10 @@ static let CompactedVisibility = Ptr<float4, Access.ReadWrite>(COMPACTED_VISIBIL
 [vk::constant_id(17)]
 const uint64_t LIGHTS_ADDRESS;
 static let Lights = Ptr<Light, Access.Read>(LIGHTS_ADDRESS);
+
+[vk::constant_id(18)]
+const uint64_t COMPACTION_BUFFER_ADDRESS;
+static let CompactionBuffer = Ptr<uint2, Access.ReadWrite>(COMPACTION_BUFFER_ADDRESS);
 
 enum LightmapMode : uint
 {

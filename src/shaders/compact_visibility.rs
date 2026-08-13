@@ -25,7 +25,6 @@ pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> C
     let mut bindings = Vec::new();
 
     bind_visibility(&mut bindings);
-    bind_compaction_buffer(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
@@ -74,21 +73,6 @@ pub fn update_shader(
         ..Default::default()
     };
     write = write.image_info(&info);
-    descriptor_writes.push(write);
-
-    // CompactionBuffer
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compaction,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 15,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };

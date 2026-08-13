@@ -14,7 +14,6 @@ use crate::bindings::*;
 use crate::buffer::Buffer;
 use crate::compute_shader::*;
 use crate::graphics_shader::update_rasterize_shader;
-use crate::lights::light_buffer_flags;
 use crate::math::{Vector2, Vector3};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
@@ -393,7 +392,7 @@ fn initialize_render(app: &mut Glim) {
         lightmaps_info_address: 0,
         compacted_visiblity_address: 0,
         lights_address: app.gpu_lights.gpu_address,
-        pad1: 0,
+        compaction_buffer_address: 0,
     };
 
     app.preview_shader = preview::load_shader(&app.vk, &app.constants);
@@ -1120,10 +1119,10 @@ impl Glim {
             multiple_importance_sampling: 0,
             lightmap_group_count: 0,
             lightmap_mode: 0,
-            coordinate_system: config.coordinate_system as u32,
-            skybox_intensity: config.skybox_intensity,
-            indirect_intensity: config.indirect_intensity,
-            lightprobe_deringing: config.lightprobe_deringing,
+            coordinate_system: 0,
+            skybox_intensity: 0.0,
+            indirect_intensity: 0.0,
+            lightprobe_deringing: 0.0,
             pad0: 0,
             vertex_address: 0,
             indices_address: 0,
@@ -1132,7 +1131,7 @@ impl Glim {
             lightmaps_info_address: 0,
             compacted_visiblity_address: 0,
             lights_address: 0,
-            pad1: 0,
+            compaction_buffer_address: 0,
         };
 
         Self {
@@ -1288,17 +1287,18 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         app.gpu_mesh.vertex_buffer.buffer,
     );
 
-    let mut compaction_shader = compaction_mask::load_shader(&app.vk, &app.constants);
     let mut compaction_buffer = Buffer::empty(
         &app.vk,
         "Compaction Mask".to_owned(),
         (total_pixel_count as u64 / 32) as u64 * std::mem::size_of::<u32>() as u64 * 2,
         vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
+    app.constants.compaction_buffer_address = compaction_buffer.gpu_address;
+
+    let mut compaction_shader = compaction_mask::load_shader(&app.vk, &app.constants);
     compaction_mask::update_shader(
         &app.vk,
         &compaction_shader,

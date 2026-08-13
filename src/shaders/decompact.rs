@@ -28,8 +28,6 @@ pub struct PushConstants {
 pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> ComputeShader {
     let mut bindings = Vec::new();
 
-    bind_compaction_buffer(&mut bindings);
-
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
     let specialization_info = vk::SpecializationInfo::default()
@@ -62,22 +60,7 @@ pub fn update_shader(
     compacted_visibility: vk::Buffer,
     lightmap_info: vk::Buffer,
 ) {
-    let mut descriptor_writes = Vec::new();
-
-    // CompactionBuffer
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compaction,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 15,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
+    let descriptor_writes = Vec::new();
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }
