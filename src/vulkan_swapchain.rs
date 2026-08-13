@@ -82,8 +82,11 @@ impl VulkanContext {
                 ),
             }
         };
-
-        let image_count = 3.clamp(capabilities.min_image_count, capabilities.max_image_count);
+        let image_count = if capabilities.max_image_count == 0 {
+            3.max(capabilities.min_image_count)
+        } else {
+            3.clamp(capabilities.min_image_count, capabilities.max_image_count)
+        };
 
         println!(
             "images: {:?}\nextent: {:?}\nformat: {:?}\nmode: {:?}",
