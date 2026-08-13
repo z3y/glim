@@ -390,6 +390,8 @@ fn initialize_render(app: &mut Glim) {
         indices_address: app.gpu_mesh.index_buffer.gpu_address,
         emissive_triangles_address: app.emissive_triangles_buffer.gpu_address,
         compacted_lightmap_address: 0,
+        lightmaps_info_address: 0,
+        pad1: 0,
     };
 
     app.preview_shader = preview::load_shader(&app.vk, &app.constants);
@@ -1125,6 +1127,8 @@ impl Glim {
             indices_address: 0,
             emissive_triangles_address: 0,
             compacted_lightmap_address: 0,
+            lightmaps_info_address: 0,
+            pad1: 0,
         };
 
         Self {
@@ -1975,7 +1979,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         bake_direct_emission_shader.destroy(&app.vk);
     }
 
-    let mut group_info_buffer = {
+    let mut lightmaps_info = {
         let mut infos = Vec::with_capacity(app.groups.len());
         for group_index in 0..app.groups.len() {
             let group = &app.groups[group_index].settings;
@@ -1986,22 +1990,23 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             });
         }
 
-        let group_info_buffer = Buffer::empty(
+        let lightmaps_info = Buffer::empty(
             &app.vk,
             "Lightmap Info".into(),
-            128 * std::mem::size_of::<LightmapInfo>() as u64,
-            vk::BufferUsageFlags::UNIFORM_BUFFER,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            (infos.len() * std::mem::size_of::<LightmapInfo>()) as u64,
+            vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT, // todo device local
         );
         unsafe {
             std::ptr::copy_nonoverlapping(
                 infos.as_ptr() as *const u8,
-                group_info_buffer.ptr as *mut u8,
+                lightmaps_info.ptr as *mut u8,
                 infos.len() * std::mem::size_of::<LightmapInfo>(),
             );
         }
-        group_info_buffer
+        lightmaps_info
     };
+    app.constants.lightmaps_info_address = lightmaps_info.gpu_address;
 
     if app.config.bounce_count > 0 {
         let mut indirect_shader = bake_indirect::load_shader(&app.vk, &app.constants);
@@ -2023,7 +2028,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             app.gpu_mesh.vertex_buffer.buffer,
             compacted_lightmap.buffer,
             compaction_buffer.buffer,
-            group_info_buffer.buffer,
+            lightmaps_info.buffer,
         );
 
         'bounces: for bounce_index in 0..app.config.bounce_count {
@@ -2098,7 +2103,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         staging_buffer_lightmap.buffer,
         compacted_lightmap.buffer,
         compacted_visibility.buffer,
-        group_info_buffer.buffer,
+        lightmaps_info.buffer,
     );
 
     let oidn = Oidn::load();
@@ -2381,7 +2386,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             app.gpu_mesh.vertex_buffer.buffer,
             app.gpu_lights.buffer,
             compaction_buffer.buffer,
-            group_info_buffer.buffer,
+            lightmaps_info.buffer,
             app.skybox.view(),
             app.skybox.sampler(),
             app.emissive_triangles_buffer.buffer,
@@ -2474,10 +2479,10 @@ unsafe fn render_lightmaps(app: &mut Glim) {
 
     compacted_lightmap.destroy(&app.vk);
     compaction_buffer.destroy(&app.vk);
-    group_info_buffer.destroy(&app.vk);
+    lightmaps_info.destroy(&app.vk);
     drop(compacted_lightmap);
     drop(compaction_buffer);
-    drop(group_info_buffer);
+    drop(lightmaps_info);
 
     if is_cancelled() {
         (log)(LogMessage::message("Bake cancelled by user"));

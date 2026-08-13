@@ -70,9 +70,12 @@ pub struct SpecializationConstants {
 
     pub emissive_triangles_address: u64,
     pub compacted_lightmap_address: u64,
+
+    pub lightmaps_info_address: u64,
+    pub pad1: u64,
 }
 
-pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 15] {
+pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 16] {
     let size = size_of::<u32>();
 
     [
@@ -149,6 +152,11 @@ pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 15] {
         vk::SpecializationMapEntry {
             constant_id: 14,
             offset: 18 * size as u32,
+            size: size_of::<u64>(),
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 15,
+            offset: 20 * size as u32,
             size: size_of::<u64>(),
         },
     ]
@@ -254,26 +262,6 @@ pub fn bind_decompact_target(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'
     bindings.push(vk::DescriptorSetLayoutBinding {
         binding: 17,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-}
-
-pub fn bind_compacted_lightmap(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 18,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-}
-
-pub fn bind_lightmap_info(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 19,
-        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
         descriptor_count: 1,
         stage_flags: vk::ShaderStageFlags::COMPUTE,
         ..Default::default()

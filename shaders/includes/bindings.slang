@@ -46,19 +46,6 @@ RWStructuredBuffer<float4> CompactedVisibility;
 [[vk::binding(17, 0)]]
 RWStructuredBuffer<float4> DecompactTarget;
 
-struct LightmapInfo
-{
-    uint2 resolution;
-    uint compactionOffset;
-    uint pad;
-};
-
-[[vk::binding(19, 0)]]
-cbuffer LightmapInfoBuffer
-{
-    LightmapInfo LightmapGroups[128];
-};
-
 [[vk::binding(20, 0)]]
 [[vk::image_format("rgba32f")]]
 TextureCube<float4> Skybox;
@@ -104,6 +91,16 @@ static let EmissiveTriangles = Ptr<uint, Access.Read>(EMISSIVE_TRIANGLES_ADDRESS
 [vk::constant_id(14)]
 const uint64_t COMPACTED_LIGHTMAP_ADDRESS;
 static let CompactedLightmap = Ptr<float, Access.ReadWrite>(COMPACTED_LIGHTMAP_ADDRESS);
+
+[vk::constant_id(15)]
+const uint64_t LIGHTMAPS_INFO_ADDRESS;
+struct LightmapInfo
+{
+    uint2 resolution;
+    uint compactionOffset;
+    uint pad;
+};
+static let LightmapsInfo = Ptr<LightmapInfo, Access.Read>(LIGHTMAPS_INFO_ADDRESS);
 
 enum LightmapMode : uint
 {

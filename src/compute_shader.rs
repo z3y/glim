@@ -140,9 +140,7 @@ pub fn load_bake_light_probes_shader(
     bind_emissions(&mut bindings, constants.lightmap_group_count);
     bind_probe_sh(&mut bindings);
     bind_lights(&mut bindings);
-    bind_compacted_lightmap(&mut bindings);
     bind_compaction_buffer(&mut bindings);
-    bind_lightmap_info(&mut bindings);
     bind_skybox(&mut bindings);
 
     let push_constant_ranges = [vk::PushConstantRange {
@@ -265,21 +263,6 @@ pub fn update_bake_light_probes_shader(
     write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
-    // CompactedLightmap
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compacted_lightmap,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 18,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
     // CompactionBuffer
     let info = [vk::DescriptorBufferInfo {
         buffer: compaction,
@@ -290,21 +273,6 @@ pub fn update_bake_light_probes_shader(
         dst_set: shader.descriptor_set,
         dst_binding: 15,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // LightmapInfo
-    let info = [vk::DescriptorBufferInfo {
-        buffer: lightmap_info,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 19,
-        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
         ..Default::default()
     };
     write = write.buffer_info(&info);
