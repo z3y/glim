@@ -69,10 +69,10 @@ pub struct SpecializationConstants {
     pub indices_address: u64,
 
     pub emissive_triangles_address: u64,
-    pub pad1: u64,
+    pub compacted_lightmap_address: u64,
 }
 
-pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 14] {
+pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 15] {
     let size = size_of::<u32>();
 
     [
@@ -144,6 +144,11 @@ pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 14] {
         vk::SpecializationMapEntry {
             constant_id: 13,
             offset: 16 * size as u32,
+            size: size_of::<u64>(),
+        },
+        vk::SpecializationMapEntry {
+            constant_id: 14,
+            offset: 18 * size as u32,
             size: size_of::<u64>(),
         },
     ]

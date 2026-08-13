@@ -257,8 +257,8 @@ impl GpuMesh {
             AccelerationStructureType::RayQuery(GpuMesh::create_vulkan_blas(
                 vk,
                 &merged_mesh,
-                vertex_buffer.address,
-                index_buffer.address,
+                vertex_buffer.gpu_address,
+                index_buffer.gpu_address,
                 opaque_triangle_count,
                 transparent_triangle_count,
             ))

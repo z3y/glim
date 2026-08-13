@@ -23,10 +23,9 @@ fn unregister_gpu_alloc(bytes: u64) {
 pub struct Buffer {
     pub buffer: vk::Buffer,
     pub memory: vk::DeviceMemory,
-    pub address: vk::DeviceAddress,
 
     pub ptr: *mut c_void,
-    pub gpu_address: u64,
+    pub gpu_address: vk::DeviceAddress,
 
     pub bytes: u64,
     pub name: String,
@@ -37,7 +36,6 @@ impl Buffer {
         Self {
             buffer: vk::Buffer::null(),
             memory: vk::DeviceMemory::null(),
-            address: 0,
             bytes: 0,
             name: String::new(),
             ptr: ptr::null_mut(),
@@ -100,17 +98,6 @@ impl Buffer {
 
         unsafe { vk.device.bind_buffer_memory(buffer, memory, 0) }.unwrap();
 
-        let info = vk::BufferDeviceAddressInfo {
-            buffer,
-            ..Default::default()
-        };
-
-        let address = if properties.contains(vk::MemoryPropertyFlags::HOST_VISIBLE) {
-            0
-        } else {
-            unsafe { vk.device.get_buffer_device_address(&info) }
-        };
-
         let allocated = register_gpu_alloc(mem_reqs.size);
         let mb = mem_reqs.size as f64 / (1024.0 * 1024.0);
 
@@ -141,7 +128,6 @@ impl Buffer {
         Self {
             buffer,
             memory,
-            address,
             bytes: size,
             name,
             ptr,
@@ -163,6 +149,6 @@ impl Buffer {
 
         self.buffer = vk::Buffer::null();
         self.memory = vk::DeviceMemory::null();
-        self.address = 0;
+        self.gpu_address = 0;
     }
 }

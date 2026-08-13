@@ -389,7 +389,7 @@ fn initialize_render(app: &mut Glim) {
         vertex_address: app.gpu_mesh.vertex_buffer.gpu_address,
         indices_address: app.gpu_mesh.index_buffer.gpu_address,
         emissive_triangles_address: app.emissive_triangles_buffer.gpu_address,
-        pad1: 0,
+        compacted_lightmap_address: 0,
     };
 
     app.preview_shader = preview::load_shader(&app.vk, &app.constants);
@@ -1124,7 +1124,7 @@ impl Glim {
             vertex_address: 0,
             indices_address: 0,
             emissive_triangles_address: 0,
-            pad1: 0,
+            compacted_lightmap_address: 0,
         };
 
         Self {
@@ -1810,6 +1810,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
+    app.constants.compacted_lightmap_address = compacted_lightmap.gpu_address;
 
     {
         let cmd = app.vk.begin_single_use_cmd();
