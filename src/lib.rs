@@ -391,7 +391,7 @@ fn initialize_render(app: &mut Glim) {
         emissive_triangles_address: app.emissive_triangles_buffer.gpu_address,
         compacted_lightmap_address: 0,
         lightmaps_info_address: 0,
-        pad1: 0,
+        compacted_visiblity_address: 0,
     };
 
     app.preview_shader = preview::load_shader(&app.vk, &app.constants);
@@ -1128,7 +1128,7 @@ impl Glim {
             emissive_triangles_address: 0,
             compacted_lightmap_address: 0,
             lightmaps_info_address: 0,
-            pad1: 0,
+            compacted_visiblity_address: 0,
         };
 
         Self {
@@ -1583,11 +1583,11 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         "Compacted Visibility".to_owned(),
         compacted_pixels_count as u64 * (std::mem::size_of::<f32>() * 4) as u64,
         vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
+    app.constants.compacted_visiblity_address = compacted_visibility.gpu_address;
 
     let mut compact_visibility_shader = compact_visibility::load_shader(&app.vk, &app.constants);
     compact_visibility::update_shader(

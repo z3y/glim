@@ -27,7 +27,6 @@ pub fn load_shader(
     bind_albedos(&mut bindings, constants.lightmap_group_count);
     bind_emissions(&mut bindings, constants.lightmap_group_count);
     bind_lights(&mut bindings);
-    bind_compacted_visibility_buffer(&mut bindings);
     bind_skybox(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
@@ -132,21 +131,6 @@ pub fn update_shader(
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
         dst_binding: 10,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // CompactedVisibility
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compacted_visibility,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 16,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         ..Default::default()
     };
