@@ -12,6 +12,10 @@ struct PushConstants
     uint maxSamples;
     uint sampleIndex;
     uint probeCount;
+
+    uint64_t shProbesAddress;
+    uint pad0;
+    uint pad1;
 };
 
 const static float3 ProbeRayDirections[26] = {
@@ -60,6 +64,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     {
         return;
     }
+
+    let SHProbes = Ptr<SHProbeL2, Access.ReadWrite>(Push.shProbesAddress);
 
     SHProbeL2 probe = SHProbes[probeIndex];
 
@@ -181,7 +187,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         {
             float3 emission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
 
-            if (any(emission > 0.0))
+            if (surface.emissive && any(emission > 0.0))
             {
                 bool isEmissiveTriange = surface.emissive;
                 if (EMISSIVE_TRIANGLES_COUNT > 0 && isEmissiveTriange)

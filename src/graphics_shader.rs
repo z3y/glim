@@ -299,7 +299,7 @@ pub struct VisibilityPushConstants {
     pub pad2: u32,
 }
 
-pub fn load_visibility_shader(
+pub fn load_rasterize_shader(
     vk: &mut VulkanContext,
     visibility: &Texture2D,
     conservative: bool,
@@ -370,7 +370,7 @@ pub fn load_visibility_shader(
     shader
 }
 
-pub fn update_visibility_shader(
+pub fn update_rasterize_shader(
     vk: &VulkanContext,
     shader: &GraphicsShader,
     indices: vk::Buffer,

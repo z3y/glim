@@ -31,12 +31,6 @@ pub struct Light {
     pub mixed: u32,
 }
 
-pub fn light_buffer_flags() -> vk::BufferUsageFlags {
-    vk::BufferUsageFlags::TRANSFER_DST
-        | vk::BufferUsageFlags::STORAGE_BUFFER
-        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-}
-
 impl Default for Light {
     fn default() -> Self {
         Self {

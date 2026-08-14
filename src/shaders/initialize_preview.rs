@@ -23,8 +23,6 @@ pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> C
 
     bind_visibility(&mut bindings);
     bind_tlas(&mut bindings);
-    bind_indices(&mut bindings);
-    bind_vertices(&mut bindings);
     bind_albedos(&mut bindings, constants.lightmap_group_count);
 
     let map_entries = create_specialization_map_entries();
@@ -84,36 +82,6 @@ pub fn update_shader(
         ..Default::default()
     };
     write = write.image_info(&info);
-    descriptor_writes.push(write);
-
-    // Indices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: indices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // Vertices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: vertices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
     // Albedo

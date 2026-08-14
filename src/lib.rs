@@ -1,3 +1,5 @@
+#![allow(unsafe_op_in_unsafe_fn)]
+
 use ash::vk::{self, Handle};
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -11,8 +13,7 @@ use glfw_sys::{
 use crate::bindings::*;
 use crate::buffer::Buffer;
 use crate::compute_shader::*;
-use crate::graphics_shader::update_visibility_shader;
-use crate::lights::light_buffer_flags;
+use crate::graphics_shader::update_rasterize_shader;
 use crate::math::{Vector2, Vector3};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
@@ -26,7 +27,7 @@ use crate::texture_array::{TextureArray, TextureDescriptor};
 use crate::{
     camera::Camera,
     compute_shader::ComputeShader,
-    graphics_shader::{VisibilityPushConstants, load_visibility_shader},
+    graphics_shader::{VisibilityPushConstants, load_rasterize_shader},
     lights::Light,
     mesh::{GpuMesh, Mesh, VulkanAs, create_tlas},
     oidn::Oidn,
@@ -85,7 +86,6 @@ pub struct Glim {
     pub probes: Vec<SHProbeL2>,
 
     pub probes_buffer: Buffer,
-    pub bake_probes_shader: ComputeShader,
 
     pub adjust_samples_shader: ComputeShader,
 
@@ -131,7 +131,6 @@ impl Drop for Glim {
 
         if !self.probes_buffer.buffer.is_null() {
             self.probes_buffer.destroy(&self.vk);
-            self.bake_probes_shader.destroy(&self.vk);
         }
 
         if !self.emissive_triangles_buffer.buffer.is_null() {
@@ -239,27 +238,7 @@ fn initialize_render(app: &mut Glim) {
 
     extract_emissive_triangles(app);
 
-    let config = &app.config;
-
-    app.constants = SpecializationConstants {
-        use_camera: 0,
-        light_falloff_type: config.light_falloff as u32,
-        transparent_primitive_offset: (app.opaque_mesh.indices.len() / 3) as u32,
-        emissive_triangles_count: app.emissive_triangles.len() as u32,
-        multiple_importance_sampling: config.mis as u32,
-        lightmap_group_count: app.groups.len() as u32,
-        lightmap_mode: config.lightmap_mode as u32,
-        coordinate_system: app.config.coordinate_system as u32,
-        skybox_intensity: config.skybox_intensity,
-        indirect_intensity: config.indirect_intensity,
-        lightprobe_deringing: config.lightprobe_deringing,
-    };
-
-    app.preview_shader = preview::load_shader(&app.vk, &app.constants);
-
     if app.probes.len() > 0 {
-        app.bake_probes_shader = load_bake_light_probes_shader(&app.vk, &app.constants);
-
         let flags = vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
@@ -288,7 +267,7 @@ fn initialize_render(app: &mut Glim) {
             &app.vk,
             String::from("Lights"),
             &app.cpu_lights,
-            light_buffer_flags(),
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
     } else {
@@ -296,7 +275,7 @@ fn initialize_render(app: &mut Glim) {
             &app.vk,
             String::from("Lights"),
             std::mem::size_of::<Light>() as vk::DeviceSize,
-            light_buffer_flags(),
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
     }
@@ -391,10 +370,37 @@ fn initialize_render(app: &mut Glim) {
     app.albedo_array = albedo_array;
     app.emission_array = emission_array;
 
+    let config = &app.config;
+
+    app.constants = SpecializationConstants {
+        use_camera: 0,
+        light_falloff_type: config.light_falloff as u32,
+        transparent_primitive_offset: (app.opaque_mesh.indices.len() / 3) as u32,
+        emissive_triangles_count: app.emissive_triangles.len() as u32,
+        multiple_importance_sampling: config.mis as u32,
+        lightmap_group_count: app.groups.len() as u32,
+        lightmap_mode: config.lightmap_mode as u32,
+        coordinate_system: app.config.coordinate_system as u32,
+        skybox_intensity: config.skybox_intensity,
+        indirect_intensity: config.indirect_intensity,
+        lightprobe_deringing: config.lightprobe_deringing,
+        pad0: 0,
+        vertex_address: app.gpu_mesh.vertex_buffer.gpu_address,
+        indices_address: app.gpu_mesh.index_buffer.gpu_address,
+        emissive_triangles_address: app.emissive_triangles_buffer.gpu_address,
+        compacted_lightmap_address: 0,
+        lightmaps_info_address: 0,
+        compacted_visiblity_address: 0,
+        lights_address: app.gpu_lights.gpu_address,
+        compaction_buffer_address: 0,
+    };
+
+    app.preview_shader = preview::load_shader(&app.vk, &app.constants);
+
     if app.config.is_preview {
         render_preview(app);
     } else {
-        render_lightmaps(app);
+        unsafe { render_lightmaps(app) };
     }
     unsafe {
         app.vk.device.device_wait_idle().unwrap();
@@ -419,7 +425,7 @@ fn render_preview(app: &mut Glim) {
     preview::update_shader(
         &app.vk,
         &app.preview_shader,
-        app.tlas.acceleration_structure(),
+        app.tlas.acceleration_structure,
         visibility.view(),
         &albedos,
         &emissions,
@@ -487,7 +493,7 @@ fn render_preview(app: &mut Glim) {
                 preview::update_shader(
                     &app.vk,
                     &app.preview_shader,
-                    app.tlas.acceleration_structure(),
+                    app.tlas.acceleration_structure,
                     visibility.view(),
                     &albedos,
                     &emissions,
@@ -868,7 +874,7 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
         initialize_preview::update_shader(
             vk,
             shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             &visibility,
             app.gpu_mesh.index_buffer.buffer,
             app.gpu_mesh.vertex_buffer.buffer,
@@ -1113,10 +1119,19 @@ impl Glim {
             multiple_importance_sampling: 0,
             lightmap_group_count: 0,
             lightmap_mode: 0,
-            coordinate_system: config.coordinate_system as u32,
-            skybox_intensity: config.skybox_intensity,
-            indirect_intensity: config.indirect_intensity,
-            lightprobe_deringing: config.lightprobe_deringing,
+            coordinate_system: 0,
+            skybox_intensity: 0.0,
+            indirect_intensity: 0.0,
+            lightprobe_deringing: 0.0,
+            pad0: 0,
+            vertex_address: 0,
+            indices_address: 0,
+            emissive_triangles_address: 0,
+            compacted_lightmap_address: 0,
+            lightmaps_info_address: 0,
+            compacted_visiblity_address: 0,
+            lights_address: 0,
+            compaction_buffer_address: 0,
         };
 
         Self {
@@ -1138,7 +1153,6 @@ impl Glim {
             render_target,
             probes: Vec::new(),
             probes_buffer: Buffer::null(),
-            bake_probes_shader: ComputeShader::null(),
             seams: Vec::new(),
             emissive_triangles: Vec::new(),
             emissive_triangles_buffer: Buffer::null(),
@@ -1227,7 +1241,7 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
     Ok(())
 }
 
-fn render_lightmaps(app: &mut Glim) {
+unsafe fn render_lightmaps(app: &mut Glim) {
     let mut max_resolution = (1, 1);
     let mut total_pixel_count = 0;
     for group in &app.groups {
@@ -1239,6 +1253,8 @@ fn render_lightmaps(app: &mut Glim) {
 
     // let max_pixel_count = max_resolution.0 * max_resolution.1;
     // let max_pixels_size = (max_pixel_count * std::mem::size_of::<f32>() as u32) as vk::DeviceSize;
+
+    let bake_start_time = std::time::Instant::now();
 
     let mut visibility_expanded = Texture2D::new(
         &app.vk,
@@ -1254,34 +1270,35 @@ fn render_lightmaps(app: &mut Glim) {
     );
 
     let mut visibility_shader_conservative =
-        load_visibility_shader(&mut app.vk, &visibility_expanded, true, &app.constants);
+        load_rasterize_shader(&mut app.vk, &visibility_expanded, true, &app.constants);
     let mut visibility_shader_non_conservative =
-        load_visibility_shader(&mut app.vk, &visibility_expanded, false, &app.constants);
+        load_rasterize_shader(&mut app.vk, &visibility_expanded, false, &app.constants);
 
-    update_visibility_shader(
+    update_rasterize_shader(
         &app.vk,
         &visibility_shader_conservative,
         app.gpu_mesh.index_buffer.buffer,
         app.gpu_mesh.vertex_buffer.buffer,
     );
-    update_visibility_shader(
+    update_rasterize_shader(
         &app.vk,
         &visibility_shader_non_conservative,
         app.gpu_mesh.index_buffer.buffer,
         app.gpu_mesh.vertex_buffer.buffer,
     );
 
-    let mut compaction_shader = compaction_mask::load_shader(&app.vk, &app.constants);
     let mut compaction_buffer = Buffer::empty(
         &app.vk,
         "Compaction Mask".to_owned(),
         (total_pixel_count as u64 / 32) as u64 * std::mem::size_of::<u32>() as u64 * 2,
         vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
+    app.constants.compaction_buffer_address = compaction_buffer.gpu_address;
+
+    let mut compaction_shader = compaction_mask::load_shader(&app.vk, &app.constants);
     compaction_mask::update_shader(
         &app.vk,
         &compaction_shader,
@@ -1570,11 +1587,11 @@ fn render_lightmaps(app: &mut Glim) {
         "Compacted Visibility".to_owned(),
         compacted_pixels_count as u64 * (std::mem::size_of::<f32>() * 4) as u64,
         vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
+    app.constants.compacted_visiblity_address = compacted_visibility.gpu_address;
 
     let mut compact_visibility_shader = compact_visibility::load_shader(&app.vk, &app.constants);
     compact_visibility::update_shader(
@@ -1738,7 +1755,7 @@ fn render_lightmaps(app: &mut Glim) {
         update_adjust_samples_shader(
             &app.vk,
             &adjust_sample_shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             compacted_visibility.buffer,
             &albedos,
             app.gpu_mesh.index_buffer.buffer,
@@ -1801,6 +1818,7 @@ fn render_lightmaps(app: &mut Glim) {
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
+    app.constants.compacted_lightmap_address = compacted_lightmap.gpu_address;
 
     {
         let cmd = app.vk.begin_single_use_cmd();
@@ -1832,7 +1850,7 @@ fn render_lightmaps(app: &mut Glim) {
         bake_direct::update_shader(
             &app.vk,
             &bake_direct_light_shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             &albedos,
             &emissions,
             app.gpu_mesh.index_buffer.buffer,
@@ -1902,7 +1920,7 @@ fn render_lightmaps(app: &mut Glim) {
         bake_direct::update_shader(
             &app.vk,
             &bake_direct_emission_shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             &albedos,
             &emissions,
             app.gpu_mesh.index_buffer.buffer,
@@ -1965,7 +1983,7 @@ fn render_lightmaps(app: &mut Glim) {
         bake_direct_emission_shader.destroy(&app.vk);
     }
 
-    let mut group_info_buffer = {
+    let mut lightmaps_info = {
         let mut infos = Vec::with_capacity(app.groups.len());
         for group_index in 0..app.groups.len() {
             let group = &app.groups[group_index].settings;
@@ -1976,22 +1994,23 @@ fn render_lightmaps(app: &mut Glim) {
             });
         }
 
-        let group_info_buffer = Buffer::empty(
+        let lightmaps_info = Buffer::empty(
             &app.vk,
             "Lightmap Info".into(),
-            128 * std::mem::size_of::<LightmapInfo>() as u64,
-            vk::BufferUsageFlags::UNIFORM_BUFFER,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            (infos.len() * std::mem::size_of::<LightmapInfo>()) as u64,
+            vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT, // todo device local
         );
         unsafe {
             std::ptr::copy_nonoverlapping(
                 infos.as_ptr() as *const u8,
-                group_info_buffer.ptr as *mut u8,
+                lightmaps_info.ptr as *mut u8,
                 infos.len() * std::mem::size_of::<LightmapInfo>(),
             );
         }
-        group_info_buffer
+        lightmaps_info
     };
+    app.constants.lightmaps_info_address = lightmaps_info.gpu_address;
 
     if app.config.bounce_count > 0 {
         let mut indirect_shader = bake_indirect::load_shader(&app.vk, &app.constants);
@@ -2006,14 +2025,14 @@ fn render_lightmaps(app: &mut Glim) {
         bake_indirect::update_shader(
             &app.vk,
             &indirect_shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             compacted_visibility.buffer,
             &albedos,
             app.gpu_mesh.index_buffer.buffer,
             app.gpu_mesh.vertex_buffer.buffer,
             compacted_lightmap.buffer,
             compaction_buffer.buffer,
-            group_info_buffer.buffer,
+            lightmaps_info.buffer,
         );
 
         'bounces: for bounce_index in 0..app.config.bounce_count {
@@ -2075,7 +2094,9 @@ fn render_lightmaps(app: &mut Glim) {
         &app.vk,
         "Staging Buffer Lightmap".to_owned(),
         (max_resolution.0 * max_resolution.1 * 4) as u64 * std::mem::size_of::<f32>() as u64,
-        vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::STORAGE_BUFFER,
+        vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::STORAGE_BUFFER
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     );
 
@@ -2086,7 +2107,7 @@ fn render_lightmaps(app: &mut Glim) {
         staging_buffer_lightmap.buffer,
         compacted_lightmap.buffer,
         compacted_visibility.buffer,
-        group_info_buffer.buffer,
+        lightmaps_info.buffer,
     );
 
     let oidn = Oidn::load();
@@ -2133,6 +2154,9 @@ fn render_lightmaps(app: &mut Glim) {
             group_index: group_index as u32,
             dilate: group.dilate as u32,
             pad2: 0,
+            decompact_target_address: staging_buffer_lightmap.gpu_address,
+            pad3: 0,
+            pad4: 0,
         };
         let decompact_push_bytes = as_bytes(&push);
 
@@ -2360,7 +2384,7 @@ fn render_lightmaps(app: &mut Glim) {
         update_bake_light_probes_shader(
             &app.vk,
             &shader,
-            app.tlas.acceleration_structure(),
+            app.tlas.acceleration_structure,
             app.probes_buffer.buffer,
             &albedos,
             &emissions,
@@ -2369,7 +2393,7 @@ fn render_lightmaps(app: &mut Glim) {
             app.gpu_mesh.vertex_buffer.buffer,
             app.gpu_lights.buffer,
             compaction_buffer.buffer,
-            group_info_buffer.buffer,
+            lightmaps_info.buffer,
             app.skybox.view(),
             app.skybox.sampler(),
             app.emissive_triangles_buffer.buffer,
@@ -2380,6 +2404,8 @@ fn render_lightmaps(app: &mut Glim) {
             max_samples: app.config.probe_samples,
             sample_index: 0,
             probes_count: app.probes.len() as u32,
+            sh_probes_address: app.probes_buffer.gpu_address,
+            pad0: 0,
         };
 
         let probes_count = app.probes.len() as u32;
@@ -2403,28 +2429,26 @@ fn render_lightmaps(app: &mut Glim) {
             progress += 1.0;
 
             let cmd = app.vk.begin_single_use_cmd();
-            unsafe {
-                vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
 
-                vk.cmd_bind_descriptor_sets(
-                    cmd,
-                    vk::PipelineBindPoint::COMPUTE,
-                    shader.pipeline_layout,
-                    0,
-                    &[shader.descriptor_set],
-                    &[],
-                );
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                shader.pipeline_layout,
+                0,
+                &[shader.descriptor_set],
+                &[],
+            );
 
-                vk.cmd_push_constants(
-                    cmd,
-                    shader.pipeline_layout,
-                    vk::ShaderStageFlags::COMPUTE,
-                    0,
-                    &constants_bytes,
-                );
+            vk.cmd_push_constants(
+                cmd,
+                shader.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &constants_bytes,
+            );
 
-                vk.cmd_dispatch(cmd, groups_x, 1, 1);
-            };
+            vk.cmd_dispatch(cmd, groups_x, 1, 1);
             app.vk.end_single_use_cmd(cmd);
         }
 
@@ -2464,12 +2488,16 @@ fn render_lightmaps(app: &mut Glim) {
 
     compacted_lightmap.destroy(&app.vk);
     compaction_buffer.destroy(&app.vk);
-    group_info_buffer.destroy(&app.vk);
+    lightmaps_info.destroy(&app.vk);
     drop(compacted_lightmap);
     drop(compaction_buffer);
-    drop(group_info_buffer);
+    drop(lightmaps_info);
 
     if is_cancelled() {
         (log)(LogMessage::message("Bake cancelled by user"));
     }
+
+    let now = std::time::Instant::now();
+    let elapsed = now.duration_since(bake_start_time).as_secs_f32();
+    println!("Bake Complete in {}s", elapsed);
 }

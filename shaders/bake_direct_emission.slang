@@ -84,33 +84,35 @@ void main(uint3 threadID: SV_DispatchThreadID)
             }
         }
 
-        float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
-        float3 emission = bounceEmission * color.a;
-
-        if (any(emission > 0.0))
+        if (surface.emissive)
         {
-            bool isEmissiveTriange = surface.emissive;
-            if (EMISSIVE_TRIANGLES_COUNT > 0 && isEmissiveTriange)
-            {
-                float triangleArea = CalculateTriangleArea(hit.primitiveID);
-                float3 positionToLight = surface.P - positionWS;
-                float distSq = max(dot(positionToLight, positionToLight), 0.0001);
-                float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
+            float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+            float3 emission = bounceEmission * color.a;
 
-                if (cosThetaLight > 0.0)
+            if (any(emission > 0.0))
+            {
+                if (EMISSIVE_TRIANGLES_COUNT > 0)
                 {
-                    float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
-                    emission *= MISWeight(bsdfPdf, lightPdf);
+                    float triangleArea = CalculateTriangleArea(hit.primitiveID);
+                    float3 positionToLight = surface.P - positionWS;
+                    float distSq = max(dot(positionToLight, positionToLight), 0.0001);
+                    float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
+
+                    if (cosThetaLight > 0.0)
+                    {
+                        float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
+                        emission *= MISWeight(bsdfPdf, lightPdf);
+                        color.rgb += emission;
+                        dominantDirection.xyz += ray.D * Luminance(emission);
+                        AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
+                    }
+                }
+                else
+                {
                     color.rgb += emission;
                     dominantDirection.xyz += ray.D * Luminance(emission);
                     AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
                 }
-            }
-            else
-            {
-                color.rgb += emission;
-                dominantDirection.xyz += ray.D * Luminance(emission);
-                AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
             }
         }
     }

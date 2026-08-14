@@ -19,16 +19,14 @@ pub struct PushConstants {
     pub group_index: u32,
     pub dilate: u32,
     pub pad2: u32,
+
+    pub decompact_target_address: u64,
+    pub pad3: u32,
+    pub pad4: u32,
 }
 
 pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> ComputeShader {
     let mut bindings = Vec::new();
-
-    bind_compaction_buffer(&mut bindings);
-    bind_decompact_target(&mut bindings);
-    bind_compacted_lightmap(&mut bindings);
-    bind_compacted_visibility_buffer(&mut bindings);
-    bind_lightmap_info(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
@@ -62,82 +60,7 @@ pub fn update_shader(
     compacted_visibility: vk::Buffer,
     lightmap_info: vk::Buffer,
 ) {
-    let mut descriptor_writes = Vec::new();
-
-    // CompactionBuffer
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compaction,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 15,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // DecompactTarget
-    let info = [vk::DescriptorBufferInfo {
-        buffer: decompact_target,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 17,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // CompactedLightmap
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compacted_lightmap,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 18,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // CompactedVisibility
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compacted_visibility,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 16,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // LightmapInfo
-    let info = [vk::DescriptorBufferInfo {
-        buffer: lightmap_info,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 19,
-        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
+    let descriptor_writes = Vec::new();
 
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }

@@ -16,14 +16,15 @@ mod tests {
 
     const TEST_NAME: &str = "monkey_2";
 
-    const DIRECT_LIGHT_SAMPLES: u32 = 64;
-    const DIRECT_EMISSION_SAMPLES: u32 = 512;
+    const DIRECT_LIGHT_SAMPLES: u32 = 256 * 4;
+    const DIRECT_EMISSION_SAMPLES: u32 = 1024 * 4;
     const INDIRECT_SAMPLES: u32 = 256;
     const LIGHT_PROBE_SAMPLES: u32 = 4096;
     const BOUNCE_COUNT: u32 = 5;
     const DENOISE: bool = false;
     const DILATE: bool = false;
     const FIX_SEAMS: bool = false;
+    const MIS: bool = true;
 
     #[test]
     fn test_preview() {
@@ -61,7 +62,7 @@ mod tests {
             lightprobes_read_callback: test_probes_callback,
             probe_samples: LIGHT_PROBE_SAMPLES,
             light_falloff: LightFalloffType::InverseSquare,
-            mis: true,
+            mis: MIS,
             direct_light_samples: DIRECT_LIGHT_SAMPLES,
             direct_emission_samples: DIRECT_EMISSION_SAMPLES,
             indirect_samples: INDIRECT_SAMPLES,

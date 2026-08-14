@@ -27,10 +27,6 @@ pub fn load_shader(vk: &VulkanContext, constants: &SpecializationConstants) -> C
     bind_albedos(&mut bindings, constants.lightmap_group_count);
     bind_emissions(&mut bindings, constants.lightmap_group_count);
     bind_lightmap_diffuse(&mut bindings);
-    bind_indices(&mut bindings);
-    bind_vertices(&mut bindings);
-    bind_lights(&mut bindings);
-    bind_emissive_triangles(&mut bindings);
     bind_skybox(&mut bindings);
 
     let map_entries = create_specialization_map_entries();
@@ -149,66 +145,6 @@ pub fn update_shader(
         ..Default::default()
     };
     write = write.image_info(&info);
-    descriptor_writes.push(write);
-
-    // Indices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: indices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // Vertices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: vertices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // Lights
-    let info = [vk::DescriptorBufferInfo {
-        buffer: lights,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 10,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // EmissiveTriangles
-    let info = [vk::DescriptorBufferInfo {
-        buffer: emissive_triangles,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 12,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
     // Skybox

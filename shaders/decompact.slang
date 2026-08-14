@@ -14,6 +14,10 @@ struct PushConstants
     uint groupIndex;
     uint dilate;
     uint pad2;
+
+    uint64_t decompactTargetAddress;
+    uint pad3;
+    uint pad4;
 };
 
 // only one pixel dilation in order to make the denoiser not sharpen the edges
@@ -121,6 +125,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint linearIndex = coords.y * Push.resolution.x + coords.x;
     uint compactIndex = GetCompactedIndex(float2(coords), Push.groupIndex, false);
     bool active = compactIndex != uint::maxValue;
+
+    let DecompactTarget = Ptr<float4, Access.ReadWrite>(Push.decompactTargetAddress);
 
     if (!active)
     {

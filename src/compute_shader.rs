@@ -119,6 +119,9 @@ pub struct BakeLightProbesPushConstants {
     pub max_samples: u32,
     pub sample_index: u32,
     pub probes_count: u32,
+
+    pub sh_probes_address: u64,
+    pub pad0: u64,
 }
 
 #[repr(C)]
@@ -138,20 +141,12 @@ pub fn load_bake_light_probes_shader(
     bind_tlas(&mut bindings);
     bind_albedos(&mut bindings, constants.lightmap_group_count);
     bind_emissions(&mut bindings, constants.lightmap_group_count);
-    bind_probe_sh(&mut bindings);
-    bind_indices(&mut bindings);
-    bind_vertices(&mut bindings);
-    bind_lights(&mut bindings);
-    bind_compacted_lightmap(&mut bindings);
-    bind_compaction_buffer(&mut bindings);
-    bind_lightmap_info(&mut bindings);
     bind_skybox(&mut bindings);
-    bind_emissive_triangles(&mut bindings);
 
     let push_constant_ranges = [vk::PushConstantRange {
         stage_flags: vk::ShaderStageFlags::COMPUTE,
         offset: 0,
-        size: std::mem::size_of::<BakeLightProbesPushConstants>() as u32,
+        size: size_of::<BakeLightProbesPushConstants>() as u32,
     }];
 
     let map_entries = create_specialization_map_entries();
@@ -238,111 +233,6 @@ pub fn update_bake_light_probes_shader(
     write = write.image_info(&infos);
     descriptor_writes.push(write);
 
-    // ProbeSH
-    let info = [vk::DescriptorBufferInfo {
-        buffer: probes,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 7,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // Indices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: indices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // Vertices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: vertices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // Lights
-    let info = [vk::DescriptorBufferInfo {
-        buffer: lights,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 10,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // CompactedLightmap
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compacted_lightmap,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 18,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // CompactionBuffer
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compaction,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 15,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // LightmapInfo
-    let info = [vk::DescriptorBufferInfo {
-        buffer: lightmap_info,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 19,
-        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
     // Skybox
     let info = [vk::DescriptorImageInfo {
         image_view: skybox,
@@ -371,21 +261,6 @@ pub fn update_bake_light_probes_shader(
     write = write.image_info(&info);
     descriptor_writes.push(write);
 
-    // EmissiveTriangles
-    let info = [vk::DescriptorBufferInfo {
-        buffer: emissive_triangles,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 12,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }
 
@@ -396,9 +271,6 @@ pub fn load_adjust_samples_shader(
     let mut bindings = Vec::new();
 
     bind_tlas(&mut bindings);
-    bind_compacted_visibility_buffer(&mut bindings);
-    bind_indices(&mut bindings);
-    bind_vertices(&mut bindings);
     bind_albedos(&mut bindings, constants.lightmap_group_count);
 
     let map_entries = create_specialization_map_entries();
@@ -443,51 +315,6 @@ pub fn update_adjust_samples_shader(
         .dst_binding(0)
         .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
         .descriptor_count(1);
-    descriptor_writes.push(write);
-
-    // CompactedVisibility
-    let info = [vk::DescriptorBufferInfo {
-        buffer: compacted_visibility,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 16,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // Indices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: indices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // Vertices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: vertices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
     descriptor_writes.push(write);
 
     // Albedo

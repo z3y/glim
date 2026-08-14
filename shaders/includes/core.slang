@@ -246,7 +246,7 @@ bool UseSmoothPosition(Surface surface)
 uint GetCompactedIndex(float2 uv, uint lightmapGroup, bool flipY = true)
 {
     uint2 coords = uint2(floor(uv));
-    LightmapInfo info = LightmapGroups[lightmapGroup];
+    LightmapInfo info = LightmapsInfo[lightmapGroup];
 
     if (coords.x >= info.resolution.x || coords.y >= info.resolution.y)
     {

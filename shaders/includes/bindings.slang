@@ -8,10 +8,6 @@
 [[vk::binding(0, 0)]]
 RaytracingAccelerationStructure TopLevelAS;
 #else
-[[vk::binding(0, 0)]]
-StructuredBuffer<float4> CWBVHNodes;
-[[vk::binding(1, 0)]]
-StructuredBuffer<float4> CWBVHTriangles;
 #endif
 
 [[vk::binding(2, 0)]]
@@ -27,53 +23,6 @@ Texture2D<float4> Emission[];
 [[vk::binding(4, 0)]]
 [[vk::image_format("rgba32f")]]
 RWTexture2D<float4> LightmapDiffuse;
-
-[[vk::binding(7, 0)]]
-RWStructuredBuffer<SHProbeL2> SHProbes;
-
-[[vk::binding(8, 0)]]
-StructuredBuffer<uint> Indices;
-
-[[vk::binding(9, 0)]]
-StructuredBuffer<Vertex> Vertices;
-
-[[vk::binding(10, 0)]]
-StructuredBuffer<Light> Lights;
-
-[[vk::binding(11, 0)]]
-[[vk::image_format("rgba32f")]]
-RWTexture2D<float4> NormalsBuffer;
-
-[[vk::binding(12, 0)]]
-StructuredBuffer<uint> EmissiveTriangles;
-
-[[vk::binding(14, 0)]]
-RWStructuredBuffer<float> DominantDirection;
-
-[[vk::binding(15, 0)]]
-RWStructuredBuffer<uint2> CompactionBuffer;
-
-[[vk::binding(16, 0)]]
-RWStructuredBuffer<float4> CompactedVisibility;
-
-[[vk::binding(17, 0)]]
-RWStructuredBuffer<float4> DecompactTarget;
-
-[[vk::binding(18, 0)]]
-RWStructuredBuffer<float> CompactedLightmap;
-
-struct LightmapInfo
-{
-    uint2 resolution;
-    uint compactionOffset;
-    uint pad;
-};
-
-[[vk::binding(19, 0)]]
-cbuffer LightmapInfoBuffer
-{
-    LightmapInfo LightmapGroups[128];
-};
 
 [[vk::binding(20, 0)]]
 [[vk::image_format("rgba32f")]]
@@ -104,6 +53,44 @@ const float SKYBOX_INTENSITY;
 const float INDIRECT_INTENSITY;
 [vk::constant_id(10)]
 const float LIGHTPROBE_DERINGING;
+
+[vk::constant_id(11)]
+const uint64_t VERTEX_ADDRESS;
+static let Vertices = Ptr<Vertex, Access.Read>(VERTEX_ADDRESS);
+
+[vk::constant_id(12)]
+const uint64_t INDICES_ADDRESS;
+static let Indices = Ptr<uint, Access.Read>(INDICES_ADDRESS);
+
+[vk::constant_id(13)]
+const uint64_t EMISSIVE_TRIANGLES_ADDRESS;
+static let EmissiveTriangles = Ptr<uint, Access.Read>(EMISSIVE_TRIANGLES_ADDRESS);
+
+[vk::constant_id(14)]
+const uint64_t COMPACTED_LIGHTMAP_ADDRESS;
+static let CompactedLightmap = Ptr<float, Access.ReadWrite>(COMPACTED_LIGHTMAP_ADDRESS);
+
+[vk::constant_id(15)]
+const uint64_t LIGHTMAPS_INFO_ADDRESS;
+struct LightmapInfo
+{
+    uint2 resolution;
+    uint compactionOffset;
+    uint pad;
+};
+static let LightmapsInfo = Ptr<LightmapInfo, Access.Read>(LIGHTMAPS_INFO_ADDRESS);
+
+[vk::constant_id(16)]
+const uint64_t COMPACTED_VISIBILITY_ADDRESS;
+static let CompactedVisibility = Ptr<float4, Access.ReadWrite>(COMPACTED_VISIBILITY_ADDRESS);
+
+[vk::constant_id(17)]
+const uint64_t LIGHTS_ADDRESS;
+static let Lights = Ptr<Light, Access.Read>(LIGHTS_ADDRESS);
+
+[vk::constant_id(18)]
+const uint64_t COMPACTION_BUFFER_ADDRESS;
+static let CompactionBuffer = Ptr<uint2, Access.ReadWrite>(COMPACTION_BUFFER_ADDRESS);
 
 enum LightmapMode : uint
 {
