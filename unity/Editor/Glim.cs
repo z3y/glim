@@ -514,7 +514,7 @@ namespace Glim
                     vertices = mesh.vertices,
                     normals = mesh.normals,
                     uvs = mesh.uv,
-                    triangles = mesh.triangles,
+                    indices = mesh.triangles,
                     groupIndex = groupIndex,
                     backfaceGI = false,
                     transparent = hasHoles ? true : false,
@@ -666,7 +666,7 @@ namespace Glim
             public Vector3[] vertices;
             public Vector3[] normals;
             public Vector2[] uvs;
-            public int[] triangles;
+            public int[] indices;
             public uint groupIndex;
             public bool backfaceGI;
             public bool transparent;
@@ -677,115 +677,158 @@ namespace Glim
         {
             var datas = new List<MeshData>();
 
-            for (int i = 0; i < renderers.Length; i++)
+            var vertices = new List<Vector3>();
+            var normals = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var indices = new List<int>();
+
+            var localVertices = new List<Vector3>();
+            var localNormals = new List<Vector3>();
+            var localUvs = new List<Vector2>();
+            var localIndices = new List<int>();
+            var remap = new Dictionary<int, int>();
+
+            for (int rendererIndex = 0; rendererIndex < renderers.Length; rendererIndex++)
             {
-                var filter = renderers[i].GetComponent<MeshFilter>();
+                var mr = renderers[rendererIndex] as MeshRenderer;
+                if (!mr)
+                {
+                    continue;
+                }
+
+                var filter = mr.GetComponent<MeshFilter>();
                 if (!filter)
                 {
                     continue;
                 }
 
-                var transform = filter.transform;
-                var mesh = filter.sharedMesh;
+                var transform = mr.transform;
 
-                var vertices = mesh.vertices;
-                var normals = mesh.normals;
-                var triangles = mesh.triangles;
+                var enlightenVertexStream = mr.enlightenVertexStream;
+                var additionalVertexStreams = mr.additionalVertexStreams;
 
-                var uvs = mesh.HasVertexAttribute(VertexAttribute.TexCoord1) ? mesh.uv2 : mesh.uv;
-                int subMeshCount = mesh.subMeshCount;
-                // todo backfacegi, emissive and transparent per submesh instead of entire mesh
-                bool backfaceGI = false;
-                bool transparent = false;
-                bool emissive = false;
-                if (renderers[i] is MeshRenderer mr)
+                Mesh mesh;
+                if (enlightenVertexStream)
                 {
-                    var evs = mr.enlightenVertexStream;
-                    var avs = mr.additionalVertexStreams;
-
-                    if (evs && evs.HasVertexAttribute(VertexAttribute.TexCoord1))
-                    {
-                        uvs = evs.uv2;
-                    }
-                    else if (avs && avs.HasVertexAttribute(VertexAttribute.TexCoord1))
-                    {
-                        uvs = avs.uv2;
-                    }
-
-                    var mats = mr.sharedMaterials;
-                    for (int j = 0; j < mats.Length; j++)
-                    {
-                        if (j >= subMeshCount)
-                        {
-                            break;
-                        }
-
-                        Material mat = mats[j];
-                        if (mat == null)
-                        {
-                            continue;
-                        }
-
-                        if (mat.doubleSidedGI)
-                        {
-                            backfaceGI = true;
-                        }
-
-                        if (MetaTexture.IsMaterialTransparent(mat))
-                        {
-                            transparent = true;
-                        }
-
-                        if (MetaTexture.IsMaterialEmissive(mat))
-                        {
-                            emissive = true;
-                        }
-                    }
+                    mesh = enlightenVertexStream;
+                }
+                else if (additionalVertexStreams)
+                {
+                    mesh = additionalVertexStreams;
+                }
+                else
+                {
+                    mesh = filter.sharedMesh;
                 }
 
-
-                transform.TransformPoints(vertices);
-
-                // todo move to rust
-                Matrix4x4 normalMatrix = transform.localToWorldMatrix.inverse.transpose;
-
-                for (int j = 0; j < normals.Length; j++)
+                if (!mesh)
                 {
-                    normals[j] = normalMatrix.MultiplyVector(normals[j]).normalized;
+                    continue;
+                }
+
+                mesh.GetVertices(vertices);
+                mesh.GetNormals(normals);
+                if (mesh.HasVertexAttribute(VertexAttribute.TexCoord1))
+                {
+                    mesh.GetUVs(1, uvs);
+                }
+                else
+                {
+                    mesh.GetUVs(0, uvs);
+                }
+
+                int subMeshCount = mesh.subMeshCount;
+                var materials = mr.sharedMaterials;
+
+                for (int i = 0; i < vertices.Count; i++)
+                {
+                    vertices[i] = transform.TransformPoint(vertices[i]);
+                }
+
+                Matrix4x4 normalMatrix = transform.localToWorldMatrix.inverse.transpose;
+                for (int normalIndex = 0; normalIndex < normals.Count; normalIndex++)
+                {
+                    normals[normalIndex] = normalMatrix.MultiplyVector(normals[normalIndex]).normalized;
                 }
 
                 bool isNegativeScale = transform.localToWorldMatrix.determinant < 0.0f;
-                if (isNegativeScale)
-                {
-
-                    for (int j = 0; j < triangles.Length; j += 3)
-                    {
-                        (triangles[j + 1], triangles[j]) = (triangles[j], triangles[j + 1]);
-                    }
-                }
 
 
-                Vector4 scaleOffset = renderers[i].lightmapScaleOffset;
+                Vector4 scaleOffset = mr.lightmapScaleOffset;
                 Vector2 scale = new(scaleOffset.x, scaleOffset.y);
                 Vector2 offset = new(scaleOffset.z, scaleOffset.w);
-                for (int j = 0; j < uvs.Length; j++)
+                for (int uvIndex = 0; uvIndex < uvs.Count; uvIndex++)
                 {
-                    uvs[j] = uvs[j] * scale + offset;
+                    uvs[uvIndex] = uvs[uvIndex] * scale + offset;
                 }
 
-                var data = new MeshData
+                for (int submeshIndex = 0; submeshIndex < materials.Length; submeshIndex++)
                 {
-                    vertices = vertices,
-                    normals = normals,
-                    uvs = uvs,
-                    triangles = triangles,
-                    groupIndex = groupIndex,
-                    backfaceGI = backfaceGI,
-                    transparent = transparent,
-                    emissive = emissive,
-                };
+                    if (submeshIndex >= subMeshCount)
+                    {
+                        break;
+                    }
 
-                datas.Add(data);
+                    Material material = materials[submeshIndex];
+                    if (material == null)
+                    {
+                        continue;
+                    }
+
+                    bool backfaceGI = material.doubleSidedGI;
+                    bool transparent = MetaTexture.IsMaterialTransparent(material);
+                    bool emissive = MetaTexture.IsMaterialEmissive(material);
+
+                    mesh.GetIndices(indices, submeshIndex);
+
+                    if (isNegativeScale)
+                    {
+                        for (int j = 0; j < indices.Count; j += 3)
+                        {
+                            (indices[j + 1], indices[j]) = (indices[j], indices[j + 1]);
+                        }
+                    }
+
+                    remap.Clear();
+                    localVertices.Clear();
+                    localNormals.Clear();
+                    localUvs.Clear();
+                    localIndices.Clear();
+                    localIndices.Capacity = indices.Count;
+
+                    for (int j = 0; j < indices.Count; j++)
+                    {
+                        int globalIndex = indices[j];
+
+                        if (!remap.TryGetValue(globalIndex, out int localIndex))
+                        {
+                            localIndex = localVertices.Count;
+                            remap[globalIndex] = localIndex;
+
+                            localVertices.Add(vertices[globalIndex]);
+                            localNormals.Add(normals[globalIndex]);
+                            localUvs.Add(uvs[globalIndex]);
+                        }
+
+                        localIndices.Add(localIndex);
+                    }
+
+
+                    var data = new MeshData
+                    {
+                        vertices = localVertices.ToArray(),
+                        normals = localNormals.ToArray(),
+                        uvs = localUvs.ToArray(),
+                        indices = localIndices.ToArray(),
+                        groupIndex = groupIndex,
+                        backfaceGI = backfaceGI,
+                        transparent = transparent,
+                        emissive = emissive,
+                    };
+
+                    datas.Add(data);
+
+                }
             }
 
             return datas;

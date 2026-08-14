@@ -608,7 +608,7 @@ namespace Glim
                             fixed (Vector3* vPtr = data.vertices)
                             fixed (Vector3* nPtr = data.normals)
                             fixed (Vector2* uPtr = data.uvs)
-                            fixed (int* iPtr = data.triangles)
+                            fixed (int* iPtr = data.indices)
                             {
                                 var exportedMesh = new Bindings.Mesh
                                 {
@@ -617,7 +617,7 @@ namespace Glim
                                     uvs = uPtr,
                                     indices = (uint*)iPtr,
                                     vertices_length = (uint)data.vertices.Length,
-                                    indices_length = (uint)data.triangles.Length,
+                                    indices_length = (uint)data.indices.Length,
                                     lightmap_group = data.groupIndex,
                                     backface_gi = data.backfaceGI,
                                     transparent = data.transparent,
