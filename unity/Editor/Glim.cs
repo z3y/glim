@@ -726,14 +726,14 @@ namespace Glim
                 var additionalVertexStreams = mr.additionalVertexStreams;
                 if (enlightenVertexStream)
                 {
-                    if (mesh.HasVertexAttribute(VertexAttribute.TexCoord1))
+                    if (enlightenVertexStream.HasVertexAttribute(VertexAttribute.TexCoord1))
                     {
                         enlightenVertexStream.GetUVs(1, uvs);
                     }
                 }
                 else if (additionalVertexStreams)
                 {
-                    if (mesh.HasVertexAttribute(VertexAttribute.TexCoord1))
+                    if (additionalVertexStreams.HasVertexAttribute(VertexAttribute.TexCoord1))
                     {
                         additionalVertexStreams.GetUVs(1, uvs);
                     }
