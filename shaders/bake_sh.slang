@@ -187,7 +187,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         {
             float3 emission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
 
-            if (any(emission > 0.0))
+            if (surface.emissive && any(emission > 0.0))
             {
                 bool isEmissiveTriange = surface.emissive;
                 if (EMISSIVE_TRIANGLES_COUNT > 0 && isEmissiveTriange)
