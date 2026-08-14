@@ -704,23 +704,7 @@ namespace Glim
 
                 var transform = mr.transform;
 
-                var enlightenVertexStream = mr.enlightenVertexStream;
-                var additionalVertexStreams = mr.additionalVertexStreams;
-
-                Mesh mesh;
-                if (enlightenVertexStream)
-                {
-                    mesh = enlightenVertexStream;
-                }
-                else if (additionalVertexStreams)
-                {
-                    mesh = additionalVertexStreams;
-                }
-                else
-                {
-                    mesh = filter.sharedMesh;
-                }
-
+                Mesh mesh = filter.sharedMesh;
                 if (!mesh)
                 {
                     continue;
@@ -728,6 +712,7 @@ namespace Glim
 
                 mesh.GetVertices(vertices);
                 mesh.GetNormals(normals);
+
                 if (mesh.HasVertexAttribute(VertexAttribute.TexCoord1))
                 {
                     mesh.GetUVs(1, uvs);
@@ -735,6 +720,23 @@ namespace Glim
                 else
                 {
                     mesh.GetUVs(0, uvs);
+                }
+
+                var enlightenVertexStream = mr.enlightenVertexStream;
+                var additionalVertexStreams = mr.additionalVertexStreams;
+                if (enlightenVertexStream)
+                {
+                    if (mesh.HasVertexAttribute(VertexAttribute.TexCoord1))
+                    {
+                        enlightenVertexStream.GetUVs(1, uvs);
+                    }
+                }
+                else if (additionalVertexStreams)
+                {
+                    if (mesh.HasVertexAttribute(VertexAttribute.TexCoord1))
+                    {
+                        additionalVertexStreams.GetUVs(1, uvs);
+                    }
                 }
 
                 int subMeshCount = mesh.subMeshCount;
