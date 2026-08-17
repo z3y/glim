@@ -80,8 +80,11 @@ impl VulkanContext {
 
         for ext in &config.window_extensions {
             extensions.push(*ext);
-            // let str = unsafe { CStr::from_ptr(*ext) };
-            // println!("Adding: {:?}", str);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            extensions.push(vk::KHR_PORTABILITY_ENUMERATION_NAME.as_ptr());
         }
 
         println!("Validation Layers: {} ", config.enable_validation_layers);
@@ -107,6 +110,11 @@ impl VulkanContext {
 
         if config.enable_validation_layers {
             create_info = create_info.push_next(&mut debug_create_info);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            create_info.flags |= vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR;
         }
 
         let instance = unsafe { entry.create_instance(&create_info, None).unwrap() };
@@ -178,14 +186,14 @@ impl VulkanContext {
 
         // device_extensions.push(vk::KHR_BUFFER_DEVICE_ADDRESS_NAME.as_ptr());
 
-        let avalilable_extensions = unsafe {
+        let available_extensions = unsafe {
             instance
                 .enumerate_device_extension_properties(physical_device)
                 .unwrap()
         };
 
         let mut has_ray_query = false;
-        for ext in avalilable_extensions {
+        for ext in &available_extensions {
             if ext.extension_name_as_c_str().unwrap() == vk::KHR_RAY_QUERY_NAME {
                 has_ray_query = true;
             }
@@ -203,8 +211,16 @@ impl VulkanContext {
             device_extensions.push(vk::KHR_RAY_QUERY_NAME.as_ptr());
         }
 
+        #[cfg(target_os = "macos")]
+        {
+            if available_extensions.iter().any(|ext| {
+                ext.extension_name_as_c_str().unwrap() == vk::KHR_PORTABILITY_SUBSET_NAME
+            }) {
+                device_extensions.push(vk::KHR_PORTABILITY_SUBSET_NAME.as_ptr());
+            }
+        }
+
         let device_features = vk::PhysicalDeviceFeatures {
-            geometry_shader: vk::TRUE,
             shader_int64: vk::TRUE,
             ..Default::default()
         };
