@@ -89,14 +89,22 @@ impl Oidn {
         let lib_name = if cfg!(windows) {
             "OpenImageDenoise.dll"
         } else if cfg!(target_os = "macos") {
-            "libOpenImageDenoise.dylib"
+            "libOpenImageDenoise.2.dylib"
         } else {
             "libOpenImageDenoise.so.2"
         };
 
-        // todo proper oidn path
         let lib_path = if let Ok(root) = std::env::var("OpenImageDenoise_DIR") {
             std::path::Path::new(&root).join("bin").join(lib_name)
+        } else if cfg!(target_os = "macos") {
+            [
+                "/opt/homebrew/lib", // Apple Silicon Homebrew
+                "/usr/local/lib",    // Intel Homebrew
+            ]
+            .iter()
+            .map(|dir| std::path::Path::new(dir).join(lib_name))
+            .find(|p| p.exists())
+            .unwrap_or_else(|| std::path::Path::new(lib_name).to_path_buf())
         } else {
             std::path::Path::new(lib_name).to_path_buf()
         };

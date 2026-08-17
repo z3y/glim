@@ -51,13 +51,53 @@ pub struct VulkanContext {
     pub as_device: Option<khr::acceleration_structure::Device>,
 }
 
+// thanks owlboy for the help
+#[cfg(target_os = "macos")]
+unsafe fn load_vulkan_entry() -> Entry {
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+
+    match std::env::var("GLIM_VULKAN_LOADER") {
+        Ok(path) if !path.is_empty() => candidates.push(path.into()),
+        _ => {}
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        candidates.push(std::path::Path::new(&home).join("lib/libvulkan.dylib"));
+    }
+
+    candidates.push("/usr/local/lib/libvulkan.dylib".into());
+    candidates.push("/opt/homebrew/opt/vulkan-loader/lib/libvulkan.dylib".into());
+    candidates.push("/opt/homebrew/lib/libvulkan.dylib".into());
+
+    for path in &candidates {
+        if !path.exists() {
+            continue;
+        }
+
+        match unsafe { Entry::load_from(path) } {
+            Ok(entry) => {
+                println!("Vulkan loader: {}", path.display());
+                return entry;
+            }
+            Err(err) => println!("Vulkan loader at {} failed: {err}", path.display()),
+        }
+    }
+
+    unsafe { Entry::load() }.unwrap()
+}
+
+#[cfg(not(target_os = "macos"))]
+unsafe fn load_vulkan_entry() -> Entry {
+    unsafe { Entry::load() }.unwrap()
+}
+
 impl VulkanContext {
     pub fn new(
         config: &VulkanConfig,
         create_surface_callback: impl Fn(&Instance) -> vk::SurfaceKHR,
     ) -> Self {
         // let entry = ash::Entry::linked();
-        let entry = unsafe { ash::Entry::load().unwrap() };
+        let entry = unsafe { load_vulkan_entry() };
 
         const APP_NAME: &CStr = c"glim";
         const VALIDATION_LAYER_NAME: &CStr = c"VK_LAYER_KHRONOS_validation";
