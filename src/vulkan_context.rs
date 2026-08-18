@@ -96,7 +96,6 @@ impl VulkanContext {
         config: &VulkanConfig,
         create_surface_callback: impl Fn(&Instance) -> vk::SurfaceKHR,
     ) -> Self {
-        // let entry = ash::Entry::linked();
         let entry = unsafe { load_vulkan_entry() };
 
         const APP_NAME: &CStr = c"glim";

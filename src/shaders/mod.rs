@@ -236,16 +236,6 @@ pub fn bind_emissions(
     });
 }
 
-pub fn bind_probe_sh(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 7,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        ..Default::default()
-    });
-}
-
 pub fn bind_skybox(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
     bindings.push(vk::DescriptorSetLayoutBinding {
         binding: 20,

@@ -28,6 +28,7 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
 - Currently requires a GPU with the `VK_KHR_ray_query` extension, however it will support any GPU with a software BVH in the future. Check GPU support here `https://vulkan.gpuinfo.org/listdevices.php`, most modern GPUs should work.
 - While the lightmapper is fully working, it is still in early stages, theres room for improvement and it might lack some features (Check the [TODO](./TODO.md) list)
+- Glim can work on macOS via MoltenVK with `VK_KHR_ray_query`, however the stock MoltenVK does not yet implement it. There is a [pending PR](https://github.com/KhronosGroup/MoltenVK/pull/2771) that contains the required features. You can temporarily build MoltenVK from that fork, or use the version from https://github.com/owlboy/glim-moltenvk-dist/. Glim releases also do not include macOS builds currently so you would have to also [build](#building) it yourself.
 
 ## Support
 - If you'd like to see it further improved, consider supporting on [Patreon](https://patreon.com/z3y)
@@ -49,6 +50,9 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 
 #### Linux
 - Fedora Linux: `sudo dnf install oidn`
+
+#### macOS
+- `brew install open-image-denoise`
 
 ### Lightmapper Setup
 
