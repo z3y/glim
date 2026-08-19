@@ -309,37 +309,11 @@ pub fn load_rasterize_shader(
 
     let stage_flags = vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::VERTEX;
 
-    // Indices
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags,
-        ..Default::default()
-    });
-
-    // Vertices
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-        stage_flags,
-        ..Default::default()
-    });
-
     // Albedo
     bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 3,
+        binding: ShaderBinding::Albedos as u32,
         descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
         descriptor_count: constants.lightmap_group_count,
-        stage_flags: vk::ShaderStageFlags::FRAGMENT,
-        ..Default::default()
-    });
-
-    bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: 6,
-        descriptor_type: vk::DescriptorType::SAMPLER,
-        descriptor_count: 1,
         stage_flags: vk::ShaderStageFlags::FRAGMENT,
         ..Default::default()
     });
@@ -368,45 +342,4 @@ pub fn load_rasterize_shader(
         conservative,
     );
     shader
-}
-
-pub fn update_rasterize_shader(
-    vk: &VulkanContext,
-    shader: &GraphicsShader,
-    indices: vk::Buffer,
-    vertices: vk::Buffer,
-) {
-    let mut descriptor_writes = Vec::new();
-
-    // Indices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: indices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 8,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    // Vertices
-    let info = [vk::DescriptorBufferInfo {
-        buffer: vertices,
-        offset: 0,
-        range: vk::WHOLE_SIZE,
-    }];
-    let mut write = vk::WriteDescriptorSet {
-        dst_set: shader.descriptor_set,
-        dst_binding: 9,
-        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-        ..Default::default()
-    };
-    write = write.buffer_info(&info);
-    descriptor_writes.push(write);
-
-    unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }

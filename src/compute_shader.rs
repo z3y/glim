@@ -2,7 +2,7 @@ use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
 
-use crate::{as_bytes, shaders::*, vulkan_context::VulkanContext};
+use crate::vulkan_context::VulkanContext;
 
 pub struct ComputeShader {
     module: vk::ShaderModule,

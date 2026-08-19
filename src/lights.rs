@@ -1,5 +1,3 @@
-use ash::vk::{self};
-
 use crate::math::{Vector2, Vector3};
 
 #[repr(u32)]

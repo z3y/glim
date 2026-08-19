@@ -13,7 +13,6 @@ use glfw_sys::{
 use crate::bindings::*;
 use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
-use crate::graphics_shader::update_rasterize_shader;
 use crate::math::{Vector2, Vector3};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
@@ -1301,19 +1300,6 @@ unsafe fn render_lightmaps(app: &mut Glim) {
     let mut visibility_shader_non_conservative =
         load_rasterize_shader(&mut app.vk, &visibility_expanded, false, &app.constants);
 
-    update_rasterize_shader(
-        &app.vk,
-        &visibility_shader_conservative,
-        app.gpu_mesh.index_buffer.buffer,
-        app.gpu_mesh.vertex_buffer.buffer,
-    );
-    update_rasterize_shader(
-        &app.vk,
-        &visibility_shader_non_conservative,
-        app.gpu_mesh.index_buffer.buffer,
-        app.gpu_mesh.vertex_buffer.buffer,
-    );
-
     let mut compaction_buffer = Buffer::empty(
         &app.vk,
         "Compaction Mask".to_owned(),
@@ -2229,7 +2215,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         ShaderName::Decompact,
         &app.constants,
         size_of::<PushConstants>(),
-        &[ShaderBinding::Emissions],
+        &[],
     );
 
     let mut staging_buffer_lightmap = Buffer::empty(
