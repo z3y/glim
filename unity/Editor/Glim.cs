@@ -421,7 +421,7 @@ namespace Glim
                         }
 
                         float coverage = UVPacking.uvpacker_get_coverage(packer);
-                        Debug.Log($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
+                        Bake.bakeMessages.AppendLine($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
 
                         lightmapGroup.lightmapUVHash = newHash;
                         EditorUtility.SetDirty(lightmapper);
@@ -438,7 +438,7 @@ namespace Glim
                 }
                 else
                 {
-                    Debug.Log($"Group {groupIndex} using cached lightmap UVs");
+                    Bake.bakeMessages.AppendLine($"Group {groupIndex} using cached lightmap UVs");
                 }
 
                 if (!config.is_preview)

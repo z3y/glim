@@ -293,10 +293,13 @@ fn initialize_render(app: &mut Glim) {
         &app.transparent_mesh,
         &app.groups,
     );
+
     let message = format!(
-        "Created scene with Vertices: {} Triangles: {}",
-        app.opaque_mesh.vertices.len() + app.transparent_mesh.vertices.len(),
-        total_triangles,
+        "Created scene with Opaque (Vertices: {} Triangles: {}) and Transparent (Vertices: {} Triangles: {})",
+        app.opaque_mesh.vertices.len(),
+        app.opaque_mesh.indices.len() / 3,
+        app.transparent_mesh.vertices.len(),
+        app.transparent_mesh.indices.len() / 3,
     );
 
     (app.config.log_callback)(LogMessage::message(&message));

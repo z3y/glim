@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -35,6 +36,7 @@ namespace Glim
 
         static volatile float _progress = 0f;
         static volatile string _bakeMessage = "";
+        public static StringBuilder bakeMessages = new();
         static volatile bool _isPreview = false;
         static volatile bool _cancelRequested = false;
 
@@ -56,7 +58,7 @@ namespace Glim
         [AOT.MonoPInvokeCallback(typeof(Bindings.ReadbackProbesCallback))]
         public static void OnReadbackLightprobes(Bindings.LightprobesReadbackData data)
         {
-            Debug.Log($"Received Probes {data.probes_count}");
+            bakeMessages.AppendLine($"Received Probes {data.probes_count}");
             var probes = data.GetProbes();
 
             _bakeProbesResults.AddRange(probes);
@@ -73,7 +75,7 @@ namespace Glim
             if (data.ty == 0) // info
             {
                 _bakeMessage = data.message.ToString();
-                Debug.Log(_bakeMessage);
+                bakeMessages.AppendLine(_bakeMessage);
                 ChangeProgressMessage(_bakeMessage);
             }
             if (data.ty == 1) // error
@@ -164,6 +166,7 @@ namespace Glim
 
             if (_context.isPreview)
             {
+                PrintBakeLogs();
                 ResetBake();
                 return;
             }
@@ -181,7 +184,8 @@ namespace Glim
             try
             {
                 var now = Time.realtimeSinceStartupAsDouble;
-                Debug.Log($"Bake Complete in {now - _bakeStartTime}");
+
+                bakeMessages.AppendLine($"Bake Complete in {now - _bakeStartTime}");
 
                 List<LightmapData> lightmapDatas = new();
                 for (int i = 0; i < _context.groups.Count; i++)
@@ -394,7 +398,17 @@ namespace Glim
             }
             finally
             {
+                PrintBakeLogs();
                 ResetBake();
+            }
+        }
+
+        private static void PrintBakeLogs()
+        {
+            string logs = bakeMessages.ToString();
+            if (!string.IsNullOrEmpty(logs))
+            {
+                Debug.Log("Bake Logs:\n" + logs);
             }
         }
 
@@ -414,6 +428,7 @@ namespace Glim
                 Progress.Finish(_progressID, Progress.Status.Succeeded);
             }
             _progressID = -1;
+            bakeMessages.Clear();
         }
 
         public static Vector4[] GenerateProbeVolume(Vector3 center, Vector3 size, Quaternion rotation, Vector3Int resolution)
@@ -676,6 +691,7 @@ namespace Glim
                 {
                     _running = false;
                     _isComplete = true;
+                    PrintBakeLogs();
                     Debug.LogException(e);
                 }
             });
