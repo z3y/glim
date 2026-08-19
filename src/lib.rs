@@ -18,9 +18,11 @@ use crate::math::{Vector2, Vector3};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
+use crate::shaders::ShaderBinding::Emissions;
 use crate::shaders::{
-    SpecializationConstants, bake_direct, bake_indirect, compact_visibility, compaction_mask,
-    decompact, initialize_preview, preview,
+    ShaderBinding, ShaderName, SpecializationConstants, bake_direct, bake_indirect,
+    compact_visibility, compaction_mask, decompact, initialize_preview, load_compute_shader,
+    preview,
 };
 use crate::skybox::Skybox;
 use crate::texture_array::{TextureArray, TextureDescriptor};
@@ -1846,7 +1848,14 @@ unsafe fn render_lightmaps(app: &mut Glim) {
     let progress_scale = 1.0 / progress_max as f32;
 
     if app.cpu_lights.len() > 0 {
-        let mut bake_direct_light_shader = bake_direct::load_shader(&app.vk, &app.constants, true);
+        let mut bake_direct_light_shader = load_compute_shader(
+            &app.vk,
+            ShaderName::BakeDirectLight,
+            &app.constants,
+            size_of::<bake_direct::PushConstants>(),
+            &[ShaderBinding::Tlas, ShaderBinding::Albedos],
+        );
+
         bake_direct::update_shader(
             &app.vk,
             &bake_direct_light_shader,
@@ -1914,8 +1923,18 @@ unsafe fn render_lightmaps(app: &mut Glim) {
     }
 
     {
-        let mut bake_direct_emission_shader =
-            bake_direct::load_shader(&app.vk, &app.constants, false);
+        let mut bake_direct_emission_shader = load_compute_shader(
+            &app.vk,
+            ShaderName::BakeDirectEmission,
+            &app.constants,
+            size_of::<bake_direct::PushConstants>(),
+            &[
+                ShaderBinding::Tlas,
+                ShaderBinding::Albedos,
+                ShaderBinding::Emissions,
+                ShaderBinding::Skybox,
+            ],
+        );
 
         bake_direct::update_shader(
             &app.vk,

@@ -16,44 +16,6 @@ pub struct PushConstants {
     pub lights_count: u32,
 }
 
-pub fn load_shader(
-    vk: &VulkanContext,
-    constants: &SpecializationConstants,
-    lights: bool,
-) -> ComputeShader {
-    let mut bindings = Vec::new();
-
-    bind_tlas(&mut bindings);
-    bind_albedos(&mut bindings, constants.lightmap_group_count);
-    bind_emissions(&mut bindings, constants.lightmap_group_count);
-    bind_skybox(&mut bindings);
-
-    let map_entries = create_specialization_map_entries();
-    let data_bytes = as_bytes(constants);
-    let specialization_info = vk::SpecializationInfo::default()
-        .map_entries(&map_entries)
-        .data(data_bytes);
-
-    let push_constant_ranges = [vk::PushConstantRange {
-        stage_flags: vk::ShaderStageFlags::COMPUTE,
-        offset: 0,
-        size: std::mem::size_of::<PushConstants>() as u32,
-    }];
-
-    let shader = match lights {
-        true => ShaderName::BakeDirectLight,
-        false => ShaderName::BakeDirectEmission,
-    };
-
-    ComputeShader::new(
-        vk,
-        &load_shader_bytes(shader),
-        &bindings,
-        &push_constant_ranges,
-        &specialization_info,
-    )
-}
-
 pub fn update_shader(
     vk: &VulkanContext,
     shader: &ComputeShader,

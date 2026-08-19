@@ -1,5 +1,7 @@
 use ash::vk;
 
+use crate::{as_bytes, compute_shader::ComputeShader, vulkan_context::VulkanContext};
+
 pub mod bake_direct;
 pub mod bake_indirect;
 pub mod compact_visibility;
@@ -178,6 +180,115 @@ pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 19] {
             size: size_of::<u64>(),
         },
     ]
+}
+
+pub enum ShaderBinding {
+    Tlas,
+    PreviewVisibility,
+    PreviewDiffuse,
+    Emissions,
+    Albedos,
+    Skybox,
+}
+
+pub fn load_compute_shader(
+    vk: &VulkanContext,
+    shader_name: ShaderName,
+    constants: &SpecializationConstants,
+    push_constants_size: usize,
+    required_bindigns: &[ShaderBinding],
+) -> ComputeShader {
+    let mut bindings = Vec::new();
+
+    let lightmap_group_count = constants.lightmap_group_count;
+
+    for binding in required_bindigns {
+        match binding {
+            ShaderBinding::Tlas => {
+                bindings.push(vk::DescriptorSetLayoutBinding {
+                    binding: 0,
+                    descriptor_type: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                });
+            }
+            ShaderBinding::PreviewVisibility => {
+                bindings.push(vk::DescriptorSetLayoutBinding {
+                    binding: 2,
+                    descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                });
+            }
+            ShaderBinding::PreviewDiffuse => {
+                bindings.push(vk::DescriptorSetLayoutBinding {
+                    binding: 4,
+                    descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                });
+            }
+            ShaderBinding::Emissions => {
+                bindings.push(vk::DescriptorSetLayoutBinding {
+                    binding: 5,
+                    descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+                    descriptor_count: lightmap_group_count,
+                    stage_flags: vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                });
+            }
+            ShaderBinding::Albedos => {
+                bindings.push(vk::DescriptorSetLayoutBinding {
+                    binding: 3,
+                    descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+                    descriptor_count: lightmap_group_count,
+                    stage_flags: vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                });
+            }
+            ShaderBinding::Skybox => {
+                bindings.push(vk::DescriptorSetLayoutBinding {
+                    binding: 20,
+                    descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                });
+                bindings.push(vk::DescriptorSetLayoutBinding {
+                    binding: 21,
+                    descriptor_type: vk::DescriptorType::SAMPLER,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                });
+            }
+        }
+    }
+
+    let map_entries = create_specialization_map_entries();
+    let data_bytes = as_bytes(constants);
+    let specialization_info = vk::SpecializationInfo::default()
+        .map_entries(&map_entries)
+        .data(data_bytes);
+
+    let push_constant_ranges = [vk::PushConstantRange {
+        stage_flags: vk::ShaderStageFlags::COMPUTE,
+        offset: 0,
+        size: push_constants_size as u32,
+    }];
+
+    let bytes = load_shader_bytes(shader_name);
+
+    ComputeShader::new(
+        vk,
+        &bytes,
+        &bindings,
+        &push_constant_ranges,
+        &specialization_info,
+    )
 }
 
 pub fn bind_tlas(bindings: &mut Vec<vk::DescriptorSetLayoutBinding<'_>>) {
