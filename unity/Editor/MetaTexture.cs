@@ -320,16 +320,31 @@ namespace Glim
             return mat.globalIlluminationFlags.HasFlag(MaterialGlobalIlluminationFlags.BakedEmissive);
         }
 
+
+        public static readonly HashSet<string> TransparentTags = new()
+        {
+            "Transparent",
+            "TransparentCutout",
+            "TreeTransparentCutout",
+            "GrassBillboard",
+            "Grass",
+            "TreeLeaf"
+        };
+
         public static bool IsMaterialTransparent(Material mat)
         {
             if (!mat) return false;
             if (!mat.shader) return false;
 
-            string surfaceType = mat.GetTag("SurfaceType", false, "");
-            if (surfaceType == "Transparent" || surfaceType == "TransparentCutout") return true;
+            {
+                string type = mat.GetTag("SurfaceType", false, "");
+                if (TransparentTags.Contains(type)) return true;
+            }
 
-            string renderType = mat.GetTag("RenderType", false, "");
-            if (renderType == "Transparent" || renderType == "TransparentCutout") return true;
+            {
+                string type = mat.GetTag("RenderType", false, "");
+                if (TransparentTags.Contains(type)) return true;
+            }
 
             // if (mat.renderQueue >= (int)RenderQueue.AlphaTest)
             // {
