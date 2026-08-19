@@ -9,7 +9,7 @@ struct PushConstants
     uint compactedCount;
     uint sampleIndex;
     uint maxSamples;
-    uint lightCount;
+    uint pad0;
 };
 
 [shader("compute")]
@@ -30,7 +30,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
-    uint lightCount = Push.lightCount;
     float sampleScale = 1.0 / float(sampleCount);
 
     SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;

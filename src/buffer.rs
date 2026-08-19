@@ -119,11 +119,15 @@ impl Buffer {
             ptr::null_mut()
         };
 
-        let address_info = vk::BufferDeviceAddressInfo {
-            buffer: buffer,
-            ..Default::default()
+        let gpu_address = if usage.contains(vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS) {
+            let address_info = vk::BufferDeviceAddressInfo {
+                buffer: buffer,
+                ..Default::default()
+            };
+            unsafe { vk.device.get_buffer_device_address(&address_info) }
+        } else {
+            0
         };
-        let gpu_address = unsafe { vk.device.get_buffer_device_address(&address_info) };
 
         Self {
             buffer,

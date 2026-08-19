@@ -1,4 +1,4 @@
-use crate::{math::Vector3, shaders::initialize_preview};
+use crate::math::Vector3;
 
 pub struct Camera {
     pub position: Vector3,
@@ -9,8 +9,17 @@ pub struct Camera {
     pub last_cursor_pos: Option<(f64, f64)>,
 }
 
+#[repr(C)]
+pub struct InitializePreviewPushConstants {
+    pub camera_position: Vector3,
+    pub fov_half_tan: f32,
+
+    pub camera_direction: Vector3,
+    pub pad: u32,
+}
+
 impl Camera {
-    pub fn make_push_constants(&self) -> initialize_preview::PushConstants {
+    pub fn make_push_constants(&self) -> InitializePreviewPushConstants {
         let x = self.yaw.sin() * self.pitch.cos();
         let y = self.pitch.sin();
         let z = self.yaw.cos() * self.pitch.cos();
@@ -19,7 +28,7 @@ impl Camera {
 
         let fov_half_tan = (self.fov.to_radians() * 0.5).tan();
 
-        initialize_preview::PushConstants {
+        InitializePreviewPushConstants {
             camera_position: self.position,
             fov_half_tan,
             camera_direction,

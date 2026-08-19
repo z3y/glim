@@ -6,9 +6,9 @@ PushConstants Push;
 struct PushConstants
 {
     uint compactedCount;
-    uint sampleIndex;
-    uint maxSamples;
-    uint lightCount;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
