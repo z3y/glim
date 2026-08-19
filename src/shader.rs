@@ -65,8 +65,8 @@ pub struct SpecializationConstants {
     pub emissive_triangles_address: u64, // 16 17
     pub compacted_lightmap_address: u64, // 18 19
 
-    pub lightmaps_info_address: u64,      // 20 21
-    pub compacted_visiblity_address: u64, // 22 23
+    pub lightmaps_info_address: u64,       // 20 21
+    pub compacted_visibility_address: u64, // 22 23
 
     pub lights_address: u64,            // 24 25
     pub compaction_buffer_address: u64, // 26 27
@@ -90,6 +90,7 @@ pub fn create_specialization_map_entries() -> Vec<vk::SpecializationMapEntry> {
     entries
 }
 
+#[repr(u32)]
 pub enum ShaderBinding {
     Tlas = 0,
     Visibility = 2,
