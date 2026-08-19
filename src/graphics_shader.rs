@@ -324,10 +324,9 @@ pub fn load_rasterize_shader(
         size: std::mem::size_of::<VisibilityPushConstants>() as u32,
     }];
 
-    let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
     let specialization_info = vk::SpecializationInfo::default()
-        .map_entries(&map_entries)
+        .map_entries(&SPECIALIZATION_MAP_ENTRIES)
         .data(data_bytes);
 
     let shader = GraphicsShader::new(

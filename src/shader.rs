@@ -72,23 +72,30 @@ pub struct SpecializationConstants {
     pub compaction_buffer_address: u64, // 26 27
 }
 
-pub fn create_specialization_map_entries() -> Vec<vk::SpecializationMapEntry> {
+pub const SPECIALIZATION_MAP_ENTRIES_LEN: usize =
+    size_of::<SpecializationConstants>() / size_of::<u32>();
+
+pub const SPECIALIZATION_MAP_ENTRIES: [vk::SpecializationMapEntry; SPECIALIZATION_MAP_ENTRIES_LEN] = {
     let entry_size = size_of::<u32>();
-    let entries_total = size_of::<SpecializationConstants>();
-    let entry_len = entries_total / entry_size;
 
-    let mut entries = Vec::with_capacity(entry_len);
+    let mut entries = [vk::SpecializationMapEntry {
+        constant_id: 0,
+        offset: 0,
+        size: entry_size,
+    }; SPECIALIZATION_MAP_ENTRIES_LEN];
 
-    for id in 0..entry_len {
-        entries.push(vk::SpecializationMapEntry {
-            constant_id: id as u32,
-            offset: (id * entry_size) as u32,
+    let mut i = 0;
+    while i < SPECIALIZATION_MAP_ENTRIES_LEN {
+        entries[i] = vk::SpecializationMapEntry {
+            constant_id: i as u32,
+            offset: (i * entry_size) as u32,
             size: entry_size,
-        });
+        };
+        i += 1;
     }
 
     entries
-}
+};
 
 #[repr(u32)]
 pub enum ShaderBinding {
@@ -180,10 +187,9 @@ pub fn load_compute_shader(
         }
     }
 
-    let map_entries = create_specialization_map_entries();
     let data_bytes = as_bytes(constants);
     let specialization_info = vk::SpecializationInfo::default()
-        .map_entries(&map_entries)
+        .map_entries(&SPECIALIZATION_MAP_ENTRIES)
         .data(data_bytes);
 
     let push_constant_ranges = [vk::PushConstantRange {
