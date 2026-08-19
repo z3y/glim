@@ -97,7 +97,7 @@ Automatically applied to light volumes based on texel size."
         [Tooltip("(Experimental)\nHashes mesh data in order to skip uv packing if no changes are detected.")]
         public bool enableUVCache = false;
 
-        [MenuItem("Glim/Bake")]
+        [MenuItem("Tools/Glim/Bake")]
         public static void CreateLightmapBaker()
         {
             var scene = SceneManager.GetActiveScene();

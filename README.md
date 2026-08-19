@@ -72,7 +72,7 @@ Make sure to also read [Updating](#updating) ⚠️
 - Setup the scene (mark GameObjects as static, generate lightmap uvs etc.)
 - The lightmapper uses regular Unity light components, make sure to set them to baked
 - Scale In Lightmap is also calculated differently from the Unity lightmapper, readjust it on the renderers if needed
-- Menu Item `Glim > Bake`
+- Menu Item `Tools > Glim > Bake`
 - Adjust settings on the created GameObject and press `Generate Lighting`
 
 ### Updating
