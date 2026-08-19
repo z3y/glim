@@ -15,7 +15,7 @@ struct PushConstants
     uint dilate;
     uint pad2;
 
-    uint64_t decompactTargetAddress;
+    float4 *decompactTarget;
     uint pad3;
     uint pad4;
 };
@@ -126,7 +126,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint compactIndex = GetCompactedIndex(float2(coords), Push.groupIndex, false);
     bool active = compactIndex != uint::maxValue;
 
-    let DecompactTarget = Ptr<float4, Access.ReadWrite>(Push.decompactTargetAddress);
+    float4 *DecompactTarget = Push.decompactTarget;
 
     if (!active)
     {

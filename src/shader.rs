@@ -44,137 +44,52 @@ pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
 
 #[repr(C)]
 pub struct SpecializationConstants {
-    pub use_camera: u32, // unused
-    pub light_falloff_type: u32,
-    pub transparent_primitive_offset: u32,
-    pub emissive_triangles_count: u32,
+    pub use_camera: u32,                   // 0
+    pub light_falloff_type: u32,           // 1
+    pub transparent_primitive_offset: u32, // 2
+    pub emissive_triangles_count: u32,     // 3
 
-    pub multiple_importance_sampling: u32,
-    pub lightmap_group_count: u32,
-    pub lightmap_mode: u32,
-    pub coordinate_system: u32,
+    pub multiple_importance_sampling: u32, // 4
+    pub lightmap_group_count: u32,         // 5
+    pub lightmap_mode: u32,                // 6
+    pub coordinate_system: u32,            // 7
 
-    pub skybox_intensity: f32,
-    pub indirect_intensity: f32,
-    pub lightprobe_deringing: f32,
-    pub pad0: u32,
+    pub skybox_intensity: f32,     // 8
+    pub indirect_intensity: f32,   // 9
+    pub lightprobe_deringing: f32, // 10
+    pub pad0: u32,                 // 11
 
-    pub vertex_address: u64,
-    pub indices_address: u64,
+    pub vertex_address: u64,  // 12 13
+    pub indices_address: u64, // 14 15
 
-    pub emissive_triangles_address: u64,
-    pub compacted_lightmap_address: u64,
+    pub emissive_triangles_address: u64, // 16 17
+    pub compacted_lightmap_address: u64, // 18 19
 
-    pub lightmaps_info_address: u64,
-    pub compacted_visiblity_address: u64,
+    pub lightmaps_info_address: u64,      // 20 21
+    pub compacted_visiblity_address: u64, // 22 23
 
-    pub lights_address: u64,
-    pub compaction_buffer_address: u64,
+    pub lights_address: u64,            // 24 25
+    pub compaction_buffer_address: u64, // 26 27
 }
 
-pub fn create_specialization_map_entries() -> [vk::SpecializationMapEntry; 19] {
-    let size = size_of::<u32>();
+pub fn create_specialization_map_entries() -> Vec<vk::SpecializationMapEntry> {
+    let entry_size = size_of::<u32>();
+    let entries_total = size_of::<SpecializationConstants>();
+    let entry_len = entries_total / entry_size;
 
-    [
-        vk::SpecializationMapEntry {
-            constant_id: 0,
-            offset: 0 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 1,
-            offset: 1 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 2,
-            offset: 2 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 3,
-            offset: 3 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 4,
-            offset: 4 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 5,
-            offset: 5 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 6,
-            offset: 6 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 7,
-            offset: 7 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 8,
-            offset: 8 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 9,
-            offset: 9 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 10,
-            offset: 10 * size as u32,
-            size,
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 11,
-            offset: 12 * size as u32,
-            size: size_of::<u64>(),
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 12,
-            offset: 14 * size as u32,
-            size: size_of::<u64>(),
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 13,
-            offset: 16 * size as u32,
-            size: size_of::<u64>(),
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 14,
-            offset: 18 * size as u32,
-            size: size_of::<u64>(),
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 15,
-            offset: 20 * size as u32,
-            size: size_of::<u64>(),
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 16,
-            offset: 22 * size as u32,
-            size: size_of::<u64>(),
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 17,
-            offset: 24 * size as u32,
-            size: size_of::<u64>(),
-        },
-        vk::SpecializationMapEntry {
-            constant_id: 18,
-            offset: 26 * size as u32,
-            size: size_of::<u64>(),
-        },
-    ]
+    let mut entries = Vec::with_capacity(entry_len);
+
+    for id in 0..entry_len {
+        entries.push(vk::SpecializationMapEntry {
+            constant_id: id as u32,
+            offset: (id * entry_size) as u32,
+            size: entry_size,
+        });
+    }
+
+    entries
 }
 
-#[repr(u32)]
 pub enum ShaderBinding {
     Tlas = 0,
     Visibility = 2,

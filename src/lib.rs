@@ -17,7 +17,7 @@ use crate::math::{Vector2, Vector3};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
-use crate::shaders::{
+use crate::shader::{
     PreviewPushConstants, ShaderBinding, ShaderName, SpecializationConstants, load_compute_shader,
     update_compute_shader,
 };
@@ -47,7 +47,7 @@ mod oidn;
 mod pack;
 mod seams;
 mod sh;
-mod shaders;
+mod shader;
 mod skybox;
 mod test;
 mod texture2d;
@@ -240,8 +240,6 @@ fn update_visibility_from_camera(app: &mut Glim, cmd: vk::CommandBuffer) {
 // main render function
 fn initialize_render(app: &mut Glim) {
     assert!(app.opaque_mesh.vertices.len() > 0 || app.transparent_mesh.vertices.len() > 0);
-
-    let total_triangles = (app.opaque_mesh.indices.len() + app.transparent_mesh.indices.len()) / 3;
 
     extract_emissive_triangles(app);
 

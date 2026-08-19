@@ -260,7 +260,6 @@ impl VulkanContext {
         }
 
         let device_features = vk::PhysicalDeviceFeatures {
-            shader_int64: vk::TRUE,
             ..Default::default()
         };
 

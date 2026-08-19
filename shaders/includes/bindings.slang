@@ -31,66 +31,61 @@ TextureCube<float4> Skybox;
 [[vk::binding(21, 0)]]
 SamplerState SkyboxSampler;
 
-[vk::constant_id(0)]
-const uint USE_CAMERA;
-[vk::constant_id(1)]
-const uint LIGHT_FALLOFF_TYPE;
-[vk::constant_id(2)]
-const uint TRANSPARENT_PRIMITIVE_ID_OFFSET;
-[vk::constant_id(3)]
-const uint EMISSIVE_TRIANGLES_COUNT;
-[vk::constant_id(4)]
-const uint MULTIPLE_IMPORTANCE_SAMPLING;
-[vk::constant_id(5)]
-const uint LIGHTMAP_GROUP_COUNT;
-[vk::constant_id(6)]
-const uint LIGHTMAP_MODE;
-[vk::constant_id(7)]
-const uint COORDINATE_SPACE;
-[vk::constant_id(8)]
-const float SKYBOX_INTENSITY;
-[vk::constant_id(9)]
-const float INDIRECT_INTENSITY;
-[vk::constant_id(10)]
-const float LIGHTPROBE_DERINGING;
-
-[vk::constant_id(11)]
-const uint64_t VERTEX_ADDRESS;
-static let Vertices = Ptr<Vertex, Access.Read>(VERTEX_ADDRESS);
-
-[vk::constant_id(12)]
-const uint64_t INDICES_ADDRESS;
-static let Indices = Ptr<uint, Access.Read>(INDICES_ADDRESS);
-
-[vk::constant_id(13)]
-const uint64_t EMISSIVE_TRIANGLES_ADDRESS;
-static let EmissiveTriangles = Ptr<uint, Access.Read>(EMISSIVE_TRIANGLES_ADDRESS);
-
-[vk::constant_id(14)]
-const uint64_t COMPACTED_LIGHTMAP_ADDRESS;
-static let CompactedLightmap = Ptr<float, Access.ReadWrite>(COMPACTED_LIGHTMAP_ADDRESS);
-
-[vk::constant_id(15)]
-const uint64_t LIGHTMAPS_INFO_ADDRESS;
 struct LightmapInfo
 {
     uint2 resolution;
     uint compactionOffset;
     uint pad;
 };
-static let LightmapsInfo = Ptr<LightmapInfo, Access.Read>(LIGHTMAPS_INFO_ADDRESS);
 
-[vk::constant_id(16)]
-const uint64_t COMPACTED_VISIBILITY_ADDRESS;
-static let CompactedVisibility = Ptr<float4, Access.ReadWrite>(COMPACTED_VISIBILITY_ADDRESS);
+#define DECLARE_CONST_PTR(name, type, lo_id) \
+    [vk::constant_id(lo_id)]                 \
+    const uint name##_ADDRESS_LO;            \
+    [vk::constant_id((lo_id) + 1)]           \
+    const uint name##_ADDRESS_HI;            \
+    static let name = reinterpret<Ptr<type, Access.ReadWrite>>(uint2(name##_ADDRESS_LO, name##_ADDRESS_HI));
 
-[vk::constant_id(17)]
-const uint64_t LIGHTS_ADDRESS;
-static let Lights = Ptr<Light, Access.Read>(LIGHTS_ADDRESS);
+[vk::constant_id(0)]
+const uint USE_CAMERA;
 
-[vk::constant_id(18)]
-const uint64_t COMPACTION_BUFFER_ADDRESS;
-static let CompactionBuffer = Ptr<uint2, Access.ReadWrite>(COMPACTION_BUFFER_ADDRESS);
+[vk::constant_id(1)]
+const uint LIGHT_FALLOFF_TYPE;
+
+[vk::constant_id(2)]
+const uint TRANSPARENT_PRIMITIVE_ID_OFFSET;
+
+[vk::constant_id(3)]
+const uint EMISSIVE_TRIANGLES_COUNT;
+
+[vk::constant_id(4)]
+const uint MULTIPLE_IMPORTANCE_SAMPLING;
+
+[vk::constant_id(5)]
+const uint LIGHTMAP_GROUP_COUNT;
+
+[vk::constant_id(6)]
+const uint LIGHTMAP_MODE;
+
+[vk::constant_id(7)]
+const uint COORDINATE_SPACE;
+
+[vk::constant_id(8)]
+const float SKYBOX_INTENSITY;
+
+[vk::constant_id(9)]
+const float INDIRECT_INTENSITY;
+
+[vk::constant_id(10)]
+const float LIGHTPROBE_DERINGING;
+
+DECLARE_CONST_PTR(Vertices, Vertex, 12)
+DECLARE_CONST_PTR(Indices, uint, 14)
+DECLARE_CONST_PTR(EmissiveTriangles, uint, 16)
+DECLARE_CONST_PTR(CompactedLightmap, float, 18)
+DECLARE_CONST_PTR(LightmapsInfo, LightmapInfo, 20)
+DECLARE_CONST_PTR(CompactedVisibility, float4, 22)
+DECLARE_CONST_PTR(Lights, Light, 24)
+DECLARE_CONST_PTR(CompactionBuffer, uint2, 26)
 
 enum LightmapMode : uint
 {

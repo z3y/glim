@@ -2,7 +2,7 @@ use std::ffi::CStr;
 
 use ash::vk::{self, Handle};
 
-use crate::{as_bytes, shaders::*, texture2d::Texture2D, vulkan_context::VulkanContext};
+use crate::{as_bytes, shader::*, texture2d::Texture2D, vulkan_context::VulkanContext};
 
 pub struct GraphicsShader {
     vertex_module: vk::ShaderModule,

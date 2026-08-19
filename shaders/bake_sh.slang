@@ -13,7 +13,7 @@ struct PushConstants
     uint sampleIndex;
     uint probeCount;
 
-    uint64_t shProbesAddress;
+    SHProbeL2 *shProbes;
     uint pad0;
     uint pad1;
 };
@@ -65,9 +65,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
-    let SHProbes = Ptr<SHProbeL2, Access.ReadWrite>(Push.shProbesAddress);
-
-    SHProbeL2 probe = SHProbes[probeIndex];
+    SHProbeL2 probe = Push.shProbes[probeIndex];
 
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
@@ -235,5 +233,5 @@ void main(uint3 threadID: SV_DispatchThreadID)
         }
     }
 
-    SHProbes[probeIndex] = probe;
+    Push.shProbes[probeIndex] = probe;
 }
