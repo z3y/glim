@@ -38,7 +38,11 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
     float3 invDir = rcp(D);
     uint octinv4 = (7u - ((D.x < 0 ? 4u : 0u) | (D.y < 0 ? 2u : 0u) | (D.z < 0 ? 1u : 0u))) * 0x1010101u;
 
+#pragma warning(push)
+#pragma warning(disable: 4700)
     uint2 stack[32];
+#pragma warning(pop)
+
     uint stackPtr = 0;
     uint2 nodeGroup = uint2(0, 0x80000000u);
     uint2 triGroup = uint2(0, 0u);
