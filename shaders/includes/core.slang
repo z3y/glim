@@ -2,6 +2,13 @@
 #include "ray.slang"
 #include "util.slang"
 
+bool TriangleAlphaTest(uint primitiveID, float2 bary)
+{
+    Surface surf = Surface::Get(primitiveID, bary);
+    float alpha = SampleAlbedo(surf.uv, surf.lightmapGroup).a;
+    return alpha >= 0.5;
+}
+
 uint ExtractByte(uint value, uint byteIndex)
 {
     return (value >> (byteIndex * 8)) & 0xFF;
@@ -38,6 +45,7 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
 
     float2 uv = float2(0, 0);
     uint hitTriIndex = 0;
+    float hitA = 0;
 
     while (true)
     {
@@ -130,11 +138,11 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
 
             // CWBVHTriangles layout: [e1, e2, v0] each a float4
             float3 e1 = BVHTriangles[triAddr + 0].xyz;
-            float3 e2 = BVHTriangles[triAddr + 1].xyz;
+            float4 e2 = BVHTriangles[triAddr + 1];
             float4 v0 = BVHTriangles[triAddr + 2];
 
             float3 r = cross(D, e1);
-            float a = dot(e2, r);
+            float a = dot(e2.xyz, r);
             if (abs(a) > 1e-7f)
             {
                 float f = 1.0f / a;
@@ -142,20 +150,34 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
                 float u = f * dot(s, r);
                 if (u >= 0.0f && u <= 1.0f)
                 {
-                    float3 q = cross(s, e2);
+                    float3 q = cross(s, e2.xyz);
                     float v = f * dot(D, q);
                     if (v >= 0.0f && u + v <= 1.0f)
                     {
                         float d = f * dot(e1, q);
                         if (d > 0.0f && d < tmax)
                         {
+                            bool transparent = e2.w != 0;
+                            uv = float2(u, v);
+
+                            [branch]
+                            if (transparent)
+                            {
+                                bool visible = TriangleAlphaTest(asuint(v0.w), uv);
+                                if (!visible)
+                                {
+                                    continue;
+                                }
+                            }
+
                             if (anyHit)
                             {
                                 return true;
                             }
+
                             tmax = d;
-                            uv = float2(u, v);
                             hitTriIndex = triAddr;
+                            hitA = a;
                         }
                     }
                 }
@@ -180,7 +202,7 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
         float4 v0 = BVHTriangles[hitTriIndex + 2];
 
         hit.primitiveID = asuint(v0.w);
-        hit.frontFace = true; // todo
+        hit.frontFace = hitA > 0.0;
         hit.t = tmax;
 
         // hit.p0 = v0.xyz;
@@ -206,10 +228,9 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
     }
     float2 bary = query.CandidateTriangleBarycentrics();
 
-    Surface surf = Surface::Get(primitiveID, bary);
-    float alpha = SampleAlbedo(surf.uv, surf.lightmapGroup).a;
+    bool visible = TriangleAlphaTest(primitiveID, bary);
 
-    if (alpha >= 0.5)
+    if (visible)
     {
         query.CommitNonOpaqueTriangleHit();
     }

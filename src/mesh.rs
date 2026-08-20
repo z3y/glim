@@ -264,15 +264,57 @@ impl GpuMesh {
                 transparent_triangle_count,
             ))
         } else {
-            let mut bvh_triangles = Vec::new();
+            let mut bvh_triangles =
+                Vec::with_capacity(opaque_mesh.indices.len() + transparent_mesh.indices.len());
 
             let vertices = &opaque_mesh.vertices;
             let indices = &opaque_mesh.indices;
-            for i in 0..indices.len() {
-                let i = indices[i] as usize;
-                let v0 = vertices[i];
-                let p = v0.position;
-                bvh_triangles.push([p.x, p.y, p.z, 0.0]);
+            for primitive_id in 0..(indices.len() / 3) {
+                let i0 = indices[primitive_id * 3 + 0];
+                let i1 = indices[primitive_id * 3 + 1];
+                let i2 = indices[primitive_id * 3 + 2];
+
+                let v0 = vertices[i0 as usize];
+                let v1 = vertices[i1 as usize];
+                let v2 = vertices[i2 as usize];
+
+                let p0 = v0.position;
+                let p1 = v1.position;
+                let p2 = v2.position;
+
+                let transparent = 0.0;
+
+                bvh_triangles.push([p0.x, p0.y, p0.z, f32::from_bits(primitive_id as u32)]);
+                bvh_triangles.push([p1.x, p1.y, p1.z, transparent]);
+                bvh_triangles.push([p2.x, p2.y, p2.z, 0.0]);
+            }
+
+            let vertices = &transparent_mesh.vertices;
+            let indices = &transparent_mesh.indices;
+            let offset = opaque_mesh.indices.len() / 3;
+            for primitive_id in 0..(indices.len() / 3) {
+                let i0 = indices[primitive_id * 3 + 0];
+                let i1 = indices[primitive_id * 3 + 1];
+                let i2 = indices[primitive_id * 3 + 2];
+
+                let v0 = vertices[i0 as usize];
+                let v1 = vertices[i1 as usize];
+                let v2 = vertices[i2 as usize];
+
+                let p0 = v0.position;
+                let p1 = v1.position;
+                let p2 = v2.position;
+
+                let transparent = 1.0;
+
+                bvh_triangles.push([
+                    p0.x,
+                    p0.y,
+                    p0.z,
+                    f32::from_bits((primitive_id + offset) as u32),
+                ]);
+                bvh_triangles.push([p1.x, p1.y, p1.z, transparent]);
+                bvh_triangles.push([p2.x, p2.y, p2.z, 0.0]);
             }
 
             let bvh = Cwbvh::build(&bvh_triangles);
