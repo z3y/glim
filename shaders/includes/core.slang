@@ -159,12 +159,13 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
                         if (d > 0.0f && d < tmax)
                         {
                             bool transparent = e2.w != 0;
-                            uv = float2(u, v);
 
                             [branch]
                             if (transparent)
                             {
-                                bool visible = TriangleAlphaTest(asuint(v0.w), uv);
+                                uint primitiveID = asuint(v0.w);
+                                float2 bary = float2(u, v);
+                                bool visible = TriangleAlphaTest(primitiveID, bary);
                                 if (!visible)
                                 {
                                     continue;
@@ -179,6 +180,7 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
                             tmax = d;
                             hitTriIndex = triAddr;
                             hitA = a;
+                            uv = float2(u, v);
                         }
                     }
                 }
