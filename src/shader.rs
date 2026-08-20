@@ -42,7 +42,32 @@ pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
     aligned
 }
 
+pub struct ShaderBindings<'a> {
+    pub tlas: vk::AccelerationStructureKHR,
+    pub albedos: &'a [vk::ImageView],
+    pub emissions: &'a [vk::ImageView],
+    pub skybox: vk::ImageView,
+    pub skybox_sampler: vk::Sampler,
+    pub visibility: vk::ImageView,
+    pub preview_diffuse: vk::ImageView,
+}
+
+impl<'a> Default for ShaderBindings<'a> {
+    fn default() -> Self {
+        Self {
+            tlas: vk::AccelerationStructureKHR::null(),
+            albedos: &[],
+            emissions: &[],
+            skybox: vk::ImageView::null(),
+            skybox_sampler: vk::Sampler::null(),
+            visibility: vk::ImageView::null(),
+            preview_diffuse: vk::ImageView::null(),
+        }
+    }
+}
+
 #[repr(C)]
+#[derive(Default)]
 pub struct SpecializationConstants {
     pub use_camera: u32,                   // 0
     pub light_falloff_type: u32,           // 1
@@ -97,94 +122,96 @@ pub const SPECIALIZATION_MAP_ENTRIES: [vk::SpecializationMapEntry; SPECIALIZATIO
     entries
 };
 
-#[repr(u32)]
-pub enum ShaderBinding {
-    Tlas = 0,
-    Visibility = 2,
-    PreviewDiffuse = 4,
-    Emissions = 5,
-    Albedos = 3,
-    Skybox = 20,
-    SkyboxSampler = 21,
+pub struct ShaderBindingID {}
+impl ShaderBindingID {
+    pub const TLAS: u32 = 0;
+    pub const VISIBILITY: u32 = 2;
+    pub const PREVIEW_DIFFUSE: u32 = 4;
+    pub const EMISSIONS: u32 = 5;
+    pub const ALBEDOS: u32 = 3;
+    pub const SKYBOX: u32 = 20;
+    pub const SKYBOX_SAMPLER: u32 = 21;
 }
 
 pub fn load_compute_shader(
     vk: &VulkanContext,
     shader_name: ShaderName,
     constants: &SpecializationConstants,
+    bindings: &ShaderBindings,
     push_constants_size: usize,
-    required_bindigns: &[ShaderBinding],
 ) -> ComputeShader {
-    let mut bindings = Vec::new();
+    let mut layout_bindings = Vec::new();
 
     let lightmap_group_count = constants.lightmap_group_count;
 
-    for binding in required_bindigns {
-        match binding {
-            ShaderBinding::Tlas => {
-                bindings.push(vk::DescriptorSetLayoutBinding {
-                    binding: ShaderBinding::Tlas as u32,
-                    descriptor_type: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
-                    descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::COMPUTE,
-                    ..Default::default()
-                });
-            }
-            ShaderBinding::Visibility => {
-                bindings.push(vk::DescriptorSetLayoutBinding {
-                    binding: ShaderBinding::Visibility as u32,
-                    descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-                    descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::COMPUTE,
-                    ..Default::default()
-                });
-            }
-            ShaderBinding::PreviewDiffuse => {
-                bindings.push(vk::DescriptorSetLayoutBinding {
-                    binding: ShaderBinding::PreviewDiffuse as u32,
-                    descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-                    descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::COMPUTE,
-                    ..Default::default()
-                });
-            }
-            ShaderBinding::Emissions => {
-                bindings.push(vk::DescriptorSetLayoutBinding {
-                    binding: ShaderBinding::Emissions as u32,
-                    descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-                    descriptor_count: lightmap_group_count,
-                    stage_flags: vk::ShaderStageFlags::COMPUTE,
-                    ..Default::default()
-                });
-            }
-            ShaderBinding::Albedos => {
-                bindings.push(vk::DescriptorSetLayoutBinding {
-                    binding: ShaderBinding::Albedos as u32,
-                    descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-                    descriptor_count: lightmap_group_count,
-                    stage_flags: vk::ShaderStageFlags::COMPUTE,
-                    ..Default::default()
-                });
-            }
-            ShaderBinding::Skybox => {
-                bindings.push(vk::DescriptorSetLayoutBinding {
-                    binding: ShaderBinding::Skybox as u32,
-                    descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-                    descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::COMPUTE,
-                    ..Default::default()
-                });
-            }
-            ShaderBinding::SkyboxSampler => {
-                bindings.push(vk::DescriptorSetLayoutBinding {
-                    binding: ShaderBinding::SkyboxSampler as u32,
-                    descriptor_type: vk::DescriptorType::SAMPLER,
-                    descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::COMPUTE,
-                    ..Default::default()
-                });
-            }
-        }
+    if !bindings.tlas.is_null() {
+        layout_bindings.push(vk::DescriptorSetLayoutBinding {
+            binding: ShaderBindingID::TLAS,
+            descriptor_type: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            ..Default::default()
+        });
+    }
+
+    if !bindings.visibility.is_null() {
+        layout_bindings.push(vk::DescriptorSetLayoutBinding {
+            binding: ShaderBindingID::VISIBILITY,
+            descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            ..Default::default()
+        });
+    }
+
+    if !bindings.preview_diffuse.is_null() {
+        layout_bindings.push(vk::DescriptorSetLayoutBinding {
+            binding: ShaderBindingID::PREVIEW_DIFFUSE,
+            descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            ..Default::default()
+        });
+    }
+
+    if bindings.emissions.len() > 0 {
+        layout_bindings.push(vk::DescriptorSetLayoutBinding {
+            binding: ShaderBindingID::EMISSIONS,
+            descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+            descriptor_count: lightmap_group_count,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            ..Default::default()
+        });
+    }
+
+    if bindings.albedos.len() > 0 {
+        layout_bindings.push(vk::DescriptorSetLayoutBinding {
+            binding: ShaderBindingID::ALBEDOS,
+            descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+            descriptor_count: lightmap_group_count,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            ..Default::default()
+        });
+    }
+
+    if !bindings.skybox.is_null() {
+        layout_bindings.push(vk::DescriptorSetLayoutBinding {
+            binding: ShaderBindingID::SKYBOX,
+            descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            ..Default::default()
+        });
+    }
+
+    if !bindings.skybox_sampler.is_null() {
+        layout_bindings.push(vk::DescriptorSetLayoutBinding {
+            binding: ShaderBindingID::SKYBOX_SAMPLER,
+            descriptor_type: vk::DescriptorType::SAMPLER,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            ..Default::default()
+        });
     }
 
     let data_bytes = as_bytes(constants);
@@ -203,7 +230,7 @@ pub fn load_compute_shader(
     ComputeShader::new(
         vk,
         &bytes,
-        &bindings,
+        &layout_bindings,
         &push_constant_ranges,
         &specialization_info,
     )
@@ -212,32 +239,27 @@ pub fn load_compute_shader(
 pub fn update_compute_shader(
     vk: &VulkanContext,
     shader: &ComputeShader,
-    tlas: vk::AccelerationStructureKHR,
-    albedos: &[vk::ImageView],
-    emissions: &[vk::ImageView],
-    skybox: vk::ImageView,
-    skybox_sampler: vk::Sampler,
-    expanded_visibility: vk::ImageView,
-    preview_diffuse: vk::ImageView,
+    bindings: &ShaderBindings,
 ) {
     let mut descriptor_writes = Vec::new();
 
     // TopLevelAS
-    let tlases = [tlas];
+    let tlases = [bindings.tlas];
     let mut info =
         vk::WriteDescriptorSetAccelerationStructureKHR::default().acceleration_structures(&tlases);
     let write = vk::WriteDescriptorSet::default()
         .push_next(&mut info)
         .dst_set(shader.descriptor_set)
-        .dst_binding(ShaderBinding::Tlas as u32)
+        .dst_binding(ShaderBindingID::TLAS)
         .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
         .descriptor_count(1);
-    if !tlas.is_null() {
+    if !bindings.tlas.is_null() {
         descriptor_writes.push(write);
     }
 
     // Albedo
-    let infos: Vec<vk::DescriptorImageInfo> = albedos
+    let infos: Vec<vk::DescriptorImageInfo> = bindings
+        .albedos
         .iter()
         .map(|tex| vk::DescriptorImageInfo {
             image_view: *tex,
@@ -247,18 +269,19 @@ pub fn update_compute_shader(
         .collect();
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: ShaderBinding::Albedos as u32,
+        dst_binding: ShaderBindingID::ALBEDOS,
         dst_array_element: 0,
         descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
         ..Default::default()
     };
     write = write.image_info(&infos);
-    if albedos.len() > 0 {
+    if bindings.albedos.len() > 0 {
         descriptor_writes.push(write);
     }
 
     // Emission
-    let infos: Vec<vk::DescriptorImageInfo> = emissions
+    let infos: Vec<vk::DescriptorImageInfo> = bindings
+        .emissions
         .iter()
         .map(|tex| vk::DescriptorImageInfo {
             image_view: *tex,
@@ -268,80 +291,80 @@ pub fn update_compute_shader(
         .collect();
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: ShaderBinding::Emissions as u32,
+        dst_binding: ShaderBindingID::EMISSIONS,
         dst_array_element: 0,
         descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
         ..Default::default()
     };
     write = write.image_info(&infos);
-    if emissions.len() > 0 {
+    if bindings.emissions.len() > 0 {
         descriptor_writes.push(write);
     }
 
     // Skybox
     let info = [vk::DescriptorImageInfo {
-        image_view: skybox,
+        image_view: bindings.skybox,
         image_layout: vk::ImageLayout::READ_ONLY_OPTIMAL,
         ..Default::default()
     }];
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: ShaderBinding::Skybox as u32,
+        dst_binding: ShaderBindingID::SKYBOX,
         descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
         ..Default::default()
     };
     write = write.image_info(&info);
-    if !skybox.is_null() {
+    if !bindings.skybox.is_null() {
         descriptor_writes.push(write);
     }
 
     // SkyboxSampler
     let info = [vk::DescriptorImageInfo {
-        sampler: skybox_sampler,
+        sampler: bindings.skybox_sampler,
         ..Default::default()
     }];
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: ShaderBinding::SkyboxSampler as u32,
+        dst_binding: ShaderBindingID::SKYBOX_SAMPLER,
         descriptor_type: vk::DescriptorType::SAMPLER,
         ..Default::default()
     };
     write = write.image_info(&info);
-    if !skybox_sampler.is_null() {
+    if !bindings.skybox_sampler.is_null() {
         descriptor_writes.push(write);
     }
 
     // VisibilityBuffer
     let info = [vk::DescriptorImageInfo {
-        image_view: expanded_visibility,
+        image_view: bindings.visibility,
         image_layout: vk::ImageLayout::GENERAL,
         ..Default::default()
     }];
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: ShaderBinding::Visibility as u32,
+        dst_binding: ShaderBindingID::VISIBILITY,
         descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
         ..Default::default()
     };
     write = write.image_info(&info);
-    if !expanded_visibility.is_null() {
+    if !bindings.visibility.is_null() {
         descriptor_writes.push(write);
     }
 
     // LightmapDiffuse
     let info = [vk::DescriptorImageInfo {
-        image_view: preview_diffuse,
+        image_view: bindings.preview_diffuse,
         image_layout: vk::ImageLayout::GENERAL,
         ..Default::default()
     }];
     let mut write = vk::WriteDescriptorSet {
         dst_set: shader.descriptor_set,
-        dst_binding: ShaderBinding::PreviewDiffuse as u32,
+        dst_binding: ShaderBindingID::PREVIEW_DIFFUSE,
         descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
         ..Default::default()
     };
     write = write.image_info(&info);
-    if !preview_diffuse.is_null() {
+    if !bindings.preview_diffuse.is_null() {
         descriptor_writes.push(write);
     }
 

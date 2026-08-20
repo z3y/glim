@@ -120,6 +120,8 @@ mod tests {
             app.skybox = Skybox::solid(&app.vk, 8, 8, Vector3::new(0.00, 0.00, 0.00));
         }
 
+        app_add_probe(app, Vector3::new(0.0, 1.0, 0.0), 0.0);
+
         app_run(app);
 
         app_destroy(app);

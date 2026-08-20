@@ -311,7 +311,7 @@ pub fn load_rasterize_shader(
 
     // Albedo
     bindings.push(vk::DescriptorSetLayoutBinding {
-        binding: ShaderBinding::Albedos as u32,
+        binding: ShaderBindingID::ALBEDOS,
         descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
         descriptor_count: constants.lightmap_group_count,
         stage_flags: vk::ShaderStageFlags::FRAGMENT,

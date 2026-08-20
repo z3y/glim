@@ -18,7 +18,7 @@ use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
 use crate::shader::{
-    PreviewPushConstants, ShaderBinding, ShaderName, SpecializationConstants, load_compute_shader,
+    PreviewPushConstants, ShaderBindings, ShaderName, SpecializationConstants, load_compute_shader,
     update_compute_shader,
 };
 use crate::skybox::Skybox;
@@ -84,10 +84,6 @@ pub struct Glim {
 
     pub probes: Vec<SHProbeL2>,
 
-    pub probes_buffer: Buffer,
-
-    pub adjust_samples_shader: ComputeShader,
-
     pub render_target: RenderTarget,
 
     pub constants: SpecializationConstants,
@@ -126,10 +122,6 @@ impl Drop for Glim {
 
         if !self.gpu_lights.buffer.is_null() {
             self.gpu_lights.destroy(&self.vk);
-        }
-
-        if !self.probes_buffer.buffer.is_null() {
-            self.probes_buffer.destroy(&self.vk);
         }
 
         if !self.emissive_triangles_buffer.buffer.is_null() {
@@ -243,21 +235,6 @@ fn initialize_render(app: &mut Glim) {
 
     extract_emissive_triangles(app);
 
-    if app.probes.len() > 0 {
-        let flags = vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::STORAGE_BUFFER
-            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-            | vk::BufferUsageFlags::TRANSFER_SRC;
-
-        app.probes_buffer = Buffer::new(
-            &app.vk,
-            String::from("Light Probes"),
-            &app.probes,
-            flags,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        );
-    }
-
     // clamp samples and bounces to supported limits
     app.config.probe_samples = clamp_samples(app.config.probe_samples);
     app.config.direct_emission_samples = clamp_samples(app.config.direct_emission_samples);
@@ -315,8 +292,8 @@ fn initialize_render(app: &mut Glim) {
 
     // create meta textures
 
-    let mut albedos = Vec::new();
-    let mut emissions = Vec::new();
+    let mut albedos = Vec::with_capacity(app.groups.len());
+    let mut emissions = Vec::with_capacity(app.groups.len());
 
     for index in 0..app.groups.len() {
         let group = &app.groups[index];
@@ -404,22 +381,6 @@ fn initialize_render(app: &mut Glim) {
     };
 
     if app.config.is_preview {
-        app.preview_shader = load_compute_shader(
-            &app.vk,
-            ShaderName::Preview,
-            &app.constants,
-            size_of::<PreviewPushConstants>(),
-            &[
-                ShaderBinding::Tlas,
-                ShaderBinding::Visibility,
-                ShaderBinding::PreviewDiffuse,
-                ShaderBinding::Albedos,
-                ShaderBinding::Emissions,
-                ShaderBinding::Skybox,
-                ShaderBinding::SkyboxSampler,
-            ],
-        );
-
         render_preview(app);
     } else {
         unsafe { render_lightmaps(app) };
@@ -430,41 +391,36 @@ fn initialize_render(app: &mut Glim) {
 }
 
 fn render_preview(app: &mut Glim) {
-    let albedos = app.albedo_array.views();
-    let emissions = app.emission_array.views();
-
     let window = app.window;
 
     let preview_settings = app.config.preview_settings.clone();
-
-    app.init_from_camera_shader = load_compute_shader(
-        &app.vk,
-        ShaderName::InitializePreview,
-        &app.constants,
-        size_of::<InitializePreviewPushConstants>(),
-        &[
-            ShaderBinding::Tlas,
-            ShaderBinding::Visibility,
-            ShaderBinding::Albedos,
-        ],
-    );
 
     update_render_target(app, &preview_settings);
 
     let visibility = &mut app.render_target.visibility;
     let diffuse = &mut app.render_target.diffuse;
 
-    update_compute_shader(
+    let albedos = app.albedo_array.views();
+    let emissions = app.emission_array.views();
+
+    let shader_bindings = ShaderBindings {
+        tlas: app.tlas.acceleration_structure,
+        albedos: &albedos,
+        emissions: &emissions,
+        skybox: app.skybox.view(),
+        skybox_sampler: app.skybox.sampler(),
+        visibility: visibility.view,
+        preview_diffuse: diffuse.view(),
+    };
+
+    app.preview_shader = load_compute_shader(
         &app.vk,
-        &app.preview_shader,
-        app.tlas.acceleration_structure,
-        &albedos,
-        &emissions,
-        app.skybox.view(),
-        app.skybox.sampler(),
-        visibility.view(),
-        diffuse.view(),
+        ShaderName::Preview,
+        &app.constants,
+        &shader_bindings,
+        size_of::<PreviewPushConstants>(),
     );
+    update_compute_shader(&app.vk, &app.preview_shader, &shader_bindings);
 
     let mut previous_time = std::time::Instant::now();
 
@@ -518,17 +474,16 @@ fn render_preview(app: &mut Glim) {
                 let diffuse = &mut app.render_target.diffuse;
                 let visibility = &mut app.render_target.visibility;
 
-                update_compute_shader(
-                    &app.vk,
-                    &app.preview_shader,
-                    app.tlas.acceleration_structure,
-                    &albedos,
-                    &emissions,
-                    app.skybox.view(),
-                    app.skybox.sampler(),
-                    visibility.view(),
-                    diffuse.view(),
-                );
+                let shader_bindings = ShaderBindings {
+                    tlas: app.tlas.acceleration_structure,
+                    albedos: &app.albedo_array.views(),
+                    emissions: &app.emission_array.views(),
+                    skybox: app.skybox.view(),
+                    skybox_sampler: app.skybox.sampler(),
+                    visibility: visibility.view,
+                    preview_diffuse: diffuse.view(),
+                };
+                update_compute_shader(&app.vk, &app.preview_shader, &shader_bindings);
 
                 continue;
             }
@@ -879,7 +834,6 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
 
     let visibility = {
         let vk = &mut app.vk;
-        let shader = &app.init_from_camera_shader;
 
         let visibility = Texture2D::new(
             vk,
@@ -893,19 +847,27 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
             String::from("RT Visibility"),
         );
 
-        let albedos = app.albedo_array.views();
+        let shader_bindings = ShaderBindings {
+            tlas: app.tlas.acceleration_structure,
+            albedos: &app.albedo_array.views(),
+            emissions: &app.emission_array.views(),
+            skybox: app.skybox.view(),
+            skybox_sampler: app.skybox.sampler(),
+            visibility: visibility.view,
+            preview_diffuse: diffuse.view(),
+        };
 
-        update_compute_shader(
-            &app.vk,
-            shader,
-            app.tlas.acceleration_structure,
-            &albedos,
-            &[],
-            vk::ImageView::null(),
-            vk::Sampler::null(),
-            visibility.view(),
-            vk::ImageView::null(),
-        );
+        if app.init_from_camera_shader.pipeline.is_null() {
+            app.init_from_camera_shader = load_compute_shader(
+                &app.vk,
+                ShaderName::InitializePreview,
+                &app.constants,
+                &shader_bindings,
+                size_of::<InitializePreviewPushConstants>(),
+            );
+        }
+
+        update_compute_shader(&app.vk, &app.init_from_camera_shader, &shader_bindings);
 
         visibility
     };
@@ -1004,9 +966,7 @@ fn extract_emissive_triangles(app: &mut Glim) {
             &app.vk,
             String::from("Emissive Triangles"),
             &emissive_triangles,
-            vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER
-                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
     } else {
@@ -1014,9 +974,7 @@ fn extract_emissive_triangles(app: &mut Glim) {
             &app.vk,
             String::from("Emissive Triangles"),
             32,
-            vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER
-                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
     }
@@ -1138,28 +1096,7 @@ impl Glim {
             diffuse: Texture2D::null(),
         };
 
-        let constants = SpecializationConstants {
-            use_camera: 0,
-            light_falloff_type: 0,
-            transparent_primitive_offset: 0,
-            emissive_triangles_count: 0,
-            multiple_importance_sampling: 0,
-            lightmap_group_count: 0,
-            lightmap_mode: 0,
-            coordinate_system: 0,
-            skybox_intensity: 0.0,
-            indirect_intensity: 0.0,
-            lightprobe_deringing: 0.0,
-            pad0: 0,
-            vertex_address: 0,
-            indices_address: 0,
-            emissive_triangles_address: 0,
-            compacted_lightmap_address: 0,
-            lightmaps_info_address: 0,
-            compacted_visibility_address: 0,
-            lights_address: 0,
-            compaction_buffer_address: 0,
-        };
+        let constants = SpecializationConstants::default();
 
         Self {
             vk,
@@ -1179,11 +1116,9 @@ impl Glim {
             preview_push_constants,
             render_target,
             probes: Vec::new(),
-            probes_buffer: Buffer::null(),
             seams: Vec::new(),
             emissive_triangles: Vec::new(),
             emissive_triangles_buffer: Buffer::null(),
-            adjust_samples_shader: ComputeShader::null(),
             constants,
             output_dir,
             skybox: Skybox::null(),
@@ -1296,6 +1231,16 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         String::from("Visibility Expanded"),
     );
 
+    let mut shader_bindings = ShaderBindings {
+        tlas: app.tlas.acceleration_structure,
+        albedos: &app.albedo_array.views(),
+        emissions: &app.emission_array.views(),
+        skybox: app.skybox.view(),
+        skybox_sampler: app.skybox.sampler(),
+        visibility: visibility_expanded.view,
+        preview_diffuse: vk::ImageView::null(),
+    };
+
     let mut visibility_shader_conservative =
         load_rasterize_shader(&mut app.vk, &visibility_expanded, true, &app.constants);
     let mut visibility_shader_non_conservative =
@@ -1329,21 +1274,10 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         &app.vk,
         ShaderName::CompactionMask,
         &app.constants,
+        &shader_bindings,
         size_of::<CompactionPushConstants>(),
-        &[ShaderBinding::Visibility],
     );
-
-    update_compute_shader(
-        &app.vk,
-        &compaction_shader,
-        vk::AccelerationStructureKHR::null(),
-        &[],
-        &[],
-        vk::ImageView::null(),
-        vk::Sampler::null(),
-        visibility_expanded.view(),
-        vk::ImageView::null(),
-    );
+    update_compute_shader(&app.vk, &compaction_shader, &shader_bindings);
 
     let visibility_clear = [vk::ClearValue {
         color: vk::ClearColorValue {
@@ -1636,20 +1570,10 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         &app.vk,
         ShaderName::CompactVisibility,
         &app.constants,
+        &shader_bindings,
         size_of::<CompactionPushConstants>(),
-        &[ShaderBinding::Visibility],
     );
-    update_compute_shader(
-        &app.vk,
-        &compact_visibility_shader,
-        vk::AccelerationStructureKHR::null(),
-        &[],
-        &[],
-        vk::ImageView::null(),
-        vk::Sampler::null(),
-        visibility_expanded.view(),
-        vk::ImageView::null(),
-    );
+    update_compute_shader(&app.vk, &compact_visibility_shader, &shader_bindings);
 
     // render visibility again but this time compact
     for group_index in 0..app.groups.len() {
@@ -1793,10 +1717,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
     staging_buffer_compaction.destroy(&app.vk);
     drop(staging_buffer_compaction);
 
-    let albedos = app.albedo_array.views();
-    let emissions = app.emission_array.views();
-    let skybox = app.skybox.view();
-    let skybox_sampler = app.skybox.sampler();
+    shader_bindings.visibility = vk::ImageView::null();
 
     // adjust sample positions
     {
@@ -1812,20 +1733,10 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             &app.vk,
             ShaderName::AdjustSamples,
             &app.constants,
+            &shader_bindings,
             size_of::<PushConstants>(),
-            &[ShaderBinding::Tlas, ShaderBinding::Albedos],
         );
-        update_compute_shader(
-            &app.vk,
-            &adjust_sample_shader,
-            app.tlas.acceleration_structure,
-            &albedos,
-            &[],
-            vk::ImageView::null(),
-            vk::Sampler::null(),
-            vk::ImageView::null(),
-            vk::ImageView::null(),
-        );
+        update_compute_shader(&app.vk, &adjust_sample_shader, &shader_bindings);
 
         let push = PushConstants {
             compacted_count: compacted_pixels_count,
@@ -1879,7 +1790,6 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         "Diffuse Buffer".to_owned(),
         compacted_pixels_count as u64 * (std::mem::size_of::<f32>() * lightmap_channels) as u64,
         vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
@@ -1924,20 +1834,10 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             &app.vk,
             ShaderName::BakeDirectLight,
             &app.constants,
+            &shader_bindings,
             size_of::<PushConstants>(),
-            &[ShaderBinding::Tlas, ShaderBinding::Albedos],
         );
-        update_compute_shader(
-            &app.vk,
-            &bake_direct_light_shader,
-            app.tlas.acceleration_structure,
-            &albedos,
-            &[],
-            vk::ImageView::null(),
-            vk::Sampler::null(),
-            vk::ImageView::null(),
-            vk::ImageView::null(),
-        );
+        update_compute_shader(&app.vk, &bake_direct_light_shader, &shader_bindings);
 
         let mut bake_direct_push = PushConstants {
             compacted_count: compacted_pixels_count,
@@ -2002,26 +1902,10 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             &app.vk,
             ShaderName::BakeDirectEmission,
             &app.constants,
+            &shader_bindings,
             size_of::<PushConstants>(),
-            &[
-                ShaderBinding::Tlas,
-                ShaderBinding::Albedos,
-                ShaderBinding::Emissions,
-                ShaderBinding::Skybox,
-                ShaderBinding::SkyboxSampler,
-            ],
         );
-        update_compute_shader(
-            &app.vk,
-            &bake_direct_emission_shader,
-            app.tlas.acceleration_structure,
-            &albedos,
-            &emissions,
-            skybox,
-            skybox_sampler,
-            vk::ImageView::null(),
-            vk::ImageView::null(),
-        );
+        update_compute_shader(&app.vk, &bake_direct_emission_shader, &shader_bindings);
 
         let mut bake_direct_push = PushConstants {
             compacted_count: compacted_pixels_count,
@@ -2115,24 +1999,10 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             &app.vk,
             ShaderName::BakeIndirect,
             &app.constants,
+            &shader_bindings,
             size_of::<PushConstants>(),
-            &[
-                ShaderBinding::Tlas,
-                ShaderBinding::Albedos,
-                ShaderBinding::Emissions,
-            ],
         );
-        update_compute_shader(
-            &app.vk,
-            &indirect_shader,
-            app.tlas.acceleration_structure,
-            &albedos,
-            &emissions,
-            vk::ImageView::null(),
-            vk::Sampler::null(),
-            vk::ImageView::null(),
-            vk::ImageView::null(),
-        );
+        update_compute_shader(&app.vk, &indirect_shader, &shader_bindings);
 
         let mut push = PushConstants {
             compacted_count: compacted_pixels_count,
@@ -2215,17 +2085,16 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         &app.vk,
         ShaderName::Decompact,
         &app.constants,
+        &shader_bindings,
         size_of::<PushConstants>(),
-        &[],
     );
+    update_compute_shader(&app.vk, &decompact_shader, &shader_bindings);
 
     let mut staging_buffer_lightmap = Buffer::empty(
         &app.vk,
         "Staging Buffer Lightmap".to_owned(),
         (max_resolution.0 * max_resolution.1 * 4) as u64 * std::mem::size_of::<f32>() as u64,
-        vk::BufferUsageFlags::TRANSFER_SRC
-            | vk::BufferUsageFlags::STORAGE_BUFFER
-            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     );
 
@@ -2498,6 +2367,16 @@ unsafe fn render_lightmaps(app: &mut Glim) {
     if app.probes.len() > 0 && !is_cancelled() {
         (log)(LogMessage::message(&format!("Baking Light Probes")));
 
+        let mut probes_buffer = Buffer::new(
+            &app.vk,
+            String::from("Light Probes"),
+            &app.probes,
+            vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                | vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+
         #[repr(C)]
         pub struct PushConstants {
             pub lights_count: u32,
@@ -2513,33 +2392,17 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             &app.vk,
             ShaderName::BakeLightProbes,
             &app.constants,
+            &shader_bindings,
             size_of::<PushConstants>(),
-            &[
-                ShaderBinding::Tlas,
-                ShaderBinding::Albedos,
-                ShaderBinding::Emissions,
-                ShaderBinding::Skybox,
-                ShaderBinding::SkyboxSampler,
-            ],
         );
-        update_compute_shader(
-            &app.vk,
-            &shader,
-            app.tlas.acceleration_structure,
-            &albedos,
-            &emissions,
-            skybox,
-            skybox_sampler,
-            vk::ImageView::null(),
-            vk::ImageView::null(),
-        );
+        update_compute_shader(&app.vk, &shader, &shader_bindings);
 
         let mut push = PushConstants {
             lights_count: app.cpu_lights.len() as u32,
             max_samples: app.config.probe_samples,
             sample_index: 0,
             probes_count: app.probes.len() as u32,
-            sh_probes_address: app.probes_buffer.gpu_address,
+            sh_probes_address: probes_buffer.gpu_address,
             pad0: 0,
         };
 
@@ -2590,7 +2453,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         let mut staging_buffer_light_probes = Buffer::empty(
             &app.vk,
             "Staging Buffer Light Probes".to_owned(),
-            app.probes_buffer.bytes,
+            probes_buffer.bytes,
             vk::BufferUsageFlags::TRANSFER_DST,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         );
@@ -2599,12 +2462,12 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         let region = vk::BufferCopy {
             src_offset: 0,
             dst_offset: 0,
-            size: app.probes_buffer.bytes,
+            size: probes_buffer.bytes,
         };
         unsafe {
             app.vk.device.cmd_copy_buffer(
                 cmd,
-                app.probes_buffer.buffer,
+                probes_buffer.buffer,
                 staging_buffer_light_probes.buffer,
                 &[region],
             )
@@ -2619,6 +2482,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         (app.config.lightprobes_read_callback)(readback_data);
         shader.destroy(&app.vk);
         staging_buffer_light_probes.destroy(&app.vk);
+        probes_buffer.destroy(&app.vk);
     }
 
     compacted_lightmap.destroy(&app.vk);
