@@ -27,12 +27,10 @@ float4 ExtractBytes(float value)
     return channels;
 }
 
+#pragma warning(disable: 41018)
 bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
 {
     hit = {};
-
-#pragma warning(push)
-#pragma warning(disable: 4700)
 
     float3 O = ray.P;
     float3 D = ray.D;
@@ -214,10 +212,9 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
         return true;
     }
 
-#pragma warning(pop)
-
     return false;
 }
+#pragma warning(default: 41018)
 
 void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 {
