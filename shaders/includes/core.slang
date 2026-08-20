@@ -279,10 +279,8 @@ bool TraceRay(Ray ray, out Hit hit)
 
 bool TraceShadowRay(Ray ray)
 {
-
     if (HARDWARE_RT == 1)
     {
-
         RayDesc rayDesc;
         rayDesc.Origin = ray.P;
         rayDesc.Direction = ray.D;
@@ -302,7 +300,7 @@ bool TraceShadowRay(Ray ray)
     else
     {
         Hit hit = {};
-        return BVHTraceRay(ray, hit, false);
+        return BVHTraceRay(ray, hit, true);
     }
 }
 
