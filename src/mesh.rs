@@ -324,7 +324,10 @@ impl GpuMesh {
 
         let build_info = vk::AccelerationStructureBuildGeometryInfoKHR::default()
             .ty(vk::AccelerationStructureTypeKHR::BOTTOM_LEVEL)
-            .flags(vk::BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE)
+            .flags(
+                vk::BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE
+                    | vk::BuildAccelerationStructureFlagsKHR::ALLOW_COMPACTION,
+            )
             .geometries(&geometries);
 
         let mut size_info = vk::AccelerationStructureBuildSizesInfoKHR::default();
@@ -374,7 +377,8 @@ impl GpuMesh {
 
         let mut as_build_geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR {
             ty: vk::AccelerationStructureTypeKHR::BOTTOM_LEVEL,
-            flags: vk::BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE,
+            flags: vk::BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE
+                | vk::BuildAccelerationStructureFlagsKHR::ALLOW_COMPACTION,
             mode: vk::BuildAccelerationStructureModeKHR::BUILD,
             dst_acceleration_structure: blas,
             scratch_data: vk::DeviceOrHostAddressKHR {
@@ -406,13 +410,89 @@ impl GpuMesh {
             ranges.push(transparent_range)
         }
 
+        let query_pool_info = vk::QueryPoolCreateInfo::default()
+            .query_type(vk::QueryType::ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR)
+            .query_count(1);
+        let query_pool = unsafe { vk.device.create_query_pool(&query_pool_info, None) }.unwrap();
+
         let cmd = vk.begin_single_use_cmd();
+        unsafe {
+            vk.device.cmd_reset_query_pool(cmd, query_pool, 0, 1);
+            as_device.cmd_build_acceleration_structures(cmd, &[as_build_geometry_info], &[&ranges]);
+
+            let barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
+                .dst_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR);
+
+            vk.device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD_KHR,
+                vk::PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD_KHR,
+                vk::DependencyFlags::empty(),
+                &[barrier],
+                &[],
+                &[],
+            );
+
+            as_device.cmd_write_acceleration_structures_properties(
+                cmd,
+                &[blas],
+                vk::QueryType::ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR,
+                query_pool,
+                0,
+            );
+        }
+        vk.end_single_use_cmd(cmd);
+
+        let mut compacted_size = [0u64; 1];
+        unsafe {
+            vk.device.get_query_pool_results(
+                query_pool,
+                0,
+                &mut compacted_size,
+                vk::QueryResultFlags::WAIT,
+            )
+        }
+        .unwrap();
+        let compacted_size = compacted_size[0];
+
+        let (compact_buffer, compact_memory, _) = vk.create_buffer(
+            compacted_size,
+            vk::BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR
+                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+        let compact_create_info = vk::AccelerationStructureCreateInfoKHR {
+            buffer: compact_buffer,
+            size: compacted_size,
+            ty: vk::AccelerationStructureTypeKHR::BOTTOM_LEVEL,
+            ..Default::default()
+        };
+        let compact_blas =
+            unsafe { as_device.create_acceleration_structure(&compact_create_info, None) }.unwrap();
+
+        let copy_cmd = vk.begin_single_use_cmd();
+        unsafe {
+            as_device.cmd_copy_acceleration_structure(
+                copy_cmd,
+                &vk::CopyAccelerationStructureInfoKHR::default()
+                    .src(blas)
+                    .dst(compact_blas)
+                    .mode(vk::CopyAccelerationStructureModeKHR::COMPACT),
+            );
+        }
+        vk.end_single_use_cmd(copy_cmd);
 
         unsafe {
-            as_device.cmd_build_acceleration_structures(cmd, &[as_build_geometry_info], &[&ranges])
-        };
+            as_device.destroy_acceleration_structure(blas, None);
+            vk.device.destroy_buffer(blas_buffer, None);
+            vk.device.free_memory(blas_memory, None);
+            vk.device.destroy_query_pool(query_pool, None);
+        }
 
-        vk.end_single_use_cmd(cmd);
+        let blas = compact_blas;
+        let blas_buffer = compact_buffer;
+        let blas_memory = compact_memory;
 
         let address_info = vk::AccelerationStructureDeviceAddressInfoKHR {
             acceleration_structure: blas,
