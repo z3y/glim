@@ -117,7 +117,17 @@ impl Drop for Glim {
             self.preview_shader.destroy(&self.vk);
         }
         self.gpu_mesh.destroy(&self.vk);
-        self.tlas.destroy(&self.vk);
+
+        if !self.bvh_nodes.buffer.is_null() {
+            self.bvh_nodes.destroy(&self.vk);
+        }
+        if !self.bvh_triangles.buffer.is_null() {
+            self.bvh_triangles.destroy(&self.vk);
+        }
+
+        if !self.tlas.acceleration_structure.is_null() {
+            self.tlas.destroy(&self.vk);
+        }
 
         if !self.init_from_camera_shader.pipeline.is_null() {
             self.init_from_camera_shader.destroy(&self.vk);
