@@ -7,19 +7,18 @@ A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
 - Supports Windows and Linux (Nvidia and AMD GPUs)
 - Fast hardware accelerated ray-tracing (can utilize RTX)
 - Easy to use (aims to be mostly a drop-in replacement)
-- Realtime Preview
+- Realtime path-traced preview
+- SH Lightmap mode (Monochromatic L1), Directional and Non Directional
+- Emissive materials, Directional, Spot, Point, and Area Lights
+- Multiple importance sampling for emissive meshes
 - Seam stitching with a least squares solver
 - UV Packing with hole filling
-- Open Image Denoise 2.0
-- SH Lightmap mode (Monochromatic L1)
 - Light Probe baking (L2 Spherical Harmonics)
-- Multiple importance sampling for emissive meshes
 - VRCLightVolumes baking
+- Open Image Denoise 2.0
 - Physically correct
 - Lightmap Groups
-- Directional Lightmaps
 - Small binary size (only ~1MB)
-- Emissive materials, Directional, Spot, Point, and Area Lights
 - Fully standalone, with Unity URP and Built-In pipeline support
 
 ## How to use
