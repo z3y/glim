@@ -23,6 +23,7 @@ namespace Glim
             [MarshalAs(UnmanagedType.I1)] public readonly bool is_preview;
             [MarshalAs(UnmanagedType.I1)] public readonly bool vulkan_validation_layers;
             [MarshalAs(UnmanagedType.I1)] public readonly bool seams_debug;
+            [MarshalAs(UnmanagedType.I1)] public readonly bool hardware_rt;
             public readonly uint throttle_preview_ms;
             public readonly LightmapSettings preview_settings;
 
@@ -53,6 +54,7 @@ namespace Glim
                                uint indirect_samples,
                                uint bounce_count,
                                bool is_preview,
+                               bool hardware_rt,
                                uint throttle_preview_ms,
                                LightmapSettings preview_settings,
                                Vector3 camera_position,
@@ -79,6 +81,7 @@ namespace Glim
                 this.direct_emission_samples = direct_emission_samples;
                 this.indirect_samples = indirect_samples;
                 this.bounce_count = bounce_count;
+                this.hardware_rt = hardware_rt;
 #if GLIM_DEV
                 this.vulkan_validation_layers = true;
 #else

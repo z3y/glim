@@ -64,6 +64,11 @@ namespace Glim
         public uint bounces = 5;
         [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;
 
+        [Tooltip(
+@"Use fast hardware accelerated ray tracing if the GPU supports it (Vulkan RayQueries).
+Automatically fallbacks to software CWBVH ray tracing when not avaliable.")]
+        public bool hardwareRayTracing = true;
+
         [Space]
         public uint lightProbeSamples = 4096;
         [Tooltip(

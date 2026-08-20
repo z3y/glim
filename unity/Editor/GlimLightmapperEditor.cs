@@ -20,7 +20,7 @@ namespace Glim
         {
             var root = new VisualElement();
 
-            var baker = target as GlimLightmapper;
+            var lightmapper = target as GlimLightmapper;
 
             InspectorElement.FillDefaultInspector(root, serializedObject, this);
 
@@ -34,9 +34,9 @@ namespace Glim
                 _nestedSO?.Dispose();
                 _nestedSO = null;
 
-                if (baker.group)
+                if (lightmapper.group)
                 {
-                    _nestedSO = new SerializedObject(baker.group);
+                    _nestedSO = new SerializedObject(lightmapper.group);
                     VisualElement nestedInspector = CreateNestedInspector(_nestedSO, this);
                     nestedContainer.Add(nestedInspector);
                 }
@@ -44,7 +44,7 @@ namespace Glim
 
             RebuildNested();
 
-            var globalGroupProp = serializedObject.FindProperty(nameof(baker.group));
+            var globalGroupProp = serializedObject.FindProperty(nameof(lightmapper.group));
             root.TrackPropertyValue(globalGroupProp, _ => RebuildNested());
 
             {
@@ -72,29 +72,30 @@ namespace Glim
                     var camera = SceneView.lastActiveSceneView.camera;
 
                     var previewSettings = new Bindings.LightmapSettings(
-                        baker.previewWidth, baker.previewHeight, false, false, false);
+                        lightmapper.previewWidth, lightmapper.previewHeight, false, false, false);
 
                     var config = new Bindings.GlimConfig(
                         Bindings.CoordinateSystem.Unity,
-                        baker.previewSamples,
-                        baker.previewSamples,
-                        baker.previewSamples,
-                        baker.previewBounces,
+                        lightmapper.previewSamples,
+                        lightmapper.previewSamples,
+                        lightmapper.previewSamples,
+                        lightmapper.previewBounces,
                         true,
-                        baker.previewThrottle,
+                        lightmapper.hardwareRayTracing,
+                        lightmapper.previewThrottle,
                         previewSettings,
                         camera.transform.position,
                         camera.transform.forward,
-                        baker.lightProbeSamples,
-                        baker.lightFalloff,
-                        baker.multipleImportanceSampling,
-                        baker.lightmapMode,
+                        lightmapper.lightProbeSamples,
+                        lightmapper.lightFalloff,
+                        lightmapper.multipleImportanceSampling,
+                        lightmapper.lightmapMode,
                         RenderSettings.ambientIntensity,
-                        baker.indirectMultiplier,
+                        lightmapper.indirectMultiplier,
                         0.0f
                     );
 
-                    Bake.Start(baker, config);
+                    Bake.Start(lightmapper, config);
                 };
                 root.Add(button);
             }
@@ -110,7 +111,7 @@ namespace Glim
                 };
                 button.clicked += () =>
                 {
-                    BakeAllReflectionProbesSnapshots(EditorSceneManager.GetActiveScene(), baker.reflectionProbesSuperSampling ? 2 : 1, baker.reflectionProbesSpecular);
+                    BakeAllReflectionProbesSnapshots(EditorSceneManager.GetActiveScene(), lightmapper.reflectionProbesSuperSampling ? 2 : 1, lightmapper.reflectionProbesSpecular);
                 };
                 root.Add(button);
             }
@@ -141,10 +142,10 @@ namespace Glim
                         EditorUtility.SetDirty(selector.group);
                     }
 
-                    if (baker.group)
+                    if (lightmapper.group)
                     {
-                        baker.group.lightmapUVHash = 0;
-                        EditorUtility.SetDirty(baker.group);
+                        lightmapper.group.lightmapUVHash = 0;
+                        EditorUtility.SetDirty(lightmapper.group);
                     }
 
                     EditorSceneManager.MarkSceneDirty(scene);
@@ -177,32 +178,33 @@ namespace Glim
                 {
                     var previewSettings = new Bindings.LightmapSettings();
 
-                    float w = Mathf.Lerp(8.0f, 2.0f, baker.deringingIntensity);
-                    if (!baker.lightProbeDeringing || baker.deringingIntensity <= 0.0f)
+                    float w = Mathf.Lerp(8.0f, 2.0f, lightmapper.deringingIntensity);
+                    if (!lightmapper.lightProbeDeringing || lightmapper.deringingIntensity <= 0.0f)
                     {
                         w = 0.0f;
                     }
 
                     var config = new Bindings.GlimConfig(
                         Bindings.CoordinateSystem.Unity,
-                        baker.directLightSamples,
-                        baker.directEmissionSamples,
-                        baker.indirectSamples,
-                        baker.bounces,
+                        lightmapper.directLightSamples,
+                        lightmapper.directEmissionSamples,
+                        lightmapper.indirectSamples,
+                        lightmapper.bounces,
                         false,
+                        lightmapper.hardwareRayTracing,
                         0,
                         previewSettings,
                         Vector3.zero,
                         Vector3.zero,
-                        baker.lightProbeSamples,
-                        baker.lightFalloff,
-                        baker.multipleImportanceSampling,
-                        baker.lightmapMode,
+                        lightmapper.lightProbeSamples,
+                        lightmapper.lightFalloff,
+                        lightmapper.multipleImportanceSampling,
+                        lightmapper.lightmapMode,
                         RenderSettings.ambientIntensity,
-                        baker.indirectMultiplier,
+                        lightmapper.indirectMultiplier,
                         w
                     );
-                    Bake.Start(baker, config);
+                    Bake.Start(lightmapper, config);
                 };
                 root.Add(button);
 
@@ -249,7 +251,7 @@ namespace Glim
 
                 void RefreshReport()
                 {
-                    var last = Bake.LoadReport(baker.gameObject.scene.path);
+                    var last = Bake.LoadReport(lightmapper.gameObject.scene.path);
                     report.style.display = last == null ? DisplayStyle.None : DisplayStyle.Flex;
 
                     if (last == null)

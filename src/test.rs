@@ -25,7 +25,7 @@ mod tests {
     const DILATE: bool = false;
     const FIX_SEAMS: bool = false;
     const MIS: bool = true;
-    const HARDWARE_RT: bool = false;
+    const HARDWARE_RT: bool = true;
 
     #[test]
     fn test_preview() {
