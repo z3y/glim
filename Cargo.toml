@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "./tinybvh"]
+
 [package]
 name = "glim"
 version = "0.1.0"
@@ -13,11 +16,10 @@ libloading = "0.9.0"
 rayon = { version = "1.12", default-features = false }
 exr = { version = "1.74.2", default-features = false }
 half = { version = "2.7.1", default-features = false }
-
+tinybvh = { path = "./tinybvh" }
 
 [dev-dependencies]
 image = "0.25.10"
 gltf = { version = "1.4.1", default-features = false, features = ["import", "utils", "KHR_lights_punctual"] }
 
 [build-dependencies]
-cc = "1.2.62"
