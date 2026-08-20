@@ -1,4 +1,5 @@
 use ash::vk::{self, Handle};
+use tinybvh::{Cwbvh, CwbvhData};
 
 use crate::{
     CoordinateSystem, LightmapGroup,
@@ -187,7 +188,7 @@ impl VulkanAs {
 
 pub enum AccelerationStructureType {
     RayQuery(VulkanAs),
-    CwBvh,
+    BVH { cwbvh: Cwbvh, data: CwbvhData },
 }
 
 pub struct GpuMesh {
@@ -205,14 +206,18 @@ impl GpuMesh {
         opaque_mesh: &Mesh,
         transparent_mesh: &Mesh,
         lightmap_groups: &[LightmapGroup],
+        use_ray_query: bool,
     ) -> Self {
         let mut usage = vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS;
 
-        if vk.as_device.is_some() {
+        if use_ray_query {
             usage |= vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR;
         }
+
+        // if vk.as_device.is_some() {
+        // }
 
         let opaque_triangle_count = (opaque_mesh.indices.len() / 3) as u32;
         let transparent_triangle_count = (transparent_mesh.indices.len() / 3) as u32;
@@ -249,7 +254,7 @@ impl GpuMesh {
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
 
-        let bvh = if vk.as_device.is_some() {
+        let bvh = if use_ray_query {
             AccelerationStructureType::RayQuery(GpuMesh::create_vulkan_blas(
                 vk,
                 &merged_mesh,
@@ -259,7 +264,21 @@ impl GpuMesh {
                 transparent_triangle_count,
             ))
         } else {
-            AccelerationStructureType::CwBvh // todo
+            let mut bvh_triangles = Vec::new();
+
+            let vertices = &opaque_mesh.vertices;
+            let indices = &opaque_mesh.indices;
+            for i in 0..indices.len() {
+                let i = indices[i] as usize;
+                let v0 = vertices[i];
+                let p = v0.position;
+                bvh_triangles.push([p.x, p.y, p.z, 0.0]);
+            }
+
+            let bvh = Cwbvh::build(&bvh_triangles);
+            let data = bvh.extract();
+
+            AccelerationStructureType::BVH { cwbvh: bvh, data }
         };
 
         Self {
@@ -529,7 +548,9 @@ impl GpuMesh {
             AccelerationStructureType::RayQuery(vulkan_blas) => {
                 vulkan_blas.destroy(vk);
             }
-            AccelerationStructureType::CwBvh => todo!(),
+            AccelerationStructureType::BVH { cwbvh, data: _ } => {
+                cwbvh.free();
+            }
         }
 
         self.index_buffer.destroy(vk);

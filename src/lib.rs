@@ -72,7 +72,10 @@ pub struct Glim {
     pub gpu_mesh: GpuMesh,
     pub gpu_lights: Buffer,
     pub emissive_triangles_buffer: Buffer,
+
     pub tlas: VulkanAs,
+    pub bvh_nodes: Buffer,
+    pub bvh_triangles: Buffer,
 
     pub camera: Camera,
 
@@ -233,6 +236,15 @@ fn update_visibility_from_camera(app: &mut Glim, cmd: vk::CommandBuffer) {
 fn initialize_render(app: &mut Glim) {
     assert!(app.opaque_mesh.vertices.len() > 0 || app.transparent_mesh.vertices.len() > 0);
 
+    let message = format!(
+        "Created scene with Opaque (Vertices: {} Triangles: {}) and Transparent (Vertices: {} Triangles: {})",
+        app.opaque_mesh.vertices.len(),
+        app.opaque_mesh.indices.len() / 3,
+        app.transparent_mesh.vertices.len(),
+        app.transparent_mesh.indices.len() / 3,
+    );
+    (app.config.log_callback)(LogMessage::message(&message));
+
     extract_emissive_triangles(app);
 
     // clamp samples and bounces to supported limits
@@ -262,29 +274,37 @@ fn initialize_render(app: &mut Glim) {
         );
     }
 
+    let use_ray_query = app.config.hardware_rt && app.vk.as_device.is_some();
+
     app.gpu_mesh = GpuMesh::new(
         &app.vk,
         &app.opaque_mesh,
         &app.transparent_mesh,
         &app.groups,
+        use_ray_query,
     );
 
-    let message = format!(
-        "Created scene with Opaque (Vertices: {} Triangles: {}) and Transparent (Vertices: {} Triangles: {})",
-        app.opaque_mesh.vertices.len(),
-        app.opaque_mesh.indices.len() / 3,
-        app.transparent_mesh.vertices.len(),
-        app.transparent_mesh.indices.len() / 3,
-    );
-
-    (app.config.log_callback)(LogMessage::message(&message));
-
-    let blas = match &app.gpu_mesh.acceleration_structure {
-        mesh::AccelerationStructureType::RayQuery(blas) => blas,
-        _ => panic!("Expected RayQuery variant"),
-    };
-
-    app.tlas = create_tlas(&app.vk, blas);
+    match &app.gpu_mesh.acceleration_structure {
+        mesh::AccelerationStructureType::RayQuery(vulkan_as) => {
+            app.tlas = create_tlas(&app.vk, &vulkan_as)
+        }
+        mesh::AccelerationStructureType::BVH { cwbvh: _, data } => {
+            app.bvh_nodes = Buffer::new(
+                &app.vk,
+                String::from("BVH Nodes"),
+                &data.nodes,
+                vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            );
+            app.bvh_triangles = Buffer::new(
+                &app.vk,
+                String::from("BVH Triangles"),
+                &data.triangles,
+                vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            );
+        }
+    }
 
     if app.skybox.view().is_null() {
         app.skybox = Skybox::solid(&app.vk, 4, 4, Vector3::new(0.0, 0.0, 0.0));
@@ -358,7 +378,7 @@ fn initialize_render(app: &mut Glim) {
     let config = &app.config;
 
     app.constants = SpecializationConstants {
-        use_camera: 0,
+        hardware_rt: use_ray_query as u32,
         light_falloff_type: config.light_falloff as u32,
         transparent_primitive_offset: (app.opaque_mesh.indices.len() / 3) as u32,
         emissive_triangles_count: app.emissive_triangles.len() as u32,
@@ -378,6 +398,8 @@ fn initialize_render(app: &mut Glim) {
         compacted_visibility_address: 0,
         lights_address: app.gpu_lights.gpu_address,
         compaction_buffer_address: 0,
+        bvh_nodes_address: app.bvh_nodes.gpu_address,
+        bvh_triangles_address: app.bvh_triangles.gpu_address,
     };
 
     if app.config.is_preview {
@@ -1124,6 +1146,8 @@ impl Glim {
             skybox: Skybox::null(),
             albedo_array: TextureArray::null(),
             emission_array: TextureArray::null(),
+            bvh_nodes: Buffer::null(),
+            bvh_triangles: Buffer::null(),
         }
     }
 }

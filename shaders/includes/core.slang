@@ -2,6 +2,195 @@
 #include "ray.slang"
 #include "util.slang"
 
+uint ExtractByte(uint value, uint byteIndex)
+{
+    return (value >> (byteIndex * 8)) & 0xFF;
+}
+
+float4 ExtractBytes(float value)
+{
+    uint packed = asuint(value);
+
+    float4 channels = float4(
+        ExtractByte(packed, 0),
+        ExtractByte(packed, 1),
+        ExtractByte(packed, 2),
+        ExtractByte(packed, 3));
+
+    return channels;
+}
+
+bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
+{
+    hit = {};
+
+    float3 O = ray.P;
+    float3 D = ray.D;
+    float tmax = ray.tMax;
+
+    float3 invDir = rcp(D);
+    uint octinv4 = (7u - ((D.x < 0 ? 4u : 0u) | (D.y < 0 ? 2u : 0u) | (D.z < 0 ? 1u : 0u))) * 0x1010101u;
+
+    uint2 stack[32];
+    uint stackPtr = 0;
+    uint2 nodeGroup = uint2(0, 0x80000000u);
+    uint2 triGroup = uint2(0, 0u);
+
+    float2 uv = float2(0, 0);
+    uint hitTriIndex = 0;
+
+    while (true)
+    {
+        if (nodeGroup.y > 0x00FFFFFFu)
+        {
+            uint mask = nodeGroup.y;
+            uint childBitIndex = firstbithigh(mask);
+            uint childNodeBaseIndex = nodeGroup.x;
+
+            nodeGroup.y &= ~(1u << childBitIndex);
+            if (nodeGroup.y > 0x00FFFFFFu)
+            {
+                stack[stackPtr++] = nodeGroup;
+            }
+
+            uint slotIndex = (childBitIndex - 24u) ^ (octinv4 & 255u);
+            uint relativeIndex = countbits(mask & ~(0xFFFFFFFFu << slotIndex));
+            uint childNodeIndex = childNodeBaseIndex + relativeIndex;
+
+            float4 n0 = BVHNodes[childNodeIndex * 5 + 0];
+            float4 n1 = BVHNodes[childNodeIndex * 5 + 1];
+            float4 n2 = BVHNodes[childNodeIndex * 5 + 2];
+            float4 n3 = BVHNodes[childNodeIndex * 5 + 3];
+            float4 n4 = BVHNodes[childNodeIndex * 5 + 4];
+
+            uint packed = asuint(n0.w);
+            float nodeInvX = asfloat(((ExtractByte(packed, 0) ^ 0x80u) - 0x80u + 127u) << 23) * invDir.x;
+            float nodeInvY = asfloat(((ExtractByte(packed, 1) ^ 0x80u) - 0x80u + 127u) << 23) * invDir.y;
+            float nodeInvZ = asfloat(((ExtractByte(packed, 2) ^ 0x80u) - 0x80u + 127u) << 23) * invDir.z;
+            float3 nodeInvDir = float3(nodeInvX, nodeInvY, nodeInvZ);
+            float3 nodePos = (n0.xyz - O) * invDir;
+
+            uint hitmask = 0;
+
+            [unroll]
+            for (int i = 0; i < 2; ++i)
+            {
+                uint meta = asuint(i == 0 ? n1.z : n1.w);
+
+                float4 lox = ExtractBytes(invDir.x < 0 ? (i == 0 ? n3.z : n3.w) : (i == 0 ? n2.x : n2.y));
+                float4 loy = ExtractBytes(invDir.y < 0 ? (i == 0 ? n4.x : n4.y) : (i == 0 ? n2.z : n2.w));
+                float4 loz = ExtractBytes(invDir.z < 0 ? (i == 0 ? n4.z : n4.w) : (i == 0 ? n3.x : n3.y));
+                float4 hix = ExtractBytes(invDir.x < 0 ? (i == 0 ? n2.x : n2.y) : (i == 0 ? n3.z : n3.w));
+                float4 hiy = ExtractBytes(invDir.y < 0 ? (i == 0 ? n2.z : n2.w) : (i == 0 ? n4.x : n4.y));
+                float4 hiz = ExtractBytes(invDir.z < 0 ? (i == 0 ? n3.x : n3.y) : (i == 0 ? n4.z : n4.w));
+
+                float4 tminx = lox * nodeInvDir.x + nodePos.x;
+                float4 tmaxx = hix * nodeInvDir.x + nodePos.x;
+                float4 tminy = loy * nodeInvDir.y + nodePos.y;
+                float4 tmaxy = hiy * nodeInvDir.y + nodePos.y;
+                float4 tminz = loz * nodeInvDir.z + nodePos.z;
+                float4 tmaxz = hiz * nodeInvDir.z + nodePos.z;
+
+                float4 cmin = max(max(max(tminx, tminy), tminz), 0.0f);
+                float4 cmax = min(min(min(tmaxx, tmaxy), tmaxz), tmax);
+
+                uint isInner = (meta & (meta << 1)) & 0x10101010u;
+                uint innerMask = (isInner >> 4) * 0xFFu;
+                uint bitIndex = (meta ^ (octinv4 & innerMask)) & 0x1F1F1F1Fu;
+                uint childBits = (meta >> 5) & 0x07070707u;
+
+                [unroll]
+                for (int j = 0; j < 4; ++j)
+                {
+                    if (cmin[j] <= cmax[j])
+                    {
+                        uint shiftBits = (childBits >> (j * 8)) & 255u;
+                        uint bitShift = (bitIndex >> (j * 8)) & 31u;
+                        hitmask |= shiftBits << bitShift;
+                    }
+                }
+            }
+
+            nodeGroup.x = asuint(n1.x);
+            nodeGroup.y = (hitmask & 0xFF000000u) | (asuint(n0.w) >> 24);
+            triGroup.x = asuint(n1.y);
+            triGroup.y = hitmask & 0x00FFFFFFu;
+        }
+        else
+        {
+            triGroup = nodeGroup;
+            nodeGroup = uint2(0, 0u);
+        }
+
+        while (triGroup.y != 0u)
+        {
+            int triangleIndex = firstbithigh(triGroup.y);
+            int triAddr = triGroup.x + triangleIndex * 3;
+            triGroup.y -= 1u << triangleIndex;
+
+            // CWBVHTriangles layout: [e1, e2, v0] each a float4
+            float3 e1 = BVHTriangles[triAddr + 0].xyz;
+            float3 e2 = BVHTriangles[triAddr + 1].xyz;
+            float4 v0 = BVHTriangles[triAddr + 2];
+
+            float3 r = cross(D, e1);
+            float a = dot(e2, r);
+            if (abs(a) > 1e-7f)
+            {
+                float f = 1.0f / a;
+                float3 s = O - v0.xyz;
+                float u = f * dot(s, r);
+                if (u >= 0.0f && u <= 1.0f)
+                {
+                    float3 q = cross(s, e2);
+                    float v = f * dot(D, q);
+                    if (v >= 0.0f && u + v <= 1.0f)
+                    {
+                        float d = f * dot(e1, q);
+                        if (d > 0.0f && d < tmax)
+                        {
+                            if (anyHit)
+                            {
+                                return true;
+                            }
+                            tmax = d;
+                            uv = float2(u, v);
+                            hitTriIndex = triAddr;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (nodeGroup.y <= 0x00FFFFFFu)
+        {
+            if (stackPtr > 0)
+                nodeGroup = stack[--stackPtr];
+            else
+                break;
+        }
+    }
+
+    if (tmax < ray.tMax)
+    {
+        hit.bary = uv;
+
+        float3 e1 = BVHTriangles[hitTriIndex + 0].xyz;
+        float3 e2 = BVHTriangles[hitTriIndex + 1].xyz;
+        float4 v0 = BVHTriangles[hitTriIndex + 2];
+
+        hit.primitiveID = asuint(v0.w);
+        hit.frontFace = true; // todo
+        hit.t = tmax;
+
+        // hit.p0 = v0.xyz;
+        // hit.p1 = v0.xyz + e2;
+        // hit.p2 = v0.xyz + e1;
+        return true;
+    }
+    return false;
+}
+
 void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 {
     if (query.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE)
@@ -30,54 +219,70 @@ bool TraceRay(Ray ray, out Hit hit)
 {
     hit = {};
 
-    RayDesc rayDesc;
-    rayDesc.Origin = ray.P;
-    rayDesc.Direction = ray.D;
-    rayDesc.TMin = ray.tMin;
-    rayDesc.TMax = ray.tMax;
-
-    RayQuery query;
-    query.TraceRayInline(TopLevelAS, RAY_FLAG_NONE, 0xFF, rayDesc);
-
-    while (query.Proceed())
+    if (HARDWARE_RT == 1)
     {
-        QueryHandleAlpha(query);
-    }
+        RayDesc rayDesc;
+        rayDesc.Origin = ray.P;
+        rayDesc.Direction = ray.D;
+        rayDesc.TMin = ray.tMin;
+        rayDesc.TMax = ray.tMax;
 
-    if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
-    {
-        hit.bary = query.CommittedTriangleBarycentrics();
-        hit.primitiveID = query.CommittedPrimitiveIndex();
-        uint geometryID = query.CommittedGeometryIndex();
-        if (geometryID > 0)
+        RayQuery query;
+        query.TraceRayInline(TopLevelAS, RAY_FLAG_NONE, 0xFF, rayDesc);
+
+        while (query.Proceed())
         {
-            hit.primitiveID += TRANSPARENT_PRIMITIVE_ID_OFFSET;
+            QueryHandleAlpha(query);
         }
-        hit.t = query.CommittedRayT();
-        hit.frontFace = query.CommittedTriangleFrontFace();
-        return true;
-    }
 
-    return false;
+        if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+        {
+            hit.bary = query.CommittedTriangleBarycentrics();
+            hit.primitiveID = query.CommittedPrimitiveIndex();
+            uint geometryID = query.CommittedGeometryIndex();
+            if (geometryID > 0)
+            {
+                hit.primitiveID += TRANSPARENT_PRIMITIVE_ID_OFFSET;
+            }
+            hit.t = query.CommittedRayT();
+            hit.frontFace = query.CommittedTriangleFrontFace();
+            return true;
+        }
+        return false;
+    }
+    else
+    {
+        return BVHTraceRay(ray, hit, false);
+    }
 }
 
 bool TraceShadowRay(Ray ray)
 {
-    RayDesc rayDesc;
-    rayDesc.Origin = ray.P;
-    rayDesc.Direction = ray.D;
-    rayDesc.TMin = ray.tMin;
-    rayDesc.TMax = ray.tMax;
 
-    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
-    query.TraceRayInline(TopLevelAS, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0xFF, rayDesc);
-
-    while (query.Proceed())
+    if (HARDWARE_RT == 1)
     {
-        QueryHandleAlpha(query);
-    }
 
-    return query.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+        RayDesc rayDesc;
+        rayDesc.Origin = ray.P;
+        rayDesc.Direction = ray.D;
+        rayDesc.TMin = ray.tMin;
+        rayDesc.TMax = ray.tMax;
+
+        RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
+        query.TraceRayInline(TopLevelAS, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0xFF, rayDesc);
+
+        while (query.Proceed())
+        {
+            QueryHandleAlpha(query);
+        }
+
+        return query.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+    }
+    else
+    {
+        Hit hit = {};
+        return BVHTraceRay(ray, hit, false);
+    }
 }
 
 float CalculateTriangleArea(uint primitiveID)

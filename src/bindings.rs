@@ -24,6 +24,7 @@ pub struct GlimConfig {
     pub is_preview: bool,
     pub vulkan_validation_layers: bool,
     pub seams_debug: bool,
+    pub hardware_rt: bool,
     pub throttle_preview_ms: u32,
     pub preview_settings: LightmapSettings,
 

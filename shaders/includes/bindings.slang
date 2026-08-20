@@ -4,11 +4,8 @@
 #include "mesh.slang"
 #include "sh.slang"
 
-#ifndef SOFTWARE_RT
 [[vk::binding(0, 0)]]
 RaytracingAccelerationStructure TopLevelAS;
-#else
-#endif
 
 [[vk::binding(2, 0)]]
 [[vk::image_format("rgba32f")]]
@@ -46,7 +43,7 @@ struct LightmapInfo
     static let name = reinterpret<Ptr<type, Access.ReadWrite>>(uint2(name##_ADDRESS_LO, name##_ADDRESS_HI));
 
 [vk::constant_id(0)]
-const uint USE_CAMERA;
+const uint HARDWARE_RT;
 
 [vk::constant_id(1)]
 const uint LIGHT_FALLOFF_TYPE;
@@ -86,6 +83,8 @@ DECLARE_CONST_PTR(LightmapsInfo, LightmapInfo, 20)
 DECLARE_CONST_PTR(CompactedVisibility, float4, 22)
 DECLARE_CONST_PTR(Lights, Light, 24)
 DECLARE_CONST_PTR(CompactionBuffer, uint2, 26)
+DECLARE_CONST_PTR(BVHNodes, float4, 28)
+DECLARE_CONST_PTR(BVHTriangles, float4, 30)
 
 enum LightmapMode : uint
 {

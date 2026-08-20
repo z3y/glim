@@ -25,6 +25,7 @@ mod tests {
     const DILATE: bool = false;
     const FIX_SEAMS: bool = false;
     const MIS: bool = true;
+    const HARDWARE_RT: bool = false;
 
     #[test]
     fn test_preview() {
@@ -54,6 +55,7 @@ mod tests {
             is_preview: true,
             vulkan_validation_layers: true,
             seams_debug: false,
+            hardware_rt: HARDWARE_RT,
             throttle_preview_ms: 2,
             preview_settings,
             camera_position: Vector3::new(0.0, 0.0, 5.0),

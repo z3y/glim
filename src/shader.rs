@@ -69,7 +69,7 @@ impl<'a> Default for ShaderBindings<'a> {
 #[repr(C)]
 #[derive(Default)]
 pub struct SpecializationConstants {
-    pub use_camera: u32,                   // 0
+    pub hardware_rt: u32,                  // 0
     pub light_falloff_type: u32,           // 1
     pub transparent_primitive_offset: u32, // 2
     pub emissive_triangles_count: u32,     // 3
@@ -95,6 +95,9 @@ pub struct SpecializationConstants {
 
     pub lights_address: u64,            // 24 25
     pub compaction_buffer_address: u64, // 26 27
+
+    pub bvh_nodes_address: u64,     // 28 29
+    pub bvh_triangles_address: u64, // 30 31
 }
 
 pub const SPECIALIZATION_MAP_ENTRIES_LEN: usize =
