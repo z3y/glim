@@ -20,7 +20,12 @@ extern "C"
 
     BVHHandle *bvh_build(float *triangles, uint32_t triCount)
     {
-        BVH8_CWBVH gpu_bvh;
+        BVHContext ctx;
+        ctx.spawn = nullptr;
+        ctx.barrier = nullptr;
+        ctx.parallel_for = nullptr;
+
+        BVH8_CWBVH gpu_bvh(ctx);
         bvhvec4 *verts = reinterpret_cast<bvhvec4 *>(triangles);
         gpu_bvh.BuildHQ(verts, triCount);
 
