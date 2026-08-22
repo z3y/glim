@@ -11,11 +11,19 @@ struct PushConstants
     uint pad0;
 };
 
-[WaveSize(32)]
+groupshared uint SharedMask;
+
 [numthreads(32, 1, 1)]
-void main(uint3 threadID: SV_DispatchThreadID, uint3 groupID: SV_GroupID)
+void main(uint3 threadID: SV_DispatchThreadID, uint3 groupID: SV_GroupID, uint groupIndex: SV_GroupIndex)
 {
     uint2 resolution = Push.resolution;
+
+    if (groupIndex == 0)
+    {
+        SharedMask = 0;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
 
     bool visible = false;
 
@@ -27,10 +35,16 @@ void main(uint3 threadID: SV_DispatchThreadID, uint3 groupID: SV_GroupID)
         visible = asuint(visibility.x) != uint::maxValue;
     }
 
-    uint mask = WaveActiveBallot(visible).x;
-
-    if (WaveIsFirstLane())
+    if (visible)
     {
+        InterlockedOr(SharedMask, 1u << groupIndex);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (groupIndex == 0)
+    {
+        uint mask = SharedMask;
         CompactionBuffer[groupID.x + Push.offset] = uint2(mask, countbits(mask));
     }
 }
