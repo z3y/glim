@@ -105,7 +105,6 @@ jobs:
         run: |
           cp build/windows/glim.dll unity/Editor/glim.dll
           cp build/linux/libglim.so unity/Editor/glim.so
-          cp -r build/linux/license unity/license~
 
       - name: Create zip
         run: |
