@@ -1982,7 +1982,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             );
         }
 
-        let mut mixed_count = 0;
+        let mut mixed_count = 0u32;
         for i in 0..lights_count {
             let l = &app.cpu_lights[i];
             if l.mixed == 1 {
@@ -2014,7 +2014,12 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             app.vk.end_single_use_cmd(cmd);
 
             if mixed_count > 0 {
-                let mixed_start = lights_count - mixed_count;
+                render_direct_light(
+                    lights_count as u32 - mixed_count,
+                    lights_count as u32,
+                    app.config.direct_light_samples,
+                    true,
+                );
             }
         }
 

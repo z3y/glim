@@ -25,8 +25,8 @@ namespace Glim
     public enum MixedLightMode : uint
     {
         BakedIndirect = 0,
-        Subtractive = 1,
-        Shadowmask = 2,
+        // Subtractive = 1, // TODO
+        // Shadowmask = 2, // TODO
     }
 
     public class GlimLightmapper : MonoBehaviour
@@ -48,7 +48,7 @@ namespace Glim
   Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it."
 )]
         public LightmapMode lightmapMode = LightmapMode.NonDirectional;
-        [HideInInspector] public MixedLightMode mixedLights = MixedLightMode.BakedIndirect;
+        public MixedLightMode mixedMode = MixedLightMode.BakedIndirect;
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
         [Tooltip(
 @"Enables multiple importance sampling (MIS) for emissive meshes,

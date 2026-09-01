@@ -174,12 +174,6 @@ namespace Glim
 
                 bool mixed = light.lightmapBakeType == LightmapBakeType.Mixed;
 
-                if (mixed)
-                {
-                    Debug.LogError($"Mixed lights currently not implemented {light.gameObject.name}");
-                    continue;
-                }
-
                 var gammaColor = light.color;
                 if (light.useColorTemperature)
                 {
@@ -261,11 +255,11 @@ namespace Glim
                     outputElement.FindPropertyRelative("probeOcclusionLightIndex").intValue = 0;
                     outputElement.FindPropertyRelative("occlusionMaskChannel").intValue = -1;
 
-                    var mixedMode = lightmapper.mixedLights switch
+                    var mixedMode = lightmapper.mixedMode switch
                     {
                         MixedLightMode.BakedIndirect => MixedLightingMode.IndirectOnly,
-                        MixedLightMode.Subtractive => MixedLightingMode.Subtractive,
-                        MixedLightMode.Shadowmask => MixedLightingMode.Shadowmask,
+                        // MixedLightMode.Subtractive => MixedLightingMode.Subtractive,
+                        // MixedLightMode.Shadowmask => MixedLightingMode.Shadowmask,
                         _ => MixedLightingMode.IndirectOnly,
                     };
 
