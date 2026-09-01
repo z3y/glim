@@ -197,6 +197,11 @@ namespace Glim
                 {
                     lightType = Bindings.LightType.Area;
                 }
+                else if (light.type == LightType.Disc)
+                {
+                    // TODO
+                    lightType = Bindings.LightType.Area;
+                }
 
                 float radiusOrAngle = light.type == LightType.Directional ?
                     Mathf.Deg2Rad * light.shadowAngle : light.shadowRadius;
@@ -229,6 +234,11 @@ namespace Glim
                 {
                     l.direction = -light.transform.forward;
                     l.area_size = light.areaSize;
+                }
+                if (light.type == LightType.Disc)
+                {
+                    l.direction = -light.transform.forward;
+                    l.area_size = new Vector2(light.areaSize.x, light.areaSize.x);
                 }
 
                 addedLights.Add(light);

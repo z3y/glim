@@ -2552,7 +2552,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         update_compute_shader(&app.vk, &shader, &shader_bindings);
 
         let mut push = PushConstants {
-            lights_count: app.cpu_lights.len() as u32,
+            lights_count: app.cpu_lights.len() as u32 - mixed_count,
             max_samples: app.config.probe_samples,
             sample_index: 0,
             probes_count: app.probes.len() as u32,
