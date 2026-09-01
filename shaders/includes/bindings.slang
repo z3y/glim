@@ -117,3 +117,19 @@ float3 SampleSkybox(float3 dir)
 
     return clamp(Skybox.SampleLevel(SkyboxSampler, dir, 0.0).rgb * SKYBOX_INTENSITY, 0.0, SKYBOX_MAX);
 }
+
+uint2 GetBounceBufferOffsets(uint compactedCount)
+{
+    uint2 offsets = uint2(compactedCount, compactedCount * 2);
+
+    if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
+    {
+        offsets += compactedCount;
+    }
+    else if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
+    {
+        offsets += compactedCount * 2;
+    }
+
+    return offsets;
+}

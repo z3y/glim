@@ -54,32 +54,13 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
 
-    uint bounceAOffset = Push.compactedCount;
-    uint bounceBOffset = Push.compactedCount * 2;
-
-    if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
+    uint2 bounceOffsets = GetBounceBufferOffsets(Push.compactedCount);
+    uint currentOffset = bounceOffsets.y;
+    uint previousOffset = bounceOffsets.x;
+    if (Push.bounceIndex % 2 != 0)
     {
-        bounceAOffset += Push.compactedCount;
-        bounceBOffset += Push.compactedCount;
-    }
-    else if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
-    {
-        bounceAOffset += Push.compactedCount * 2;
-        bounceBOffset += Push.compactedCount * 2;
-    }
-
-    uint previousOffset = 0;
-    uint currentOffset = 0;
-    if (Push.bounceIndex == 0)
-    {
-        previousOffset = 0;
-        currentOffset = bounceAOffset;
-    }
-    else
-    {
-        bool swap = Push.bounceIndex % 2 != 0;
-        currentOffset = swap ? bounceBOffset : bounceAOffset;
-        previousOffset = swap ? bounceAOffset : bounceBOffset;
+        currentOffset = bounceOffsets.x;
+        previousOffset = bounceOffsets.y;
     }
 
     Hit bounceHit;
