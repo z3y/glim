@@ -1,7 +1,7 @@
 use crate::math::{Vector2, Vector3};
 
 #[repr(u32)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LightType {
     Directional = 0,
     Point = 1,

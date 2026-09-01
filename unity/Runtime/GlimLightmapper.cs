@@ -50,13 +50,16 @@ namespace Glim
         public LightmapMode lightmapMode = LightmapMode.NonDirectional;
         [HideInInspector] public MixedLightMode mixedLights = MixedLightMode.BakedIndirect;
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
-        [Tooltip("Enables multiple importance sampling (MIS) for emissive meshes, reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times. Affects lightmaps, light probes and light volumes.")]
+        [Tooltip(
+@"Enables multiple importance sampling (MIS) for emissive meshes,
+reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.
+Affects lightmaps, light probes and light volumes.")]
         public bool multipleImportanceSampling = false;
 
-        [Tooltip("Number of direct samples, affects direct lights")]
+        [Tooltip("Number of direct samples, affects direct light from point, spot and directional lights")]
         public uint directLightSamples = 64;
 
-        [Tooltip("Number of direct samples, affects emissive materials, multiple importance sampling and skybox")]
+        [Tooltip("Number of direct samples, affects emissive materials, area lights, multiple importance sampling and skybox")]
         public uint directEmissionSamples = 512;
 
         [Tooltip("Only affects bounced light")]

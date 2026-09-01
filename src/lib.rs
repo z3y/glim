@@ -13,6 +13,7 @@ use glfw_sys::{
 use crate::bindings::*;
 use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
+use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
@@ -266,7 +267,16 @@ fn initialize_render(app: &mut Glim) {
 
     // upload lights
     if app.cpu_lights.len() > 0 {
-        app.cpu_lights.sort_by_key(|x| x.mixed == 1);
+        app.cpu_lights.sort_by_key(|x| {
+            if x.ty == LightType::Area {
+                1u8
+            } else if x.mixed == 1 {
+                2u8
+            } else {
+                0u8
+            }
+        });
+
         app.gpu_lights = Buffer::new(
             &app.vk,
             String::from("Lights"),
@@ -1861,7 +1871,11 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             pub compacted_count: u32,
             pub sample_index: u32,
             pub max_samples: u32,
+            pub pad0: u32,
+            pub lights_start: u32,
             pub lights_count: u32,
+            pub pad1: u32,
+            pub pad2: u32,
         }
 
         let mut bake_direct_light_shader = load_compute_shader(
@@ -1873,53 +1887,97 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         );
         update_compute_shader(&app.vk, &bake_direct_light_shader, &shader_bindings);
 
-        let mut bake_direct_push = PushConstants {
-            compacted_count: compacted_pixels_count,
-            sample_index: 0,
-            max_samples: app.config.direct_light_samples,
-            lights_count: app.cpu_lights.len() as u32,
-        };
-
         let message = format!("Baking Direct Light");
         (log)(LogMessage::message(&message));
 
-        for sample_index in 0..bake_direct_push.max_samples {
-            if is_cancelled() {
+        let mut render_direct_light = |lights_start: u32, lights_count: u32, max_samples: u32| {
+            let mut bake_direct_push = PushConstants {
+                compacted_count: compacted_pixels_count,
+                sample_index: 0,
+                max_samples,
+                pad0: 0,
+                lights_start,
+                lights_count,
+                pad1: 0,
+                pad2: 0,
+            };
+
+            for sample_index in 0..bake_direct_push.max_samples {
+                if is_cancelled() {
+                    break;
+                }
+                bake_direct_push.sample_index = sample_index;
+                if sample_index % 4 == 0 || sample_index == (bake_direct_push.max_samples - 1) {
+                    (log)(LogMessage::progress(progress * progress_scale));
+                }
+                progress += 1.0;
+
+                let vk = &app.vk.device;
+                let shader = &bake_direct_light_shader;
+                let bake_direct_push_bytes = as_bytes(&bake_direct_push);
+
+                let cmd = app.vk.begin_single_use_cmd();
+                unsafe {
+                    vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+                    vk.cmd_bind_descriptor_sets(
+                        cmd,
+                        vk::PipelineBindPoint::COMPUTE,
+                        shader.pipeline_layout,
+                        0,
+                        &[shader.descriptor_set],
+                        &[],
+                    );
+                    vk.cmd_push_constants(
+                        cmd,
+                        shader.pipeline_layout,
+                        vk::ShaderStageFlags::COMPUTE,
+                        0,
+                        &bake_direct_push_bytes,
+                    );
+
+                    vk.cmd_dispatch(cmd, compacted_groups_x, 1, 1);
+                };
+                app.vk.end_single_use_cmd(cmd);
+            }
+        };
+
+        // lights sorted in a way that area and mixed lights are last
+        // first render non mixed non area lights
+        let mut light_count = app.cpu_lights.len() as u32;
+        for i in 0..app.cpu_lights.len() {
+            let l = &app.cpu_lights[i];
+            if l.ty == LightType::Area || l.mixed == 1 {
+                light_count = i as u32;
                 break;
             }
-            bake_direct_push.sample_index = sample_index;
-            if sample_index % 4 == 0 || sample_index == (bake_direct_push.max_samples - 1) {
-                (log)(LogMessage::progress(progress * progress_scale));
-            }
-            progress += 1.0;
-
-            let vk = &app.vk.device;
-            let shader = &bake_direct_light_shader;
-            let bake_direct_push_bytes = as_bytes(&bake_direct_push);
-
-            let cmd = app.vk.begin_single_use_cmd();
-            unsafe {
-                vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-                vk.cmd_bind_descriptor_sets(
-                    cmd,
-                    vk::PipelineBindPoint::COMPUTE,
-                    shader.pipeline_layout,
-                    0,
-                    &[shader.descriptor_set],
-                    &[],
-                );
-                vk.cmd_push_constants(
-                    cmd,
-                    shader.pipeline_layout,
-                    vk::ShaderStageFlags::COMPUTE,
-                    0,
-                    &bake_direct_push_bytes,
-                );
-
-                vk.cmd_dispatch(cmd, compacted_groups_x, 1, 1);
-            };
-            app.vk.end_single_use_cmd(cmd);
         }
+        render_direct_light(0, light_count, app.config.direct_light_samples);
+
+        // render area lights with higher sample count
+        let mut area_start = 0u32;
+        let mut area_count = 0u32;
+        for i in 0..app.cpu_lights.len() {
+            let l = &app.cpu_lights[i];
+            if l.ty == LightType::Area {
+                if area_count == 0 {
+                    area_start = i as u32;
+                }
+
+                area_count += 1;
+            }
+
+            if l.mixed == 1 {
+                break;
+            }
+        }
+        if area_count > 0 {
+            render_direct_light(
+                area_start,
+                area_start + area_count,
+                app.config.direct_emission_samples,
+            );
+        }
+
         bake_direct_light_shader.destroy(&app.vk);
     }
 

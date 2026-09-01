@@ -103,8 +103,6 @@ Make sure to also read [Updating](#updating) ⚠️
 
 ## Screenshots
 
-World Link: https://vrchat.com/home/world/wrld_6d94340a-cf41-42f9-97f9-d94667e5cba0
-
 ![Lightmaps](/images/lightmaps.jpg)
 
 ### Preview Window

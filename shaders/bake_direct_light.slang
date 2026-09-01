@@ -9,7 +9,12 @@ struct PushConstants
     uint compactedCount;
     uint sampleIndex;
     uint maxSamples;
-    uint lightCount;
+    uint pad0;
+
+    uint lightsStart;
+    uint lightsCount;
+    uint pad1;
+    uint pad2;
 };
 
 [shader("compute")]
@@ -30,7 +35,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
-    uint lightCount = Push.lightCount;
+    uint lightsStart = Push.lightsStart;
+    uint lightsCount = Push.lightsCount;
     float sampleScale = 1.0 / float(sampleCount);
 
     SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
@@ -45,7 +51,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
 
-    for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
+    for (uint lightIndex = lightsStart; lightIndex < lightsCount; lightIndex++)
     {
         Light light = Lights[lightIndex];
         float3 L;
