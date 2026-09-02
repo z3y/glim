@@ -320,7 +320,29 @@ namespace Glim
                 }
             }
 
-            var allRenderers = rootObjects.SelectMany(x => x.GetComponentsInChildren<MeshRenderer>(false));
+            var allRenderers = rootObjects.SelectMany(x => x.GetComponentsInChildren<MeshRenderer>(false)).ToList();
+            var allLodGroups = rootObjects.SelectMany(x => x.GetComponentsInChildren<LODGroup>(false));
+
+            // keep only highest level LODs for bake
+            foreach (var group in allLodGroups)
+            {
+                var lods = group.GetLODs();
+
+                for (int i = 1; i < lods.Length; i++)
+                {
+                    LOD lod = lods[i];
+
+                    foreach (var renderer in lods[i].renderers)
+                    {
+                        if (renderer is MeshRenderer mr)
+                        {
+                            allRenderers.Remove(mr);
+                        }
+                    }
+                }
+
+            }
+
             var unclaimedRenderers = new List<MeshRenderer>();
             foreach (var r in allRenderers)
             {
