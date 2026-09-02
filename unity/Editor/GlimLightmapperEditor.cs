@@ -312,6 +312,12 @@ namespace Glim
 
         public static void BakeAllReflectionProbesSnapshots(Scene scene, int supersampling, bool specularProbes)
         {
+            if (Lightmapping.lightingDataAsset == null)
+            {
+                Debug.LogError("Lightmaps not baked");
+                return;
+            }
+
             var root = scene.GetRootGameObjects();
 
             var probes = root.SelectMany(x => x.GetComponentsInChildren<ReflectionProbe>(false)).ToArray();
