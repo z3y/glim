@@ -15,6 +15,7 @@ use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
+use crate::mesh::Vertex;
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
@@ -934,9 +935,6 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
 }
 
 fn extract_emissive_triangles(app: &mut Glim) {
-    // todo indices of both opaque and transparent
-    let vertices = &app.opaque_mesh.vertices;
-    let indices = &app.opaque_mesh.indices;
     let mut emissive_triangles: Vec<u32> = Vec::new();
 
     fn sample_emissive(uv: Vector2, w: u32, h: u32, pixels: &Vec<f32>) -> bool {
@@ -948,51 +946,59 @@ fn extract_emissive_triangles(app: &mut Glim) {
     }
 
     if app.config.mis {
-        for primitive_id in 0..(indices.len() / 3) {
-            let i0 = indices[primitive_id * 3 + 0] as usize;
-            let i1 = indices[primitive_id * 3 + 1] as usize;
-            let i2 = indices[primitive_id * 3 + 2] as usize;
+        let mut extract = |vertices: &[Vertex], indices: &[u32]| {
+            for primitive_id in 0..(indices.len() / 3) {
+                let i0 = indices[primitive_id * 3 + 0] as usize;
+                let i1 = indices[primitive_id * 3 + 1] as usize;
+                let i2 = indices[primitive_id * 3 + 2] as usize;
 
-            let v0 = &vertices[i0];
-            let v1 = &vertices[i1];
-            let v2 = &vertices[i2];
+                let v0 = &vertices[i0];
+                let v1 = &vertices[i1];
+                let v2 = &vertices[i2];
 
-            let emissive = (v0.flags & (1 << 17)) != 0;
+                let emissive = (v0.flags & (1 << 17)) != 0;
 
-            if !emissive {
-                continue;
+                if !emissive {
+                    continue;
+                }
+
+                let uv0 = v0.uv;
+                let uv1 = v1.uv;
+                let uv2 = v2.uv;
+
+                let group_index = (v0.flags & 0xFFFF) as usize;
+                let group = &app.groups[group_index];
+                let pixels = &group.emission_pixels;
+
+                let w = group.settings.width;
+                let h = group.settings.height;
+
+                let center_uv = (uv0 + uv1 + uv2) / 3.0;
+
+                if sample_emissive(center_uv, w, h, pixels) {
+                    emissive_triangles.push(primitive_id as u32);
+                    continue;
+                }
+                if sample_emissive(uv0, w, h, pixels) {
+                    emissive_triangles.push(primitive_id as u32);
+                    continue;
+                }
+                if sample_emissive(uv1, w, h, pixels) {
+                    emissive_triangles.push(primitive_id as u32);
+                    continue;
+                }
+                if sample_emissive(uv2, w, h, pixels) {
+                    emissive_triangles.push(primitive_id as u32);
+                    continue;
+                }
             }
+        };
 
-            let uv0 = v0.uv;
-            let uv1 = v1.uv;
-            let uv2 = v2.uv;
-
-            let group_index = (v0.flags & 0xFFFF) as usize;
-            let group = &app.groups[group_index];
-            let pixels = &group.emission_pixels;
-
-            let w = group.settings.width;
-            let h = group.settings.height;
-
-            let center_uv = (uv0 + uv1 + uv2) / 3.0;
-
-            if sample_emissive(center_uv, w, h, pixels) {
-                emissive_triangles.push(primitive_id as u32);
-                continue;
-            }
-            if sample_emissive(uv0, w, h, pixels) {
-                emissive_triangles.push(primitive_id as u32);
-                continue;
-            }
-            if sample_emissive(uv1, w, h, pixels) {
-                emissive_triangles.push(primitive_id as u32);
-                continue;
-            }
-            if sample_emissive(uv2, w, h, pixels) {
-                emissive_triangles.push(primitive_id as u32);
-                continue;
-            }
-        }
+        extract(&app.opaque_mesh.vertices, &app.opaque_mesh.indices);
+        extract(
+            &app.transparent_mesh.vertices,
+            &app.transparent_mesh.indices,
+        );
     }
 
     if app.config.mis {
