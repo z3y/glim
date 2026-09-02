@@ -1,32 +1,66 @@
 # GPU Lightmapper
 
-A GPU accelerated standalone lightmap baker for Unity, powered by Vulkan
+A GPU accelerated lightmapper for Unity, powered by Vulkan.
+Easy to use, lightweight (only ~1MB) and works with Unity light components.
 
 ## Features
 
-- Supports Windows and Linux (Nvidia and AMD GPUs)
-- Fast hardware accelerated ray-tracing using `VK_KHR_ray_query`
-- Software CWBVH for GPUs without hardware ray-tracing
-- Easy to use (aims to be mostly a drop-in replacement)
-- Realtime path-traced preview
-- SH Lightmap mode (Monochromatic L1), Directional and Non Directional
-- Emissive materials, Directional, Spot, Point, and Area Lights
-- Multiple importance sampling for emissive meshes
-- Seam stitching with a least squares solver
-- UV Packing with hole filling
-- Light Probe baking (L2 Spherical Harmonics)
-- VRCLightVolumes baking
-- Open Image Denoise 2.0
-- Physically correct
-- Lightmap Groups
-- Small binary size (only ~1MB)
-- Fully standalone, with Unity URP and Built-In pipeline support
+- [x] Hardware Ray-Tracing with `VK_KHR_ray_query`
+- [x] Software Ray-Tracing with Compressed Wide BVHs
+- [x] Realtime path-traced preview window
+- Operating Systems
+  - [x] Windows
+  - [x] Linux
+  - [ ] macOS*
+- Graphics Cards
+  - [x] Nvidia
+  - [x] AMD
+  - [x] Intel
+- Lightmap Modes
+  - [x] Non-Directional
+  - [x] Dominant Direction
+  - [x] Monochromatic L1 SH
+- Unity Render Pipelines
+  - [x] Built-In
+  - [x] URP
+  - [ ] HDRP
+- UV Packing
+  - [x] Hole filling
+  - [x] Scale Offset mode
+  - [x] No Packing mode
+  - [ ] Chart Splitting mode
+  - [ ] Efficient LOD chart packing
+- Lights
+  - [x] Directional
+  - [x] Point
+  - [x] Spot
+  - [x] Area
+  - [ ] Disc
+- [ ] Light Cookies
+- [x] Open Image Denoise 2.0
+- [x] Emissive Materials with Multiple Importance Sampling
+- [x] Seam stitching with a least squares solver
+- [x] L2 Spherical Harmonics Light Probes
+- [x] VRC Light Volumes
+- [x] Lightmap Groups
+- [ ] Terrain Trees Support
+- [x] Mixed Lights
+  - [x] Baked Indirect
+  - [ ] Shadowmask
+  - [ ] Subtractive
+- [ ] Ambient Occlusion
+- [ ] URP Adaptive Probe Volumes
+- [ ] Light Probe Occlusion
+- [ ] Emissive Multiplier
+- [ ] Skybox Reflection Probe
+- [ ] Double-sided GI
+- [ ] Meta Pass fallback
 
 ## How to use
 
 ## Notes
 
-- While the lightmapper is fully working, it is still in early stages, theres room for improvement and it might lack some features (Check the [TODO](./TODO.md) list)
+- While the lightmapper is fully working, it is still in early stages, theres room for improvement and it might lack some features
 - Glim can work on macOS via MoltenVK with `VK_KHR_ray_query`, however the stock MoltenVK does not yet implement it. There is a [pending PR](https://github.com/KhronosGroup/MoltenVK/pull/2771) that contains the required features. You can temporarily build MoltenVK from that fork, or use the version from https://github.com/owlboy/glim-moltenvk-dist/. Glim releases also do not include macOS builds currently so you would have to also [build](#building) it yourself.
 
 ## Support
