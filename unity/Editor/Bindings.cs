@@ -166,7 +166,7 @@ namespace Glim
         internal static extern void app_set_skybox(IntPtr app, Color[] pixels, uint pixels_length, uint width, uint height);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
-        public static unsafe extern void app_add_lightmap_group(IntPtr app, LightmapSettings settings, byte* albedoPixels, uint albedoPixelsLength, float* emissionPixels, uint emissionPixelsLength);
+        public static unsafe extern void app_add_lightmap_group(IntPtr app, LightmapSettings settings, byte* albedoPixels, uint albedoPixelsLength, byte* emissionPixels, uint emissionPixelsLength);
 
         [StructLayout(LayoutKind.Sequential)]
         public unsafe struct Mesh

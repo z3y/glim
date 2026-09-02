@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Experimental.Rendering;
 
 namespace Glim
 {
@@ -27,7 +28,7 @@ namespace Glim
                 height = resolution,
                 useMipMap = false,
                 mipCount = 1,
-                colorFormat = type == AtlasType.Albedo ? RenderTextureFormat.ARGB32 : RenderTextureFormat.ARGBHalf,
+                colorFormat = type == AtlasType.Albedo ? RenderTextureFormat.ARGB32 : RenderTextureFormat.RGB111110Float,
                 sRGB = false,
                 volumeDepth = 1,
                 msaaSamples = 1,
@@ -68,7 +69,9 @@ namespace Glim
 
             Graphics.ExecuteCommandBuffer(cmd);
 
-            var format = type == AtlasType.Albedo ? TextureFormat.RGBA32 : TextureFormat.RGBAFloat;
+            var format = type == AtlasType.Albedo
+                ? GraphicsFormat.R8G8B8A8_UNorm
+                : GraphicsFormat.B10G11R11_UFloatPack32;
 
             return AsyncGPUReadback.Request(_rt, 0, format);
         }

@@ -157,13 +157,14 @@ impl Texture2D {
     }
 
     fn pixel_size(&self) -> u64 {
-        let channels = 4u64;
         let size = match self.format() {
-            vk::Format::R32G32B32A32_SFLOAT => std::mem::size_of::<f32>(),
-            vk::Format::R8G8B8A8_UNORM => std::mem::size_of::<u8>(),
+            vk::Format::R32G32B32A32_SFLOAT => std::mem::size_of::<f32>() * 4,
+            vk::Format::R8G8B8A8_UNORM => std::mem::size_of::<u8>() * 4,
+            vk::Format::B10G11R11_UFLOAT_PACK32 => std::mem::size_of::<u8>() * 4,
             _ => unreachable!(),
         } as u64;
-        size * channels
+
+        size
     }
 
     // only 4 channel f32 or u8 textures
@@ -643,5 +644,95 @@ impl Texture2D {
 
     pub fn set_layout(&mut self, layout: vk::ImageLayout) {
         self.layout = layout;
+    }
+}
+
+/// Encodes three non-negative floats into the packed R11G11B10_FLOAT format,
+/// returned as little-endian bytes of the packed u32.
+///
+/// Layout (LSB to MSB): R[10:0], G[10:0], B[9:0]
+/// R and G each have 5 exponent bits + 6 mantissa bits.
+/// B has 5 exponent bits + 5 mantissa bits.
+/// All three are unsigned (no sign bit) — negative inputs clamp to 0.
+#[allow(dead_code)]
+pub fn encode_r11g11b10(r: f32, g: f32, b: f32) -> [u8; 4] {
+    let packed = f32_to_ufloat(r, 6) | (f32_to_ufloat(g, 6) << 11) | (f32_to_ufloat(b, 5) << 22);
+    packed.to_le_bytes()
+}
+
+/// Converts an f32 to an unsigned mini-float with 5 exponent bits (bias 15)
+/// and `mantissa_bits` mantissa bits (6 for R/G, 5 for B).
+fn f32_to_ufloat(value: f32, mantissa_bits: u32) -> u32 {
+    const EXP_BITS: u32 = 5;
+    const BIAS: i32 = 15;
+    const MAX_EXP: i32 = (1 << EXP_BITS) - 1; // 31
+
+    let mantissa_mask = (1u32 << mantissa_bits) - 1;
+
+    if value.is_nan() {
+        return (MAX_EXP as u32) << mantissa_bits | 1; // NaN
+    }
+    if value <= 0.0 {
+        return 0; // negative and zero clamp to 0
+    }
+    if value.is_infinite() {
+        return (MAX_EXP as u32) << mantissa_bits; // Inf
+    }
+
+    let bits = value.to_bits();
+    let f32_exp = ((bits >> 23) & 0xFF) as i32 - 127;
+    let f32_mantissa = bits & 0x7FFFFF;
+    let full_mantissa = (1u64 << 23) | f32_mantissa as u64; // implicit leading 1
+
+    let mut exp = f32_exp + BIAS;
+    let shift = 23 - mantissa_bits as i32;
+
+    if exp >= MAX_EXP {
+        // Overflow -> saturate to infinity
+        return (MAX_EXP as u32) << mantissa_bits;
+    }
+
+    if exp <= 0 {
+        // Subnormal (or underflow to zero)
+        let extra_shift = shift - exp + 1;
+        if extra_shift >= 64 {
+            return 0;
+        }
+        let mantissa = round_shift(full_mantissa, extra_shift as u32);
+        return (mantissa as u32) & mantissa_mask;
+    }
+
+    // Normalized case
+    let mut mantissa = round_shift(full_mantissa, shift as u32);
+
+    // Rounding may have carried the mantissa into the next power of two
+    if mantissa > mantissa_mask as u64 {
+        mantissa = 0;
+        exp += 1;
+        if exp >= MAX_EXP {
+            return (MAX_EXP as u32) << mantissa_bits; // rounded up to infinity
+        }
+    }
+
+    ((exp as u32) << mantissa_bits) | (mantissa as u32 & mantissa_mask)
+}
+
+/// Shifts `value` right by `shift` bits, rounding to nearest-even.
+fn round_shift(value: u64, shift: u32) -> u64 {
+    if shift == 0 {
+        return value;
+    }
+    if shift >= 64 {
+        return 0;
+    }
+    let half = 1u64 << (shift - 1);
+    let mask = (1u64 << shift) - 1;
+    let truncated = value >> shift;
+    let remainder = value & mask;
+
+    if remainder > half || (remainder == half && (truncated & 1) == 1) {
+        truncated + 1
+    } else {
+        truncated
     }
 }

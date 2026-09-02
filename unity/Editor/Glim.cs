@@ -15,7 +15,7 @@ namespace Glim
     public class BakeContextGroup
     {
         public Color32[] albedo;
-        public Color[] emission;
+        public byte[] emission;
         public Bindings.LightmapSettings settings;
         public GlimLightmapGroup groupAsset;
 
@@ -37,8 +37,7 @@ namespace Glim
             emissionRequest.WaitForCompletion();
 
             albedo = albedoRequest.GetData<Color32>().ToArray();
-            emission = emissionRequest.GetData<Color>().ToArray();
-
+            emission = emissionRequest.GetData<byte>().ToArray();
 
             // var albedoAtlas = new Texture2D((int)settings.width, (int)settings.height, TextureFormat.ARGB32, 1, true);
             // albedoAtlas.SetPixels32(albedo);
@@ -64,13 +63,13 @@ namespace Glim
 
             using var metaAlbedo = new TerrainMetaTexture((int)settings.width);
             albedo = metaAlbedo.CreateAtlas(terrain);
-            emission = new Color[group.Width * group.Height];
+            emission = new byte[group.Width * group.Height * 4];
         }
 
         public void ClearPixels()
         {
             albedo = new Color32[0];
-            emission = new Color[0];
+            emission = new byte[0];
         }
     }
 

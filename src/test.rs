@@ -12,6 +12,7 @@ mod tests {
     use crate::math::*;
     use crate::mesh::FfiMesh;
     use crate::pack::UVPacker;
+    use crate::texture2d::encode_r11g11b10;
     use crate::*;
 
     const TEST_NAME: &str = "monkey_2";
@@ -108,13 +109,20 @@ mod tests {
             fix_seams: FIX_SEAMS,
         };
 
+        let packed_emission_pixels: Vec<u8> = emission_pixels
+            .chunks_exact(4)
+            .flat_map(|rgba| encode_r11g11b10(rgba[0], rgba[1], rgba[2]))
+            .collect();
+
+        drop(emission_pixels);
+
         app_add_lightmap_group(
             app,
             settings,
             albedo_pixels.as_ptr(),
             albedo_pixels.len() as u32,
-            emission_pixels.as_ptr(),
-            emission_pixels.len() as u32,
+            packed_emission_pixels.as_ptr(),
+            packed_emission_pixels.len() as u32,
         );
 
         {

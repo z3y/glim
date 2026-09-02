@@ -157,7 +157,7 @@ pub struct RenderTarget {
 pub struct LightmapGroup {
     pub settings: LightmapSettings,
     pub albedo_pixels: Vec<u8>,
-    pub emission_pixels: Vec<f32>,
+    pub emission_pixels: Vec<u8>,
 }
 
 #[repr(C)]
@@ -353,7 +353,7 @@ fn initialize_render(app: &mut Glim) {
         let desc = TextureDescriptor {
             width: group.settings.width,
             height: group.settings.height,
-            format: vk::Format::R32G32B32A32_SFLOAT, // todo 16bit
+            format: vk::Format::B10G11R11_UFLOAT_PACK32,
             usage: vk::ImageUsageFlags::SAMPLED
                 | vk::ImageUsageFlags::TRANSFER_SRC
                 | vk::ImageUsageFlags::TRANSFER_DST,
@@ -937,12 +937,23 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
 fn extract_emissive_triangles(app: &mut Glim) {
     let mut emissive_triangles: Vec<u32> = Vec::new();
 
-    fn sample_emissive(uv: Vector2, w: u32, h: u32, pixels: &Vec<f32>) -> bool {
+    fn sample_emissive(uv: Vector2, w: u32, h: u32, pixels: &[u8]) -> bool {
         let x = (uv.x * w as f32).clamp(0.0, (w - 1) as f32) as usize;
         let y = (uv.y * h as f32).clamp(0.0, (h - 1) as f32) as usize;
         let index = (y * w as usize + x) * 4;
-        let emission = &pixels[index..index + 4];
-        emission[0] > 0.0 || emission[1] > 0.0 || emission[2] > 0.0
+
+        let packed = u32::from_le_bytes([
+            pixels[index],
+            pixels[index + 1],
+            pixels[index + 2],
+            pixels[index + 3],
+        ]);
+
+        let r = packed & 0x7ff;
+        let g = (packed >> 11) & 0x7ff;
+        let b = (packed >> 22) & 0x3ff;
+
+        r != 0 || g != 0 || b != 0
     }
 
     if app.config.mis {
@@ -1033,41 +1044,9 @@ fn extract_emissive_triangles(app: &mut Glim) {
 impl LightmapGroup {
     fn new(
         settings: LightmapSettings,
-        albedo_pixels: &[u8],
-        emission_pixels: &[f32],
+        albedo_pixels: &[u8],   // RGB32
+        emission_pixels: &[u8], // RGB111110Float
     ) -> LightmapGroup {
-        // println!("creating lightmap group {:?}", &settings);
-
-        // let mut albedo = Texture2D::new(
-        //     &app.vk,
-        //     settings.width,
-        //     settings.height,
-        //     vk::Format::R8G8B8A8_UNORM,
-        //     vk::ImageUsageFlags::SAMPLED
-        //         | vk::ImageUsageFlags::TRANSFER_SRC
-        //         | vk::ImageUsageFlags::TRANSFER_DST,
-        //     format!("Albedo {}", index),
-        // );
-
-        // let mut emission = Texture2D::new(
-        //     &app.vk,
-        //     settings.width,
-        //     settings.height,
-        //     vk::Format::R32G32B32A32_SFLOAT,
-        //     vk::ImageUsageFlags::SAMPLED
-        //         | vk::ImageUsageFlags::TRANSFER_SRC
-        //         | vk::ImageUsageFlags::TRANSFER_DST,
-        //     format!("Emission {}", index),
-        // );
-
-        // // if emission_pixels.len() > 0 {
-        // emission.set_pixels(&app.vk, emission_pixels, &app.staging_buffer);
-        // // }
-
-        // // if albedo_pixels.len() > 0 {
-        // albedo.set_pixels(&app.vk, albedo_pixels, &app.staging_buffer);
-        // // }
-
         LightmapGroup {
             settings,
             albedo_pixels: albedo_pixels.to_vec(),

@@ -294,7 +294,7 @@ pub extern "C" fn app_add_lightmap_group(
     settings: LightmapSettings,
     albedo_pixels: *const u8,
     albedo_pixels_length: u32,
-    emission_pixels: *const f32,
+    emission_pixels: *const u8,
     emission_pixels_length: u32,
 ) {
     if app.is_null() {

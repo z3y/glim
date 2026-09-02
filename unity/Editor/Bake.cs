@@ -656,15 +656,15 @@ namespace Glim
                         unsafe
                         {
                             fixed (Color32* albedoPtr = group.albedo)
-                            fixed (Color* emissionsPtr = group.emission)
+                            fixed (byte* emissionsPtr = group.emission)
                             {
                                 Bindings.app_add_lightmap_group(
                                     app,
                                     group.settings,
                                     (byte*)albedoPtr,
                                     (uint)(group.albedo.Length * 4),
-                                    (float*)emissionsPtr,
-                                    (uint)(group.emission.Length * 4)
+                                    emissionsPtr,
+                                    (uint)group.emission.Length
                                 );
                             }
                         }
