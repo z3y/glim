@@ -146,13 +146,17 @@ impl TextureArray {
         self.textures.iter().map(|t| t.view).collect()
     }
 
-    pub fn destroy(&self, vk: &VulkanContext) {
+    pub fn destroy(&mut self, vk: &VulkanContext) {
         for tex in &self.textures {
             unsafe {
                 vk.device.destroy_image_view(tex.view, None);
                 vk.device.destroy_image(tex.image, None);
             }
         }
-        unsafe { vk.device.free_memory(self.memory, None) };
+
+        if !self.memory.is_null() {
+            unsafe { vk.device.free_memory(self.memory, None) };
+            self.memory = vk::DeviceMemory::null();
+        }
     }
 }

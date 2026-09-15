@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using Debug = UnityEngine.Debug;
+using Object = UnityEngine.Object;
 
 namespace Glim
 {
@@ -80,9 +81,17 @@ namespace Glim
         public Vector3Int resolution;
     }
 
+    public struct LightCookieData
+    {
+        public Color32[] pixels;
+        public uint width;
+        public uint height;
+    }
+
     public class BakeContext
     {
         public List<Bindings.Light> sceneLights = new();
+        public List<LightCookieData> cookies = new();
         public List<Glim.MeshData> sceneMesh = new();
         public List<BakeContextGroup> groups = new();
 
@@ -163,6 +172,8 @@ namespace Glim
             var lights = rootObjects.SelectMany(x => x.GetComponentsInChildren<Light>(false)).ToArray();
             var builtIn = GraphicsSettings.currentRenderPipeline == null;
 
+            var uniqueCookies = new List<Texture>();
+
             var addedLights = new List<Light>(lights.Length);
             foreach (var light in lights)
             {
@@ -214,7 +225,8 @@ namespace Glim
                     range = light.range,
                     color = color,
                     shadow_radius_or_angle = radiusOrAngle,
-                    mixed = light.lightmapBakeType == LightmapBakeType.Mixed ? 1u : 0u
+                    mixed = light.lightmapBakeType == LightmapBakeType.Mixed ? 1u : 0u,
+                    cookie = uint.MaxValue,
                 };
 
                 if (light.type == LightType.Spot)
@@ -240,8 +252,36 @@ namespace Glim
                     l.area_size = new Vector2(light.areaSize.x, light.areaSize.x);
                 }
 
+                if (light.cookie)
+                {
+                    if (uniqueCookies.Contains(light.cookie))
+                    {
+                        l.cookie = (uint)uniqueCookies.IndexOf(light.cookie);
+                    }
+                    else
+                    {
+                        uniqueCookies.Add(light.cookie);
+                        l.cookie = (uint)uniqueCookies.Count - 1;
+                    }
+                }
+
                 addedLights.Add(light);
                 sceneLights.Add(l);
+            }
+
+            foreach (var cookie in uniqueCookies)
+            {
+                if (cookie is Texture2D tex)
+                {
+                    var cookieData = new LightCookieData()
+                    {
+                        pixels = GetPixels32(tex),
+                        width = (uint)tex.width,
+                        height = (uint)tex.height,
+                    };
+
+                    cookies.Add(cookieData);
+                }
             }
 
 
@@ -614,6 +654,36 @@ namespace Glim
             // Debug.Log($"Indices: {sceneMesh.Sum(x => x.triangles.Length)}");
             // Debug.Log($"Lights: {sceneLights.Count}");
             // Debug.Log($"LightProbes: {this.probePositions.Count}");
+        }
+
+        public static Color32[] GetPixels32(Texture2D texture)
+        {
+            if (texture.isReadable)
+            {
+                return texture.GetPixels32();
+            }
+
+            RenderTexture render_texture = RenderTexture.GetTemporary(texture.width, texture.height, 0, RenderTextureFormat.ARGB32);
+
+            Graphics.Blit(texture, render_texture);
+
+            RenderTexture previous = RenderTexture.active;
+            RenderTexture.active = render_texture;
+
+            Texture2D readable = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
+
+            readable.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0);
+
+            readable.Apply();
+
+            Color32[] pixels = readable.GetPixels32();
+
+            Object.DestroyImmediate(readable);
+
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(render_texture);
+
+            return pixels;
         }
     }
 

@@ -162,6 +162,9 @@ namespace Glim
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_add_light(IntPtr app, Light light);
 
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static unsafe extern void app_add_light_cookie(IntPtr app, Color32* pixels, uint pixels_length, uint width, uint height);
+
         [DllImport("glim", CallingConvention = CallingConvention.Cdecl)]
         internal static extern void app_set_skybox(IntPtr app, Color[] pixels, uint pixels_length, uint width, uint height);
 
@@ -211,6 +214,11 @@ namespace Glim
 
             public Vector3 up;
             public uint mixed;
+
+            public uint cookie;
+            public float pad0;
+            public float pad1;
+            public float pad2;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 16)]

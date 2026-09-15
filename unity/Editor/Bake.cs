@@ -671,6 +671,21 @@ namespace Glim
                         group.ClearPixels();
                     }
 
+                    for (int i = 0; i < ctx.cookies.Count; i++)
+                    {
+                        LightCookieData cookie = ctx.cookies[i];
+
+                        unsafe
+                        {
+                            fixed (Color32* pixels = cookie.pixels)
+                            {
+                                Bindings.app_add_light_cookie(app, pixels, (uint)cookie.pixels.Length * 4, cookie.width, cookie.height);
+                            }
+                        }
+
+                        // todo clear
+                    }
+
                     foreach (var position in ctx.probePositions)
                     {
                         Vector3 p = (Vector3)position;
