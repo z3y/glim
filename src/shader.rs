@@ -317,6 +317,28 @@ pub fn update_compute_shader(
         descriptor_writes.push(write);
     }
 
+    // Cookies
+    let infos: Vec<vk::DescriptorImageInfo> = bindings
+        .cookies
+        .iter()
+        .map(|tex| vk::DescriptorImageInfo {
+            image_view: *tex,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ..Default::default()
+        })
+        .collect();
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: ShaderBindingID::COOKIES,
+        dst_array_element: 0,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        ..Default::default()
+    };
+    write = write.image_info(&infos);
+    if bindings.cookies.len() > 0 {
+        descriptor_writes.push(write);
+    }
+
     // Skybox
     let info = [vk::DescriptorImageInfo {
         image_view: bindings.skybox,

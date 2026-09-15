@@ -650,7 +650,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
                 float z = dot(toPoint, fwd);
                 float2 xy = float2(dot(toPoint, right), dot(toPoint, up));
 
-                float tanHalfAngle = tan(radians(light.SpotOuter));
+                float tanHalfAngle = tan(radians(light.SpotOuter) * 0.5);
 
                 float2 cookieUV = xy / (max(z, 1e-4) * tanHalfAngle);
                 cookieUV = cookieUV * 0.5 + 0.5;
