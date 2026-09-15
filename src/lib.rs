@@ -404,32 +404,34 @@ fn initialize_render(app: &mut Glim) {
     app.albedo_array = albedo_array;
     app.emission_array = emission_array;
 
-    let mut cookies = Vec::with_capacity(app.light_cookies.len());
+    if app.light_cookies.len() > 0 {
+        let mut cookies = Vec::with_capacity(app.light_cookies.len());
 
-    for (index, cookie) in app.light_cookies.iter().enumerate() {
-        let desc = TextureDescriptor {
-            width: cookie.width,
-            height: cookie.height,
-            format: vk::Format::R8G8B8A8_UNORM,
-            usage: vk::ImageUsageFlags::SAMPLED
-                | vk::ImageUsageFlags::TRANSFER_SRC
-                | vk::ImageUsageFlags::TRANSFER_DST,
-            name: format!("Cookie {}", index),
-        };
-        cookies.push(desc);
-    }
+        for (index, cookie) in app.light_cookies.iter().enumerate() {
+            let desc = TextureDescriptor {
+                width: cookie.width,
+                height: cookie.height,
+                format: vk::Format::R8G8B8A8_UNORM,
+                usage: vk::ImageUsageFlags::SAMPLED
+                    | vk::ImageUsageFlags::TRANSFER_SRC
+                    | vk::ImageUsageFlags::TRANSFER_DST,
+                name: format!("Cookie {}", index),
+            };
+            cookies.push(desc);
+        }
 
-    let mut cookie_array = TextureArray::new(&app.vk, cookies);
+        let mut cookie_array = TextureArray::new(&app.vk, cookies);
 
-    for (index, cookie) in app.light_cookies.iter().enumerate() {
-        cookie_array.textures[index].set_pixels(&app.vk, &cookie.pixels, &staging_buffer);
-    }
+        for (index, cookie) in app.light_cookies.iter().enumerate() {
+            cookie_array.textures[index].set_pixels(&app.vk, &cookie.pixels, &staging_buffer);
+        }
 
-    app.cookie_array = cookie_array;
+        app.cookie_array = cookie_array;
 
-    // free
-    for cookie in &mut app.light_cookies {
-        cookie.pixels = Vec::new();
+        // free
+        for cookie in &mut app.light_cookies {
+            cookie.pixels = Vec::new();
+        }
     }
 
     let config = &app.config;
@@ -490,6 +492,7 @@ fn render_preview(app: &mut Glim) {
         skybox_sampler: app.skybox.sampler(),
         visibility: visibility.view,
         preview_diffuse: diffuse.view(),
+        cookies: &app.cookie_array.views(),
     };
 
     app.preview_shader = load_compute_shader(
@@ -561,6 +564,7 @@ fn render_preview(app: &mut Glim) {
                     skybox_sampler: app.skybox.sampler(),
                     visibility: visibility.view,
                     preview_diffuse: diffuse.view(),
+                    cookies: &app.cookie_array.views(),
                 };
                 update_compute_shader(&app.vk, &app.preview_shader, &shader_bindings);
 
@@ -934,6 +938,7 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
             skybox_sampler: app.skybox.sampler(),
             visibility: visibility.view,
             preview_diffuse: diffuse.view(),
+            cookies: &app.cookie_array.views(),
         };
 
         if app.init_from_camera_shader.pipeline.is_null() {
@@ -1316,6 +1321,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         skybox_sampler: app.skybox.sampler(),
         visibility: visibility_expanded.view,
         preview_diffuse: vk::ImageView::null(),
+        cookies: &app.cookie_array.views(),
     };
 
     let mut visibility_shader_conservative =
