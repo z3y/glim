@@ -107,6 +107,7 @@ impl Drop for Glim {
     fn drop(&mut self) {
         self.albedo_array.destroy(&self.vk);
         self.emission_array.destroy(&self.vk);
+        self.cookie_array.destroy(&self.vk);
 
         let rt = &mut self.render_target;
 
@@ -392,8 +393,6 @@ fn initialize_render(app: &mut Glim) {
         emission_array.textures[index].set_pixels(&app.vk, &group.emission_pixels, &staging_buffer);
     }
 
-    staging_buffer.destroy(&app.vk);
-
     // free
     for index in 0..app.groups.len() {
         let group = &mut app.groups[index];
@@ -433,6 +432,8 @@ fn initialize_render(app: &mut Glim) {
             cookie.pixels = Vec::new();
         }
     }
+
+    staging_buffer.destroy(&app.vk);
 
     let config = &app.config;
 
