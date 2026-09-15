@@ -28,6 +28,9 @@ TextureCube<float4> Skybox;
 [[vk::binding(21, 0)]]
 SamplerState SkyboxSampler;
 
+[[vk::binding(6, 0)]]
+Texture2D<float4> Cookies[];
+
 struct LightmapInfo
 {
     uint2 resolution;
@@ -105,6 +108,16 @@ float4 SampleEmission(float2 uv, uint lightmapGroup)
     uint index = LIGHTMAP_GROUP_COUNT <= 1 ? 0 : NonUniformResourceIndex(lightmapGroup);
     Texture2D tex = Emission[index];
     return max(0.0, tex[(uint2)uv]);
+}
+
+float4 SampleCookie(float2 uv, uint index)
+{
+    Texture2D tex = Cookies[NonUniformResourceIndex(index)];
+
+    float2 resolution;
+    tex.GetDimensions(resolution.x, resolution.y);
+
+    return tex[uint2(uv * resolution + 0.5)];
 }
 
 float3 SampleSkybox(float3 dir)

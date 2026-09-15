@@ -23,6 +23,11 @@ struct Light
 
     float3 up;
     uint mixed;
+
+    uint cookie;
+    float pad0;
+    float pad1;
+    float pad2;
 };
 
 void CreateOrthoBasis(float3 n, out float3 b1, out float3 b2)
