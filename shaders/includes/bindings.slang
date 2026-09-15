@@ -117,7 +117,7 @@ float4 SampleCookie(float2 uv, uint index)
     float2 resolution;
     tex.GetDimensions(resolution.x, resolution.y);
 
-    return tex[uint2(uv * resolution + 0.5)];
+    return tex[uint2(saturate(uv) * resolution + 0.5)];
 }
 
 float3 SampleSkybox(float3 dir)
