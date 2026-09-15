@@ -27,6 +27,11 @@ pub struct Light {
 
     pub up: Vector3,
     pub mixed: u32,
+
+    pub cookie: u32,
+    pub pad0: f32,
+    pub pad1: f32,
+    pub pad2: f32,
 }
 
 impl Default for Light {
@@ -47,6 +52,11 @@ impl Default for Light {
 
             up: Vector3::UP,
             mixed: 0,
+
+            cookie: u32::MAX,
+            pad0: 0.0,
+            pad1: 0.0,
+            pad2: 0.0,
         }
     }
 }

@@ -67,6 +67,7 @@ pub struct Glim {
     pub opaque_mesh: Mesh,
     pub transparent_mesh: Mesh,
     pub cpu_lights: Vec<Light>,
+    pub light_cookies: Vec<LightCookie>,
     pub emissive_triangles: Vec<u32>,
     pub groups: Vec<LightmapGroup>,
     pub seams: Vec<Seam>,
@@ -152,6 +153,12 @@ impl Drop for Glim {
 pub struct RenderTarget {
     visibility: Texture2D,
     diffuse: Texture2D,
+}
+
+pub struct LightCookie {
+    pub pixels: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
 }
 
 pub struct LightmapGroup {
@@ -1153,7 +1160,18 @@ impl Glim {
             emission_array: TextureArray::null(),
             bvh_nodes: Buffer::null(),
             bvh_triangles: Buffer::null(),
+            light_cookies: Vec::new(),
         }
+    }
+
+    pub fn add_light_cookie(&mut self, pixels: &[u8], width: u32, height: u32) {
+        let cookie = LightCookie {
+            pixels: pixels.to_owned(),
+            width,
+            height,
+        };
+
+        self.light_cookies.push(cookie);
     }
 }
 
