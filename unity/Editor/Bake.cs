@@ -554,11 +554,15 @@ namespace Glim
                 tex1.SetPixels(tex1Col);
                 tex2.SetPixels(tex2Col);
 
-                AssetDatabase.CreateAsset(tex0, Path.Combine(directory, $"LightProbeVolume_{volumeIndex}-0.asset"));
-                AssetDatabase.CreateAsset(tex1, Path.Combine(directory, $"LightProbeVolume_{volumeIndex}-1.asset"));
-                AssetDatabase.CreateAsset(tex2, Path.Combine(directory, $"LightProbeVolume_{volumeIndex}-2.asset"));
-
                 var lv = vrclv[volumeIndex];
+
+                var globalId = GlobalObjectId.GetGlobalObjectIdSlow(lv.gameObject);
+                var id = globalId.targetObjectId;
+
+                AssetDatabase.CreateAsset(tex0, Path.Combine(directory, $"LV_{id}-0.asset"));
+                AssetDatabase.CreateAsset(tex1, Path.Combine(directory, $"LV_{id}-1.asset"));
+                AssetDatabase.CreateAsset(tex2, Path.Combine(directory, $"LV_{id}-2.asset"));
+
                 lv.Texture0 = tex0;
                 lv.Texture1 = tex1;
                 lv.Texture2 = tex2;
