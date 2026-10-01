@@ -3,8 +3,11 @@
     "rootNamespace": "",
     "references": [
         "GUID:9a8bdddd646a38942a48327b4cf31ca4",
+        "GUID:96fc23fcec7f11d41bfbbe240e4602dc",
         "GUID:d8a84397f42e52047b4aa117d7c10706",
-        "GUID:96fc23fcec7f11d41bfbbe240e4602dc"
+        "GUID:69bd1d289cfc06c44ab3abee9d792e60",
+        "GUID:a7ff01b0ae211b5439bf8d957d1583a8",
+        "GUID:99835874ee819da44948776e0df4ff1d"
     ],
     "includePlatforms": [
         "Editor"
@@ -20,6 +23,11 @@
             "name": "com.z3y.xatlaslightmap",
             "expression": "0.3.0",
             "define": "XATLAS_LIGHTMAP_INCLUDED"
+        },
+        {
+            "name": "red.sim.lightvolumes",
+            "expression": "3.0.0-dev.20",
+            "define": "LIGHT_VOLUMES_3"
         }
     ],
     "noEngineReferences": false
