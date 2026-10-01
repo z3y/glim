@@ -10,6 +10,10 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
 
+#if LIGHT_VOLUMES_3
+using VRCLightVolumes;
+#endif
+
 namespace Glim
 {
     [Serializable]
@@ -205,7 +209,7 @@ namespace Glim
                 long lightmapBytes = 0;
                 long lightmapMemoryBytes = 0;
 
-                bool hasDirectional = _context.lightmapMode == LightmapMode.DominantDirection || _context.lightmapMode == LightmapMode.CombinedSH;
+                bool hasDirectional = _context.lightmapMode == LightmapMode.DominantDirection || _context.lightmapMode == LightmapMode.MonoSH;
 
                 // hard coded paths for now in rust
                 for (int groupIndex = 0; groupIndex < _context.groups.Count; groupIndex++)
@@ -354,8 +358,6 @@ namespace Glim
 #if VRC_LIGHT_VOLUMES
                 CreateLightVolumeTextures(_context, _context.outputDir);
 #endif
-
-
                 // apply new asset
                 var newLda = AssetDatabase.LoadAssetAtPath<LightingDataAsset>(destPath);
                 using var lda2 = new SerializedObject(newLda);
@@ -364,7 +366,6 @@ namespace Glim
                 lda2.FindProperty("m_Name").stringValue = ldaName;
                 lda2.ApplyModifiedPropertiesWithoutUndo();
                 Lightmapping.lightingDataAsset = newLda;
-
 
 
                 EditorSceneManager.MarkSceneDirty(_context.scene);
@@ -465,7 +466,17 @@ namespace Glim
 #if VRC_LIGHT_VOLUMES
         static void AddLightProbeVolumes(GlimLightmapper baker, BakeContext ctx)
         {
-            var vrclv = ctx.scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<VRCLightVolumes.LightVolume>(false)).ToArray();
+#if LIGHT_VOLUMES_3
+            var vrclv = ctx.scene.GetRootGameObjects()
+                .SelectMany(x => x.GetComponentsInChildren<VRCLightVolumes.LightVolumeInstance>(false))
+                .Where(x => x.enabled && x.Bake)
+                .ToArray();
+#else
+            var vrclv = ctx.scene.GetRootGameObjects()
+                .SelectMany(x => x.GetComponentsInChildren<VRCLightVolumes.LightVolume>(false))
+                .Where(x => x.enabled)
+                .ToArray();
+#endif
 
             for (int i = 0; i < vrclv.Length; i++)
             {
@@ -486,7 +497,18 @@ namespace Glim
         static void CreateLightVolumeTextures(BakeContext ctx, string directory)
         {
             var lvs = ctx.probeVolumes;
-            var vrclv = ctx.scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<VRCLightVolumes.LightVolume>(false)).ToArray();
+
+#if LIGHT_VOLUMES_3
+            var vrclv = ctx.scene.GetRootGameObjects()
+                .SelectMany(x => x.GetComponentsInChildren<VRCLightVolumes.LightVolumeInstance>(false))
+                .Where(x => x.enabled && x.Bake)
+                .ToArray();
+#else
+            var vrclv = ctx.scene.GetRootGameObjects()
+                .SelectMany(x => x.GetComponentsInChildren<VRCLightVolumes.LightVolume>(false))
+                .Where(x => x.enabled)
+                .ToArray();
+#endif
 
             for (int volumeIndex = 0; volumeIndex < lvs.Count; volumeIndex++)
             {
@@ -507,9 +529,6 @@ namespace Glim
                 Color[] tex1Col = new Color[probeCount];
                 Color[] tex2Col = new Color[probeCount];
 
-                float coeff = 1.0f;// todo
-                // float coeff = 1.7699115f;// todo
-
                 int pixelIndex = 0;
                 for (int i = data.indexStart; i < data.indexStart + probeCount; i++)
                 {
@@ -524,9 +543,9 @@ namespace Glim
                     var L1g = new Vector3(L1x.y, L1y.y, L1z.y);
                     var L1b = new Vector3(L1x.z, L1y.z, L1z.z);
 
-                    tex0Col[pixelIndex] = new Color(L0.x, L0.y, L0.z, L1r.z * coeff);
-                    tex1Col[pixelIndex] = new Color(L1r.x * coeff, L1g.x * coeff, L1b.x * coeff, L1g.z * coeff);
-                    tex2Col[pixelIndex] = new Color(L1r.y * coeff, L1g.y * coeff, L1b.y * coeff, L1b.z * coeff);
+                    tex0Col[pixelIndex] = new Color(L0.x, L0.y, L0.z, L1r.z);
+                    tex1Col[pixelIndex] = new Color(L1r.x, L1g.x, L1b.x, L1g.z);
+                    tex2Col[pixelIndex] = new Color(L1r.y, L1g.y, L1b.y, L1b.z);
 
                     pixelIndex++;
                 }
@@ -546,13 +565,24 @@ namespace Glim
                 EditorUtility.SetDirty(lv);
             }
 
+#if LIGHT_VOLUMES_3
+
+            var manager = ctx.scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<VRCLightVolumes.LightVolumeManager>(false)).FirstOrDefault();
+
+            if (manager)
+            {
+                manager.GenerateAtlas();
+            }
+
+#else
             var lvSetup = ctx.scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<VRCLightVolumes.LightVolumeSetup>(false)).FirstOrDefault();
             if (lvSetup)
             {
                 lvSetup.GenerateAtlas();
             }
-
+#endif
         }
+
 #endif
 
         // Refocus the window for QoL
