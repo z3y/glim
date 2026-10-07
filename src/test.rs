@@ -22,9 +22,11 @@ mod tests {
     const INDIRECT_SAMPLES: u32 = 256;
     const LIGHT_PROBE_SAMPLES: u32 = 4096;
     const BOUNCE_COUNT: u32 = 5;
-    const DENOISE: bool = false;
-    const DILATE: bool = false;
-    const FIX_SEAMS: bool = false;
+
+    const DENOISE: bool = true;
+    const DILATE: bool = true;
+    const FIX_SEAMS: bool = true;
+
     const MIS: bool = true;
     const HARDWARE_RT: bool = true;
 

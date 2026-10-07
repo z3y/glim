@@ -111,6 +111,8 @@ impl Drop for Glim {
         self.emission_array.destroy(&self.vk);
         self.cookie_array.destroy(&self.vk);
 
+        unsafe { self.vk.device.destroy_sampler(self.linear_sampler, None) };
+
         let rt = &mut self.render_target;
 
         if !rt.visibility.image().is_null() {
@@ -404,6 +406,15 @@ fn initialize_render(app: &mut Glim) {
 
     app.albedo_array = albedo_array;
     app.emission_array = emission_array;
+
+    if app.light_cookies.len() == 0 {
+        let dummy_cookie = LightCookie {
+            pixels: vec![0u8; 16],
+            width: 2,
+            height: 2,
+        };
+        app.light_cookies.push(dummy_cookie);
+    }
 
     if app.light_cookies.len() > 0 {
         let mut cookies = Vec::with_capacity(app.light_cookies.len());

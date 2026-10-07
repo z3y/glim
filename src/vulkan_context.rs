@@ -346,7 +346,7 @@ impl VulkanContext {
         }
 
         pool_sizes.push(vk::DescriptorPoolSize {
-            descriptor_count: 1,
+            descriptor_count: 2,
             ty: vk::DescriptorType::SAMPLER,
         });
 
