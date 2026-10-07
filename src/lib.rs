@@ -101,6 +101,8 @@ pub struct Glim {
     pub albedo_array: TextureArray,
     pub emission_array: TextureArray,
     pub cookie_array: TextureArray,
+
+    pub linear_sampler: vk::Sampler,
 }
 
 impl Drop for Glim {
@@ -494,6 +496,7 @@ fn render_preview(app: &mut Glim) {
         visibility: visibility.view,
         preview_diffuse: diffuse.view(),
         cookies: &app.cookie_array.views(),
+        linear_sampler: app.linear_sampler,
     };
 
     app.preview_shader = load_compute_shader(
@@ -566,6 +569,7 @@ fn render_preview(app: &mut Glim) {
                     visibility: visibility.view,
                     preview_diffuse: diffuse.view(),
                     cookies: &app.cookie_array.views(),
+                    linear_sampler: app.linear_sampler,
                 };
                 update_compute_shader(&app.vk, &app.preview_shader, &shader_bindings);
 
@@ -940,6 +944,7 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
             visibility: visibility.view,
             preview_diffuse: diffuse.view(),
             cookies: &app.cookie_array.views(),
+            linear_sampler: app.linear_sampler,
         };
 
         if app.init_from_camera_shader.pipeline.is_null() {
@@ -1167,6 +1172,24 @@ impl Glim {
 
         let constants = SpecializationConstants::default();
 
+        let sampler_info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .mip_lod_bias(0.0)
+            .anisotropy_enable(false)
+            .max_anisotropy(1.0)
+            .compare_enable(false)
+            .compare_op(vk::CompareOp::ALWAYS)
+            .min_lod(0.0)
+            .max_lod(0.0)
+            .unnormalized_coordinates(false);
+
+        let linear_sampler = unsafe { vk.device.create_sampler(&sampler_info, None).unwrap() };
+
         Self {
             vk,
             opaque_mesh,
@@ -1197,6 +1220,7 @@ impl Glim {
             bvh_triangles: Buffer::null(),
             light_cookies: Vec::new(),
             cookie_array: TextureArray::null(),
+            linear_sampler,
         }
     }
 
@@ -1323,6 +1347,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
         visibility: visibility_expanded.view,
         preview_diffuse: vk::ImageView::null(),
         cookies: &app.cookie_array.views(),
+        linear_sampler: app.linear_sampler,
     };
 
     let mut visibility_shader_conservative =

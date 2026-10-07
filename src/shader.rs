@@ -51,6 +51,7 @@ pub struct ShaderBindings<'a> {
     pub skybox_sampler: vk::Sampler,
     pub visibility: vk::ImageView,
     pub preview_diffuse: vk::ImageView,
+    pub linear_sampler: vk::Sampler,
 }
 
 impl<'a> Default for ShaderBindings<'a> {
@@ -64,6 +65,7 @@ impl<'a> Default for ShaderBindings<'a> {
             visibility: vk::ImageView::null(),
             preview_diffuse: vk::ImageView::null(),
             cookies: &[],
+            linear_sampler: vk::Sampler::null(),
         }
     }
 }
@@ -137,6 +139,7 @@ impl ShaderBindingID {
     pub const COOKIES: u32 = 6;
     pub const SKYBOX: u32 = 20;
     pub const SKYBOX_SAMPLER: u32 = 21;
+    pub const LINEAR_SAMPLER: u32 = 7;
 }
 
 pub fn load_compute_shader(
@@ -223,6 +226,16 @@ pub fn load_compute_shader(
     if !bindings.skybox_sampler.is_null() {
         layout_bindings.push(vk::DescriptorSetLayoutBinding {
             binding: ShaderBindingID::SKYBOX_SAMPLER,
+            descriptor_type: vk::DescriptorType::SAMPLER,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            ..Default::default()
+        });
+    }
+
+    if !bindings.linear_sampler.is_null() {
+        layout_bindings.push(vk::DescriptorSetLayoutBinding {
+            binding: ShaderBindingID::LINEAR_SAMPLER,
             descriptor_type: vk::DescriptorType::SAMPLER,
             descriptor_count: 1,
             stage_flags: vk::ShaderStageFlags::COMPUTE,
@@ -369,6 +382,22 @@ pub fn update_compute_shader(
     };
     write = write.image_info(&info);
     if !bindings.skybox_sampler.is_null() {
+        descriptor_writes.push(write);
+    }
+
+    // LinearSampler
+    let info = [vk::DescriptorImageInfo {
+        sampler: bindings.linear_sampler,
+        ..Default::default()
+    }];
+    let mut write = vk::WriteDescriptorSet {
+        dst_set: shader.descriptor_set,
+        dst_binding: ShaderBindingID::LINEAR_SAMPLER,
+        descriptor_type: vk::DescriptorType::SAMPLER,
+        ..Default::default()
+    };
+    write = write.image_info(&info);
+    if !bindings.linear_sampler.is_null() {
         descriptor_writes.push(write);
     }
 
