@@ -428,11 +428,11 @@ namespace Glim
             }
         }
 
-        [MenuItem("Tools/Glim/DynamicGI.UpdateEnvironment")]
-        public static void DynamicGIUpdateEnvironment()
-        {
-            DynamicGI.UpdateEnvironment();
-        }
+        // [MenuItem("Tools/Glim/DynamicGI.UpdateEnvironment")]
+        // public static void DynamicGIUpdateEnvironment()
+        // {
+        //     DynamicGI.UpdateEnvironment();
+        // }
 
         static void ResetBake()
         {

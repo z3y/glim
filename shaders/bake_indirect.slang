@@ -63,10 +63,18 @@ void main(uint3 threadID: SV_DispatchThreadID)
         previousOffset = bounceOffsets.y;
     }
 
+    float ao = 1.0;
+    float aoRadius = AO_RANGE;
+
     Hit bounceHit;
     if (TraceRay(ray, bounceHit))
     {
         Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
+
+        if (bounceHit.t < aoRadius)
+        {
+            ao = 0;
+        }
 
         if (!bounceHit.frontFace)
         {
@@ -96,6 +104,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
         //     color.rgb += float3(1, 0, 1);
         // }
     }
+
+    color.rgb *= lerp(1.0, ao, AO_INTENSITY);
 
     ValidateSampleColor(color);
 

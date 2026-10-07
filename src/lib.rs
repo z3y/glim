@@ -473,6 +473,8 @@ fn initialize_render(app: &mut Glim) {
         bvh_nodes_address: app.bvh_nodes.gpu_address,
         bvh_triangles_address: app.bvh_triangles.gpu_address,
         emissive_multiplier: app.config.emissive_multiplier,
+        ao_intensity: config.ao_intensity,
+        ao_range: config.ao_range,
     };
 
     if app.config.is_preview {

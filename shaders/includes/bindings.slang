@@ -95,6 +95,11 @@ DECLARE_CONST_PTR(CompactionBuffer, uint2, 26)
 DECLARE_CONST_PTR(BVHNodes, float4, 28)
 DECLARE_CONST_PTR(BVHTriangles, float4, 30)
 
+[vk::constant_id(32)]
+const float AO_INTENSITY;
+[vk::constant_id(33)]
+const float AO_RANGE;
+
 enum LightmapMode : uint
 {
     NonDirectional = 0,

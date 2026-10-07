@@ -77,6 +77,8 @@ mod tests {
             indirect_intensity: 1.0,
             lightprobe_deringing: 4.0,
             emissive_multiplier: 1.0,
+            ao_intensity: 0.0,
+            ao_range: 1.0,
         };
         config
     }

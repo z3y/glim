@@ -102,6 +102,9 @@ pub struct SpecializationConstants {
 
     pub bvh_nodes_address: u64,     // 28 29
     pub bvh_triangles_address: u64, // 30 31
+
+    pub ao_intensity: f32, // 32
+    pub ao_range: f32,     // 33
 }
 
 pub const SPECIALIZATION_MAP_ENTRIES_LEN: usize =

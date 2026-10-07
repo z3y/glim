@@ -48,6 +48,9 @@ pub struct GlimConfig {
     pub indirect_intensity: f32,
     pub lightprobe_deringing: f32,
     pub emissive_multiplier: f32,
+
+    pub ao_intensity: f32,
+    pub ao_range: f32,
 }
 
 #[repr(u32)]
