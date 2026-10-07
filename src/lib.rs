@@ -2318,7 +2318,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
     );
 
     let oidn = Oidn::load();
-    let oidn = if oidn.is_err() {
+    let mut oidn = if oidn.is_err() {
         let err = oidn.err();
         match err {
             Some(err) => {
@@ -2341,6 +2341,25 @@ unsafe fn render_lightmaps(app: &mut Glim) {
     let post_total = (app.groups.len() * lightmaps_per_group).max(1) as u32;
 
     let output_dir = &app.output_dir;
+
+    if let Some(oidn) = oidn.as_mut() {
+        let mut max_width = 1usize;
+        let mut max_height = 1usize;
+
+        for g in &app.groups {
+            max_width = max_width.max(g.settings.width as usize);
+            max_height = max_height.max(g.settings.height as usize);
+        }
+
+        let size = max_width * max_height * 4 * size_of::<f32>();
+
+        if !oidn.reserve_buffer(size) {
+            (log)(LogMessage::message(&format!(
+                "OIDN: failed to reserve {} bytes",
+                size
+            )));
+        }
+    }
 
     let process_lightmap = |group_index: usize, lightmap_type: u32, post_step: u32| {
         let group = &app.groups[group_index].settings;
@@ -2574,6 +2593,8 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             }
         }
     }
+
+    drop(oidn);
 
     decompact_shader.destroy(&app.vk);
     compacted_visibility.destroy(&app.vk);

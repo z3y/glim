@@ -1,5 +1,8 @@
 use libloading::Library;
-use std::ffi::{CStr, c_char, c_void};
+use std::{
+    ffi::{CStr, c_char, c_void},
+    ptr,
+};
 
 #[repr(C)]
 pub struct OIDNDeviceImpl(c_void);
@@ -69,6 +72,27 @@ type FnSetSharedFilterImage = unsafe extern "C" fn(
     usize,
 );
 
+#[repr(C)]
+pub struct OIDNBufferImpl(c_void);
+pub type OIDNBuffer = *mut OIDNBufferImpl;
+
+type FnNewBuffer = unsafe extern "C" fn(OIDNDevice, usize) -> OIDNBuffer;
+type FnReleaseBuffer = unsafe extern "C" fn(OIDNBuffer);
+type FnWriteBuffer = unsafe extern "C" fn(OIDNBuffer, usize, usize, *const c_void);
+type FnReadBuffer = unsafe extern "C" fn(OIDNBuffer, usize, usize, *mut c_void);
+type FnSyncDevice = unsafe extern "C" fn(OIDNDevice);
+type FnSetFilterImage = unsafe extern "C" fn(
+    OIDNFilter,
+    *const c_char,
+    OIDNBuffer,
+    OIDNFormat,
+    usize, // width
+    usize, // height
+    usize, // byteOffset
+    usize, // pixelByteStride
+    usize, // rowByteStride
+);
+
 #[allow(dead_code)]
 pub struct Oidn {
     _lib: Library,
@@ -78,12 +102,20 @@ pub struct Oidn {
     release_filter: FnReleaseFilter,
     set_filter_bool: FnSetFilterBool,
     get_device_error: FnGetDeviceError,
-    set_shared_filter_image: FnSetSharedFilterImage,
+    new_buffer: FnNewBuffer,
+    release_buffer: FnReleaseBuffer,
+    write_buffer: FnWriteBuffer,
+    read_buffer: FnReadBuffer,
+    sync_device: FnSyncDevice,
+    set_filter_image: FnSetFilterImage,
 
     device: OIDNDevice,
     filter: OIDNFilter,
-}
 
+    // reusable device-accessible buffer shared by all lightmaps
+    buffer: OIDNBuffer,
+    buffer_size: usize,
+}
 impl Oidn {
     pub fn load() -> Result<Self, libloading::Error> {
         let lib_name = if cfg!(windows) {
@@ -118,8 +150,7 @@ impl Oidn {
             let commit_device: FnCommitDevice = *lib.get(b"oidnCommitDevice\0")?;
             let new_filter: FnNewFilter = *lib.get(b"oidnNewFilter\0")?;
 
-            // todo GPU device
-            let device = new_device(OIDNDeviceType::CPU);
+            let device = new_device(OIDNDeviceType::Default);
             commit_device(device);
             let filter = new_filter(device, c"RTLightmap".as_ptr());
 
@@ -129,27 +160,61 @@ impl Oidn {
                 execute_filter: *lib.get(b"oidnExecuteFilter\0")?,
                 release_filter: *lib.get(b"oidnReleaseFilter\0")?,
                 set_filter_bool: *lib.get(b"oidnSetFilterBool\0")?,
-                // .or_else(|_| lib.get(b"oidnSetFilter1b\0"))?,
                 get_device_error: *lib.get(b"oidnGetDeviceError\0")?,
-                set_shared_filter_image: *lib.get(b"oidnSetSharedFilterImage\0")?,
+                new_buffer: *lib.get(b"oidnNewBuffer\0")?,
+                release_buffer: *lib.get(b"oidnReleaseBuffer\0")?,
+                write_buffer: *lib.get(b"oidnWriteBuffer\0")?,
+                read_buffer: *lib.get(b"oidnReadBuffer\0")?,
+                sync_device: *lib.get(b"oidnSyncDevice\0")?,
+                set_filter_image: *lib.get(b"oidnSetFilterImage\0")?,
                 _lib: lib,
                 device,
                 filter,
+                buffer: ptr::null_mut(),
+                buffer_size: 0,
             })
         }
     }
 
+    pub fn reserve_buffer(&mut self, size: usize) -> bool {
+        if size <= self.buffer_size && !self.buffer.is_null() {
+            return true;
+        }
+        unsafe {
+            if !self.buffer.is_null() {
+                (self.release_buffer)(self.buffer);
+                self.buffer = ptr::null_mut();
+                self.buffer_size = 0;
+            }
+            let buf = (self.new_buffer)(self.device, size);
+            if buf.is_null() {
+                self.check_error();
+                return false;
+            }
+            self.buffer = buf;
+            self.buffer_size = size;
+        }
+        true
+    }
+
     pub fn denoise(&self, pixels: &mut [f32], width: usize, height: usize, directional: bool) {
         let pixel_stride = 4 * std::mem::size_of::<f32>();
+        let byte_size = width * height * pixel_stride;
+        assert!(pixels.len() * std::mem::size_of::<f32>() >= byte_size);
+
+        if self.buffer.is_null() {
+            panic!("reserve_buffer first")
+        }
 
         let filter = self.filter;
-        let device = self.device;
 
         unsafe {
-            (self.set_shared_filter_image)(
+            (self.write_buffer)(self.buffer, 0, byte_size, pixels.as_ptr() as *const c_void);
+
+            (self.set_filter_image)(
                 filter,
                 c"color".as_ptr(),
-                pixels.as_mut_ptr() as *mut c_void,
+                self.buffer,
                 OIDNFormat::Float3,
                 width,
                 height,
@@ -157,10 +222,10 @@ impl Oidn {
                 pixel_stride,
                 0,
             );
-            (self.set_shared_filter_image)(
+            (self.set_filter_image)(
                 filter,
                 c"output".as_ptr(),
-                pixels.as_mut_ptr() as *mut c_void,
+                self.buffer,
                 OIDNFormat::Float3,
                 width,
                 height,
@@ -168,13 +233,28 @@ impl Oidn {
                 pixel_stride,
                 0,
             );
+
             (self.set_filter_bool)(filter, c"directional".as_ptr(), directional);
 
             (self.commit_filter)(filter);
             (self.execute_filter)(filter);
+            (self.sync_device)(self.device);
 
-            let mut msg: *const c_char = std::ptr::null();
-            let err = (self.get_device_error)(device, &mut msg);
+            (self.read_buffer)(
+                self.buffer,
+                0,
+                byte_size,
+                pixels.as_mut_ptr() as *mut c_void,
+            );
+        }
+
+        self.check_error();
+    }
+
+    fn check_error(&self) {
+        unsafe {
+            let mut msg: *const c_char = ptr::null();
+            let err = (self.get_device_error)(self.device, &mut msg);
             if err != OIDNError::None {
                 let s = if msg.is_null() {
                     "unknown error".into()
@@ -190,6 +270,9 @@ impl Oidn {
 impl Drop for Oidn {
     fn drop(&mut self) {
         unsafe {
+            if !self.buffer.is_null() {
+                (self.release_buffer)(self.buffer);
+            }
             (self.release_filter)(self.filter);
             (self.release_device)(self.device);
         }
