@@ -2343,6 +2343,11 @@ unsafe fn render_lightmaps(app: &mut Glim) {
     let output_dir = &app.output_dir;
 
     if let Some(oidn) = oidn.as_mut() {
+        (log)(LogMessage::message(&format!(
+            "Open Image Denoise 2.0 loaded with device {:?}",
+            oidn.device_type()
+        )));
+
         let mut max_width = 1usize;
         let mut max_height = 1usize;
 

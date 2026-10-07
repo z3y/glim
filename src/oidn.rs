@@ -60,17 +60,6 @@ type FnExecuteFilter = unsafe extern "C" fn(OIDNFilter);
 type FnReleaseFilter = unsafe extern "C" fn(OIDNFilter);
 type FnSetFilterBool = unsafe extern "C" fn(OIDNFilter, *const c_char, bool);
 type FnGetDeviceError = unsafe extern "C" fn(OIDNDevice, *mut *const c_char) -> OIDNError;
-type FnSetSharedFilterImage = unsafe extern "C" fn(
-    OIDNFilter,
-    *const c_char,
-    *mut c_void,
-    OIDNFormat,
-    usize,
-    usize,
-    usize,
-    usize,
-    usize,
-);
 
 #[repr(C)]
 pub struct OIDNBufferImpl(c_void);
@@ -93,6 +82,8 @@ type FnSetFilterImage = unsafe extern "C" fn(
     usize, // rowByteStride
 );
 
+type FnGetDeviceInt = unsafe extern "C" fn(OIDNDevice, *const c_char) -> i32;
+
 #[allow(dead_code)]
 pub struct Oidn {
     _lib: Library,
@@ -108,6 +99,7 @@ pub struct Oidn {
     read_buffer: FnReadBuffer,
     sync_device: FnSyncDevice,
     set_filter_image: FnSetFilterImage,
+    get_device_int: FnGetDeviceInt,
 
     device: OIDNDevice,
     filter: OIDNFilter,
@@ -167,12 +159,25 @@ impl Oidn {
                 read_buffer: *lib.get(b"oidnReadBuffer\0")?,
                 sync_device: *lib.get(b"oidnSyncDevice\0")?,
                 set_filter_image: *lib.get(b"oidnSetFilterImage\0")?,
+                get_device_int: *lib.get(b"oidnGetDeviceInt\0")?,
                 _lib: lib,
                 device,
                 filter,
                 buffer: ptr::null_mut(),
                 buffer_size: 0,
             })
+        }
+    }
+
+    pub fn device_type(&self) -> OIDNDeviceType {
+        let t = unsafe { (self.get_device_int)(self.device, c"type".as_ptr()) };
+        match t {
+            1 => OIDNDeviceType::CPU,
+            2 => OIDNDeviceType::SYCL,
+            3 => OIDNDeviceType::CUDA,
+            4 => OIDNDeviceType::HIP,
+            5 => OIDNDeviceType::METAL,
+            _ => OIDNDeviceType::Default,
         }
     }
 
