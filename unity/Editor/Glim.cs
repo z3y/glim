@@ -233,14 +233,9 @@ namespace Glim
                 if (light.type == LightType.Spot)
                 {
                     l.spot_outer = light.spotAngle;
-                    l.spot_inner_percent = light.innerSpotAngle;
                     l.ty = Bindings.LightType.Spot;
                     l.direction = -light.transform.forward;
-
-                    if (builtIn)
-                    {
-                        l.spot_inner_percent = 80; // todo this doesnt match built in spot lights exactly
-                    }
+                    l.spot_inner_percent = 80;
                 }
                 if (light.type == LightType.Rectangle)
                 {
@@ -265,6 +260,12 @@ namespace Glim
                         uniqueCookies.Add(light.cookie);
                         l.cookie = (uint)uniqueCookies.Count - 1;
                     }
+                }
+
+                var glimLight = light.GetComponent<GlimAdditionalLightSettings>();
+                if (glimLight || !builtIn)
+                {
+                    l.spot_inner_percent = light.innerSpotAngle / light.spotAngle * 100.0f;
                 }
 
                 addedLights.Add(light);
