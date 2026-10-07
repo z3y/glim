@@ -113,17 +113,6 @@ float4 SampleEmission(float2 uv, uint lightmapGroup)
     return max(0.0, tex[(uint2)uv]);
 }
 
-// float4 SampleCookie(float2 uv, uint index)
-// {
-//     Texture2D tex = Cookies[NonUniformResourceIndex(index)];
-
-//     uint2 resolution;
-//     tex.GetDimensions(resolution.x, resolution.y);
-
-//     uint2 coord = min((uint2)(saturate(uv) * resolution), resolution - 1);
-//     return tex[coord];
-// }
-
 float4 SampleCookie(float2 uv, uint index)
 {
     Texture2D tex = Cookies[NonUniformResourceIndex(index)];
