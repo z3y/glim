@@ -627,6 +627,12 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
         {
             float2 offset = xi - 0.5;
             L = light.position + right * offset.x * light.AreaSize.x + light.up * offset.y * light.AreaSize.y;
+
+            if (hasCookie)
+            {
+                float2 cookieUV = float2(1.0 - xi.x, xi.y);
+                cookieColor = SampleCookie(cookieUV, light.cookie).rgb;
+            }
         }
         else
         {

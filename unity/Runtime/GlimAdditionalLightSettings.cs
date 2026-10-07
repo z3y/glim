@@ -11,6 +11,8 @@ namespace Glim
     [RequireComponent(typeof(Light))]
     public class GlimAdditionalLightSettings : MonoBehaviour
     {
+        public Texture2D areaCookie;
+
 #if UNITY_EDITOR
 
         void OnDrawGizmosSelected()
@@ -55,6 +57,8 @@ namespace Glim
         SerializedProperty _outerAngle;
         SerializedProperty _innerAngle;
 
+        SerializedProperty _areaCookie;
+
         void OnEnable()
         {
             var lights = targets
@@ -69,6 +73,8 @@ namespace Glim
             _type = _light.FindProperty("m_Type");
             _outerAngle = _light.FindProperty("m_SpotAngle");
             _innerAngle = _light.FindProperty("m_InnerSpotAngle");
+
+            _areaCookie = serializedObject.FindProperty(nameof(GlimAdditionalLightSettings.areaCookie));
         }
 
         public override void OnInspectorGUI()
@@ -80,13 +86,23 @@ namespace Glim
 
             _light.Update();
 
-            bool isSpot = _type != null && (_type.hasMultipleDifferentValues || _type.intValue == 0);
-            if (isSpot)
+            if (!_type.hasMultipleDifferentValues)
             {
-                DrawSpotAngles();
+                if (_type.intValue == (int)LightType.Spot)
+                {
+                    DrawSpotAngles();
+                }
+
+                if (_type.intValue == (int)LightType.Rectangle)
+                {
+                    EditorGUILayout.PropertyField(_areaCookie, new GUIContent("Area Cookie"));
+                }
             }
 
+
+
             _light.ApplyModifiedProperties();
+            serializedObject.ApplyModifiedProperties();
         }
 
         void DrawSpotAngles()

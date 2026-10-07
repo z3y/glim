@@ -248,7 +248,11 @@ namespace Glim
                     l.area_size = new Vector2(light.areaSize.x, light.areaSize.x);
                 }
 
-                bool lightSupportsCookie = light.type == LightType.Spot || light.type == LightType.Directional || light.type == LightType.Point;
+                bool lightSupportsCookie = light.type == LightType.Spot ||
+                    light.type == LightType.Directional ||
+                    light.type == LightType.Point ||
+                    light.type == LightType.Rectangle;
+
                 if (light.cookie && lightSupportsCookie)
                 {
                     if (uniqueCookies.Contains(light.cookie))
@@ -262,11 +266,30 @@ namespace Glim
                     }
                 }
 
-                var glimLight = light.GetComponent<GlimAdditionalLightSettings>();
-                if (glimLight || !builtIn)
+                if (!builtIn)
                 {
                     l.spot_inner_percent = light.innerSpotAngle / light.spotAngle * 100.0f;
                 }
+
+                var glimLight = light.GetComponent<GlimAdditionalLightSettings>();
+                if (glimLight && glimLight.enabled)
+                {
+                    l.spot_inner_percent = light.innerSpotAngle / light.spotAngle * 100.0f;
+
+                    if (light.type == LightType.Rectangle && glimLight.areaCookie)
+                    {
+                        if (uniqueCookies.Contains(glimLight.areaCookie))
+                        {
+                            l.cookie = (uint)uniqueCookies.IndexOf(glimLight.areaCookie);
+                        }
+                        else
+                        {
+                            uniqueCookies.Add(glimLight.areaCookie);
+                            l.cookie = (uint)uniqueCookies.Count - 1;
+                        }
+                    }
+                }
+
 
                 addedLights.Add(light);
                 sceneLights.Add(l);
