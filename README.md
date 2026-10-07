@@ -36,7 +36,7 @@ Easy to use, lightweight (only ~1MB) and works with Unity light components.
   - [x] Spot
   - [x] Area
   - [ ] Disc
-- [ ] Light Cookies
+- [x] Light Cookies
 - [x] Open Image Denoise 2.0
 - [x] Emissive Materials with Multiple Importance Sampling
 - [x] Seam stitching with a least squares solver
@@ -107,6 +107,13 @@ Make sure to also read [Updating](#updating) ⚠️
 - Scale In Lightmap is also calculated differently from the Unity lightmapper, readjust it on the renderers if needed
 - Menu Item `Tools > Glim > Bake`
 - Adjust settings on the created GameObject and press `Generate Lighting`
+
+### Additional Light Settings
+
+For additional settings for baking you can add a `GlimAdditionalLightSettings` component to a `Light`
+
+- Exposes the inner angle for spot lights and draws a gizmo for the Built-In render pipeline
+- Adds an Area (Rectangle) Light option for a cookie texture
 
 ### Updating
 
