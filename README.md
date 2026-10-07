@@ -104,9 +104,14 @@ Make sure to also read [Updating](#updating) ⚠️
 - Make sure to setup the denoiser first (otherwise denoising will be skipped)
 - Setup the scene (mark GameObjects as static, generate lightmap uvs etc.)
 - The lightmapper uses regular Unity light components, make sure to set them to baked
-- Scale In Lightmap is also calculated differently from the Unity lightmapper, readjust it on the renderers if needed
 - Menu Item `Tools > Glim > Bake`
 - Adjust settings on the created GameObject and press `Generate Lighting`
+
+#### Notes
+
+- Scale In Lightmap is calculated differently from the Unity lightmapper, readjust it on the renderers if needed
+- Light cookies use the RGB channels by default (unlike built-in where it only uses the alpha)
+- Cookies for spot lights are always masked by the spot cone falloff
 
 ### Additional Light Settings
 
