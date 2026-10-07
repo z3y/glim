@@ -596,6 +596,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     shadowRay.tMin = 0;
 
     float3 cookieColor = 1.0;
+    bool hasCookie = light.cookie != uint::maxValue;
 
     float falloff;
     if (light.type == LightType::Directional)
@@ -604,6 +605,22 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
         falloff = 1.0;
 
         shadowRay.tMax = RAY_MAX;
+
+        if (hasCookie)
+        {
+            float3 fwd = light.direction;
+            float3 right = normalize(cross(light.up, fwd));
+            float3 up = light.up;
+
+            float3 toPoint = positionWS - light.position;
+            float2 xy = float2(dot(toPoint, right), dot(toPoint, up));
+
+            // float2 cookieUV = xy / max(light.cookieSize, 1e-4) + 0.5;
+            float2 cookieUV = xy / max(float2(0.5, 0.5), 1e-4) + 0.5;
+            cookieUV = frac(cookieUV);
+
+            cookieColor = SampleCookie(cookieUV, light.cookie).rgb;
+        }
     }
     else
     {
@@ -641,7 +658,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
 
             falloff *= spotAttenuation;
 
-            if (light.cookie != uint::maxValue)
+            if (hasCookie)
             {
                 float3 fwd = light.direction;
                 float3 right = normalize(cross(fwd, light.up));

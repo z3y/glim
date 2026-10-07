@@ -114,10 +114,11 @@ float4 SampleCookie(float2 uv, uint index)
 {
     Texture2D tex = Cookies[NonUniformResourceIndex(index)];
 
-    float2 resolution;
+    uint2 resolution;
     tex.GetDimensions(resolution.x, resolution.y);
 
-    return tex[uint2(saturate(uv) * resolution + 0.5)];
+    uint2 coord = min((uint2)(saturate(uv) * resolution), resolution - 1);
+    return tex[coord];
 }
 
 float3 SampleSkybox(float3 dir)
