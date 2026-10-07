@@ -344,6 +344,7 @@ namespace Glim
                     }
                 }
 
+
                 lda.ApplyModifiedPropertiesWithoutUndo();
                 string ldaName = "LightingData";
 
@@ -361,7 +362,6 @@ namespace Glim
                 // apply new asset
                 var newLda = AssetDatabase.LoadAssetAtPath<LightingDataAsset>(destPath);
                 using var lda2 = new SerializedObject(newLda);
-
 
                 lda2.FindProperty("m_Name").stringValue = ldaName;
                 lda2.ApplyModifiedPropertiesWithoutUndo();
@@ -396,6 +396,21 @@ namespace Glim
                 {
                     GlimLightmapperEditor.BakeAllReflectionProbesSnapshots(_context.scene, _context.reflectionProbesSuperSampling ? 2 : 1, _context.reflectionProbesSpecular);
                 }
+
+                using var lda3 = new SerializedObject(Lightmapping.lightingDataAsset);
+                LightingData.InspectorModeObject.SetValue(lda3, InspectorMode.DebugInternal);
+                var skyboxReflectionProp = lda3.FindProperty("m_BakedReflectionProbeCubemaps");
+                if (skyboxReflectionProp != null)
+                {
+                    skyboxReflectionProp.arraySize += 1;
+                    skyboxReflectionProp.GetArrayElementAtIndex(skyboxReflectionProp.arraySize - 1).objectReferenceValue =
+                        AssetDatabase.LoadAssetAtPath<Cubemap>(_context.skyboxReflectionPath);
+                    lda3.ApplyModifiedPropertiesWithoutUndo();
+
+                    Lightmapping.lightingDataAsset = (LightingDataAsset)lda3.targetObject;
+                    EditorSceneManager.MarkSceneDirty(_context.scene);
+                }
+
             }
             finally
             {
@@ -411,6 +426,12 @@ namespace Glim
             {
                 Debug.Log("Bake Logs:\n" + logs);
             }
+        }
+
+        [MenuItem("Tools/Glim/DynamicGI.UpdateEnvironment")]
+        public static void DynamicGIUpdateEnvironment()
+        {
+            DynamicGI.UpdateEnvironment();
         }
 
         static void ResetBake()
@@ -724,7 +745,7 @@ namespace Glim
                         Bindings.app_add_probe(app, p, r);
                     }
 
-                    uint size = (uint)Math.Sqrt(_context.skyboxPixels.Length / 6);
+                    uint size = (uint)Mathf.Sqrt(_context.skyboxPixels.Length / 6);
 
                     Bindings.app_set_skybox(app, _context.skyboxPixels, (uint)_context.skyboxPixels.Length * 4, size, size);
 

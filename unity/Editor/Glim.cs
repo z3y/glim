@@ -105,6 +105,7 @@ namespace Glim
         public bool reflectionProbesSuperSampling;
         public bool reflectionProbesSpecular;
         public bool bakeReflectionProbes;
+        public string skyboxReflectionPath;
 
         public string outputDir;
         public LightmapMode lightmapMode;
@@ -153,6 +154,9 @@ namespace Glim
             {
                 AssetDatabase.CreateFolder(Path.GetDirectoryName(scene.path), scene.name);
             }
+
+            this.skyboxReflectionPath = Path.Combine(this.outputDir, "SkyboxReflection.exr");
+            SkyboxCapture.SaveAsCubemapAsset(skyboxPixels, this.skyboxReflectionPath);
 
             var ftraceLightmaps = rootObjects.FirstOrDefault(x => x.gameObject.name == "!ftraceLightmaps");
             if (ftraceLightmaps != null)
