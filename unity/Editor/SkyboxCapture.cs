@@ -72,10 +72,17 @@ namespace Glim
 
             for (int f = 0; f < 6; f++)
             {
-                Array.Copy(pixels, f * res * res, tmp, 0, res * res);
+                int src = f;
+                int srcOffset = src * res * res;
+
+                for (int y = 0; y < res; y++)
+                {
+                    Array.Copy(pixels, srcOffset + (res - 1 - y) * res, tmp, y * res, res);
+                }
+
                 strip.SetPixels(f * res, 0, res, res, tmp);
             }
-            strip.Apply(false);
+            // strip.Apply(false);
 
             File.WriteAllBytes(assetPath, strip.EncodeToEXR(Texture2D.EXRFlags.None));
             UnityEngine.Object.DestroyImmediate(strip);
@@ -104,7 +111,7 @@ TextureImporter:
   mipmaps:
     mipMapMode: 0
     enableMipMap: 1
-    sRGBTexture: 1
+    sRGBTexture: 0
     linearTexture: 0
     fadeOut: 0
     borderMipMap: 0
