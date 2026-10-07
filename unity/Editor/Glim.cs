@@ -253,7 +253,7 @@ namespace Glim
                     l.area_size = new Vector2(light.areaSize.x, light.areaSize.x);
                 }
 
-                bool lightSupportsCookie = light.type == LightType.Spot || light.type == LightType.Directional;
+                bool lightSupportsCookie = light.type == LightType.Spot || light.type == LightType.Directional || light.type == LightType.Point;
                 if (light.cookie && lightSupportsCookie)
                 {
                     if (uniqueCookies.Contains(light.cookie))
@@ -275,14 +275,23 @@ namespace Glim
             {
                 if (cookie is Texture2D tex)
                 {
-                    var cookieData = new LightCookieData()
+                    var pixels = GetPixels32(tex);
+                    cookies.Add(new LightCookieData()
                     {
-                        pixels = GetPixels32(tex),
+                        pixels = pixels,
                         width = (uint)tex.width,
                         height = (uint)tex.height,
-                    };
-
-                    cookies.Add(cookieData);
+                    });
+                }
+                else if (cookie is Cubemap cube)
+                {
+                    var pixels = CubemapToOctahedralPixels(cube, out int size);
+                    cookies.Add(new LightCookieData
+                    {
+                        pixels = pixels,
+                        width = (uint)size,
+                        height = (uint)size,
+                    });
                 }
             }
 
@@ -687,7 +696,42 @@ namespace Glim
 
             return pixels;
         }
+
+        static Material cubeToOctahedralMat;
+        public static Color32[] CubemapToOctahedralPixels(Cubemap cube, out int size)
+        {
+            if (!cubeToOctahedralMat)
+            {
+                cubeToOctahedralMat = AssetDatabase.LoadAssetAtPath<Material>("Packages/io.github.z3y.glim/Editor/CubemapToOctahedral.mat");
+            }
+
+            size = Mathf.Clamp(cube.width * 2, 64, 2048);
+
+            cubeToOctahedralMat.SetTexture("_Cube", cube);
+
+            RenderTexture rt = RenderTexture.GetTemporary(size, size, 0, RenderTextureFormat.ARGB32);
+            Graphics.Blit(null, rt, cubeToOctahedralMat);
+
+            RenderTexture previous = RenderTexture.active;
+            RenderTexture.active = rt;
+
+            Texture2D readable = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            readable.ReadPixels(new Rect(0, 0, size, size), 0, 0);
+            readable.Apply();
+
+            Color32[] pixels = readable.GetPixels32();
+
+            Object.DestroyImmediate(readable);
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(rt);
+
+            cubeToOctahedralMat.SetTexture("_Cube", null);
+
+            return pixels;
+        }
     }
+
+
 
     public class Glim
     {
