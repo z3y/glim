@@ -120,3 +120,20 @@ void SpotLightScaleOffset(float outerAngle, float innerAnglePercent, out float s
     spotScale = 1.0 / max(cos(innerAngle) - cosOuter, 1e-4);
     spotOffset = -cosOuter * spotScale;
 }
+
+float2 OctahedralEncode(float3 n)
+{
+    n /= (abs(n.x) + abs(n.y) + abs(n.z));
+    float2 p = n.xy;
+    if (n.z < 0.0)
+    {
+        float2 s = float2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
+        p = (1.0 - abs(p.yx)) * s;
+    }
+    return p * 0.5 + 0.5;
+}
+
+float4 SampleCookieOctahedral(float3 dir, uint index)
+{
+    return SampleCookie(OctahedralEncode(normalize(dir)), index);
+}

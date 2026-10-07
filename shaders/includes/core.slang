@@ -598,6 +598,10 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     float3 cookieColor = 1.0;
     bool hasCookie = light.cookie != uint::maxValue;
 
+    float3 fwd = light.direction;
+    float3 right = normalize(cross(light.up, fwd));
+    float3 up = light.up;
+
     float falloff;
     if (light.type == LightType::Directional)
     {
@@ -608,10 +612,6 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
 
         if (hasCookie)
         {
-            float3 fwd = light.direction;
-            float3 right = normalize(cross(light.up, fwd));
-            float3 up = light.up;
-
             float3 toPoint = positionWS - light.position;
             float2 xy = float2(dot(toPoint, right), dot(toPoint, up));
 
@@ -659,8 +659,6 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
 
             if (hasCookie)
             {
-                float3 fwd = light.direction;
-                float3 right = normalize(cross(fwd, light.up));
                 float3 up = cross(right, fwd);
 
                 float3 toPoint = positionWS - light.position;
@@ -676,6 +674,13 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
                 // cookieColor = float3(cookieUV, 0.0);
                 cookieColor = SampleCookie(cookieUV, light.cookie).rgb;
             }
+        }
+
+        if (light.type == LightType::Point && hasCookie)
+        {
+            float3 d = positionWS - light.position;
+            float3 dirLocal = float3(dot(d, right), dot(d, up), dot(d, fwd));
+            cookieColor = SampleCookieOctahedral(dirLocal, light.cookie).rgb;
         }
 
         if (light.type == LightType::Area)
