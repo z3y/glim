@@ -6,12 +6,14 @@ namespace Glim
 {
     public static class SkyboxCapture
     {
-        public const int RESOLUTION = 128;
         const GraphicsFormat FORMAT = GraphicsFormat.R16G16B16A16_SFloat;
 
         public static Color[] Capture(Scene scene)
         {
-            var rtDesc = new RenderTextureDescriptor(RESOLUTION, RESOLUTION)
+            var resolution = RenderSettings.defaultReflectionResolution;
+            Debug.Log(resolution);
+
+            var rtDesc = new RenderTextureDescriptor(resolution, resolution)
             {
                 dimension = UnityEngine.Rendering.TextureDimension.Cube,
                 graphicsFormat = FORMAT,
@@ -34,18 +36,18 @@ namespace Glim
 
             camera.RenderToCubemap(rt);
 
-            Color[] pixels = new Color[RESOLUTION * RESOLUTION * 6];
-            var face = new Texture2D(RESOLUTION, RESOLUTION, FORMAT, TextureCreationFlags.None);
+            Color[] pixels = new Color[resolution * resolution * 6];
+            var face = new Texture2D(resolution, resolution, FORMAT, TextureCreationFlags.None);
 
             for (int faceIndex = 0; faceIndex < 6; faceIndex++)
             {
                 Graphics.SetRenderTarget(rt, 0, (CubemapFace)faceIndex);
 
-                face.ReadPixels(new Rect(0, 0, RESOLUTION, RESOLUTION), 0, 0);
+                face.ReadPixels(new Rect(0, 0, resolution, resolution), 0, 0);
                 face.Apply(false);
 
                 var colors = face.GetPixels();
-                colors.CopyTo(pixels, faceIndex * RESOLUTION * RESOLUTION);
+                colors.CopyTo(pixels, faceIndex * resolution * resolution);
             }
 
             Graphics.SetRenderTarget(null);

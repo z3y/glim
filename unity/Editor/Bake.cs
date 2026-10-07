@@ -724,7 +724,8 @@ namespace Glim
                         Bindings.app_add_probe(app, p, r);
                     }
 
-                    uint size = (uint)SkyboxCapture.RESOLUTION;
+                    uint size = (uint)Math.Sqrt(_context.skyboxPixels.Length / 6);
+
                     Bindings.app_set_skybox(app, _context.skyboxPixels, (uint)_context.skyboxPixels.Length * 4, size, size);
 
                     Bindings.app_run(app);
