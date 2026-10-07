@@ -626,7 +626,6 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
         if (light.type == LightType::Area)
         {
             float2 offset = xi - 0.5;
-            float3 right = normalize(cross(light.up, light.direction));
             L = light.position + right * offset.x * light.AreaSize.x + light.up * offset.y * light.AreaSize.y;
         }
         else
@@ -670,6 +669,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
 
                 float2 cookieUV = xy / (max(z, 1e-4) * tanHalfAngle);
                 cookieUV = cookieUV * 0.5 + 0.5;
+                cookieUV = 1.0 - cookieUV;
 
                 // cookieColor = float3(cookieUV, 0.0);
                 cookieColor = SampleCookie(cookieUV, light.cookie).rgb;
