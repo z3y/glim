@@ -52,7 +52,7 @@ Easy to use, lightweight (only ~1MB) and works with Unity light components.
 - [ ] URP Adaptive Probe Volumes
 - [ ] Light Probe Occlusion
 - [x] Emissive Multiplier
-- [ ] Skybox Reflection Probe
+- [x] Skybox Reflection Probe
 - [ ] Double-sided GI
 - [ ] Meta Pass fallback
 
