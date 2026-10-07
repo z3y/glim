@@ -215,9 +215,8 @@ namespace Glim
             public Vector3 up;
             public uint mixed;
 
+            public Vector2 cookieSize;
             public uint cookie;
-            public float pad0;
-            public float pad1;
             public float pad2;
         }
 

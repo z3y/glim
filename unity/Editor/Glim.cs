@@ -227,6 +227,7 @@ namespace Glim
                     shadow_radius_or_angle = radiusOrAngle,
                     mixed = light.lightmapBakeType == LightmapBakeType.Mixed ? 1u : 0u,
                     cookie = uint.MaxValue,
+                    cookieSize = light.cookieSize2D
                 };
 
                 if (light.type == LightType.Spot)
