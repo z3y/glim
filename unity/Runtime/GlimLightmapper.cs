@@ -89,6 +89,7 @@ Affects lightmaps, light probes and light volumes.")]
         public float emissiveMultiplier = 1.0f;
 
         [Space]
+        [Tooltip("Applies Ambient Occlusion to indirect lighting. Direct light and emissive materials are unaffected.")]
         [Range(0.0f, 1.0f)] public float ambientOcclusion = 0.0f;
         public float ambientOcclusionRange = 1.0f;
 

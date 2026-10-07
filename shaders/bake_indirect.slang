@@ -73,7 +73,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
         if (bounceHit.t < aoRadius)
         {
-            ao = 0;
+            ao = 0.0;
         }
 
         if (!bounceHit.frontFace)
