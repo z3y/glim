@@ -615,6 +615,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
         }
         else
         {
+            L = light.position;
             if (light.ShadowRangeOrAngle > 0.0)
             {
                 L = RandomPointOnOrientedDisk(light.position, light.ShadowRangeOrAngle, positionWS, xi);
@@ -635,15 +636,16 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
             float spotScale;
             float spotOffset;
             SpotLightScaleOffset(light.SpotOuter, light.SpotInnerPercent, spotScale, spotOffset);
-            float spotAttenuation = SpotLightAngleAttenuation(light.direction, L, spotScale, spotOffset);
+            float3 toLightCenter = normalize(light.position - positionWS);
+            float spotAttenuation = SpotLightAngleAttenuation(light.direction, toLightCenter, spotScale, spotOffset);
 
             falloff *= spotAttenuation;
 
             if (light.cookie != uint::maxValue)
             {
                 float3 fwd = light.direction;
-                float3 right = normalize(cross(light.up, fwd));
-                float3 up = cross(fwd, right);
+                float3 right = normalize(cross(fwd, light.up));
+                float3 up = cross(right, fwd);
 
                 float3 toPoint = positionWS - light.position;
 
