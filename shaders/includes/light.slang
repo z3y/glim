@@ -4,6 +4,7 @@ enum LightType : uint
     Point = 1,
     Spot = 2,
     Area = 3,
+    Disc = 4,
 };
 
 struct Light
@@ -19,7 +20,7 @@ struct Light
 
     float SpotInnerPercent;
     float SpotOuter;
-    float2 AreaSize;
+    float2 AreaSizeOrDiscRadius;
 
     float3 up;
     uint mixed;
@@ -150,4 +151,26 @@ float2 OctahedralEncode(float3 n)
 float4 SampleCookieOctahedral(float3 dir, uint index)
 {
     return SampleCookie(OctahedralEncode(normalize(dir)), index);
+}
+
+float2 SampleDiskConcentric(float2 u)
+{
+    float2 o = 2.0 * u - 1.0;
+    if (o.x == 0.0 && o.y == 0.0)
+    {
+        return 0.0;
+    }
+
+    float r, theta;
+    if (abs(o.x) > abs(o.y))
+    {
+        r = o.x;
+        theta = (float ::getPi() * 0.25) * (o.y / o.x);
+    }
+    else
+    {
+        r = o.y;
+        theta = (float ::getPi() * 0.5) - (float ::getPi() * 0.25) * (o.x / o.y);
+    }
+    return r * float2(cos(theta), sin(theta));
 }

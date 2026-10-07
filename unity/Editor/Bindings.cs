@@ -194,6 +194,7 @@ namespace Glim
             Point = 1,
             Spot = 2,
             Area = 3,
+            Disc = 4,
         }
 
         [StructLayout(LayoutKind.Sequential)]

@@ -93,7 +93,7 @@ namespace Glim
                     DrawSpotAngles();
                 }
 
-                if (_type.intValue == (int)LightType.Rectangle)
+                if (_type.intValue == (int)LightType.Rectangle || _type.intValue == (int)LightType.Disc)
                 {
                     EditorGUILayout.PropertyField(_areaCookie, new GUIContent("Area Cookie"));
                 }

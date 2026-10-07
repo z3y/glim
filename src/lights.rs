@@ -7,6 +7,7 @@ pub enum LightType {
     Point = 1,
     Spot = 2,
     Area = 3,
+    Disc = 4,
 }
 
 #[repr(C)]
@@ -23,7 +24,7 @@ pub struct Light {
 
     pub spot_inner_percent: f32,
     pub spot_outer: f32,
-    pub area_size: Vector2,
+    pub area_size_or_disc_radius: Vector2,
 
     pub up: Vector3,
     pub mixed: u32,
@@ -47,7 +48,7 @@ impl Default for Light {
 
             spot_inner_percent: 0.0,
             spot_outer: 0.0,
-            area_size: Vector2::ZERO,
+            area_size_or_disc_radius: Vector2::ZERO,
 
             up: Vector3::UP,
             mixed: 0,

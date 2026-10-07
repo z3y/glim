@@ -209,8 +209,7 @@ namespace Glim
                 }
                 else if (light.type == LightType.Disc)
                 {
-                    // TODO
-                    lightType = Bindings.LightType.Area;
+                    lightType = Bindings.LightType.Disc;
                 }
 
                 float radiusOrAngle = light.type == LightType.Directional ?
@@ -251,7 +250,8 @@ namespace Glim
                 bool lightSupportsCookie = light.type == LightType.Spot ||
                     light.type == LightType.Directional ||
                     light.type == LightType.Point ||
-                    light.type == LightType.Rectangle;
+                    light.type == LightType.Rectangle ||
+                    light.type == LightType.Disc;
 
                 if (light.cookie && lightSupportsCookie)
                 {
@@ -276,7 +276,7 @@ namespace Glim
                 {
                     l.spot_inner_percent = light.innerSpotAngle / light.spotAngle * 100.0f;
 
-                    if (light.type == LightType.Rectangle && glimLight.areaCookie)
+                    if ((light.type == LightType.Rectangle || light.type == LightType.Disc) && glimLight.areaCookie)
                     {
                         if (uniqueCookies.Contains(glimLight.areaCookie))
                         {
