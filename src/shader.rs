@@ -86,7 +86,7 @@ pub struct SpecializationConstants {
     pub skybox_intensity: f32,     // 8
     pub indirect_intensity: f32,   // 9
     pub lightprobe_deringing: f32, // 10
-    pub pad0: u32,                 // 11
+    pub emissive_multiplier: f32,  // 11
 
     pub vertex_address: u64,  // 12 13
     pub indices_address: u64, // 14 15

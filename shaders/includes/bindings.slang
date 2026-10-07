@@ -81,6 +81,9 @@ const float INDIRECT_INTENSITY;
 [vk::constant_id(10)]
 const float LIGHTPROBE_DERINGING;
 
+[vk::constant_id(11)]
+const float EMISSIVE_MULTIPLIER;
+
 DECLARE_CONST_PTR(Vertices, Vertex, 12)
 DECLARE_CONST_PTR(Indices, uint, 14)
 DECLARE_CONST_PTR(EmissiveTriangles, uint, 16)
@@ -110,7 +113,7 @@ float4 SampleEmission(float2 uv, uint lightmapGroup)
 {
     uint index = LIGHTMAP_GROUP_COUNT <= 1 ? 0 : NonUniformResourceIndex(lightmapGroup);
     Texture2D tex = Emission[index];
-    return max(0.0, tex[(uint2)uv]);
+    return max(0.0, tex[(uint2)uv] * EMISSIVE_MULTIPLIER);
 }
 
 float4 SampleCookie(float2 uv, uint index)

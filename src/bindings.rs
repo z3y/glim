@@ -47,6 +47,7 @@ pub struct GlimConfig {
     pub skybox_intensity: f32,
     pub indirect_intensity: f32,
     pub lightprobe_deringing: f32,
+    pub emissive_multiplier: f32,
 }
 
 #[repr(u32)]

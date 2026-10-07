@@ -63,6 +63,11 @@ The Built-In pipeline's older falloff: a hyperbolic curve of (distance / Range)Â
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
 
         [Tooltip(
+@"Use fast hardware accelerated ray tracing if the GPU supports it (Vulkan RayQueries).
+Automatically fallbacks to software CWBVH ray tracing when not avaliable.")]
+        public bool hardwareRayTracing = true;
+
+        [Tooltip(
 @"Enables multiple importance sampling (MIS) for emissive meshes,
 reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.
 Affects lightmaps, light probes and light volumes.")]
@@ -77,12 +82,11 @@ Affects lightmaps, light probes and light volumes.")]
         [Tooltip("Only affects bounced light")]
         public uint indirectSamples = 256;
         public uint bounces = 5;
-        [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;
 
-        [Tooltip(
-@"Use fast hardware accelerated ray tracing if the GPU supports it (Vulkan RayQueries).
-Automatically fallbacks to software CWBVH ray tracing when not avaliable.")]
-        public bool hardwareRayTracing = true;
+
+        [Space]
+        public float emissiveMultiplier = 1.0f;
+        [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;
 
         [Space]
         public uint lightProbeSamples = 4096;
@@ -110,6 +114,7 @@ Automatically applied to light volumes based on texel size."
         public uint previewThrottle = 2;
         public uint previewSamples = 512;
         public uint previewBounces = 2;
+
 
         [Header("Default Group")]
         public GlimLightmapGroup group;

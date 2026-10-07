@@ -76,6 +76,7 @@ mod tests {
             skybox_intensity: 1.0,
             indirect_intensity: 1.0,
             lightprobe_deringing: 4.0,
+            emissive_multiplier: 1.0,
         };
         config
     }

@@ -92,7 +92,8 @@ namespace Glim
                         lightmapper.lightmapMode,
                         RenderSettings.ambientIntensity,
                         lightmapper.indirectMultiplier,
-                        0.0f
+                        0.0f,
+                        lightmapper.emissiveMultiplier
                     );
 
                     Bake.Start(lightmapper, config);
@@ -202,7 +203,8 @@ namespace Glim
                         lightmapper.lightmapMode,
                         RenderSettings.ambientIntensity,
                         lightmapper.indirectMultiplier,
-                        w
+                        w,
+                        lightmapper.emissiveMultiplier
                     );
                     Bake.Start(lightmapper, config);
                 };

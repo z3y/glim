@@ -462,7 +462,6 @@ fn initialize_render(app: &mut Glim) {
         skybox_intensity: config.skybox_intensity,
         indirect_intensity: config.indirect_intensity,
         lightprobe_deringing: config.lightprobe_deringing,
-        pad0: 0,
         vertex_address: app.gpu_mesh.vertex_buffer.gpu_address,
         indices_address: app.gpu_mesh.index_buffer.gpu_address,
         emissive_triangles_address: app.emissive_triangles_buffer.gpu_address,
@@ -473,6 +472,7 @@ fn initialize_render(app: &mut Glim) {
         compaction_buffer_address: 0,
         bvh_nodes_address: app.bvh_nodes.gpu_address,
         bvh_triangles_address: app.bvh_triangles.gpu_address,
+        emissive_multiplier: app.config.emissive_multiplier,
     };
 
     if app.config.is_preview {

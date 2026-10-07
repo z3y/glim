@@ -47,6 +47,7 @@ namespace Glim
             public readonly float skybox_intensity;
             public readonly float indirect_intensity;
             public readonly float lightprobe_deringing;
+            public readonly float emissive_multiplier;
 
             public GlimConfig(CoordinateSystem coordinate_system,
                                uint direct_light_samples,
@@ -65,7 +66,8 @@ namespace Glim
                                LightmapMode lightmap_mode,
                                float skybox_intensity,
                                float indirect_intensity,
-                               float lightprobe_deringing
+                               float lightprobe_deringing,
+                               float emissive_multiplier
                                )
             {
                 this.coordinate_system = coordinate_system;
@@ -94,6 +96,7 @@ namespace Glim
 
                 this.skybox_intensity = skybox_intensity;
                 this.indirect_intensity = indirect_intensity;
+                this.emissive_multiplier = emissive_multiplier;
 
                 var currentPipeline = GraphicsSettings.currentRenderPipeline;
                 uint autoFalloff = 0;
