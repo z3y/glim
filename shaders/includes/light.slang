@@ -73,10 +73,10 @@ float LightFalloff(float distanceSquare, float invRangeSq, uint falloffType)
 {
     if (falloffType == 0)
     {
-        // return 1.0 / distanceSquare;
         float factor = distanceSquare * invRangeSq;
         float smoothFactor = saturate(1.0 - factor * factor);
-        return (smoothFactor * smoothFactor) / (distanceSquare + 1.0);
+        // return (smoothFactor * smoothFactor) / (distanceSquare + 1.0);
+        return smoothFactor / max(distanceSquare, 0.0001);
     }
     else
     {
