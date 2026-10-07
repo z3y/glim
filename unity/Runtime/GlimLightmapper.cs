@@ -12,7 +12,7 @@ namespace Glim
     {
         Auto = 0,
         InverseSquare = 1,
-        UnityBuiltIn = 2,
+        LegacyBIRP = 2,
     }
 
     public enum LightmapMode : uint
@@ -34,22 +34,34 @@ namespace Glim
         [Header("Bake Settings")]
 
         [Tooltip(
-@"• Non-Directional
-  Bakes a single diffuse lightmap texture.
+@"- Non-Directional
+Bakes a single diffuse lightmap texture.
 
-• Dominant Direction
-  Bakes an additional directional lightmap that stores the dominant incoming light direction.
-  Supports normal maps and improves directional lighting.
+- Dominant Direction
+Bakes an additional directional lightmap that stores the dominant incoming light direction. Supports normal maps and improves directional lighting.
 
-• Mono SH
-  Bakes two textures:
-  - L0: L0 Spherical Harmonics
-  - L1: Monochromatic luminance encoded into L1 Spherical Harmonics.
-  Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it."
+- Mono SH
+Bakes two textures (L0 and Monochromatic luminance of L1). Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it."
 )]
         public LightmapMode lightmapMode = LightmapMode.NonDirectional;
         public MixedLightMode mixedMode = MixedLightMode.BakedIndirect;
+
+        [Tooltip(
+@"Distance falloff mode for point and spot lights. Directional lights have no falloff and are unaffected.
+
+When using mixed lights this falloff should match the real time light for the current render pipeline (Auto), otherwise feel free to modify it.
+
+- Auto
+Picks the mode from the active render pipeline: InverseSquare when a render pipeline asset (URP) is assigned, LegacyBIRP when using the Built-In pipeline.
+
+- Inverse Square
+Physically based 1 / d² falloff, as used by URP. Intensity drops with the square of distance, and Range only acts as a smooth cutoff near the edge, so it doesn't change how bright the light looks.
+
+- Legacy BIRP
+The Built-In pipeline's older falloff: a hyperbolic curve of (distance / Range)², faded linearly to zero over the last stretch before Range. Range scales the whole curve, so a larger Range makes the light noticeably brighter than with inverse-square."
+)]
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
+
         [Tooltip(
 @"Enables multiple importance sampling (MIS) for emissive meshes,
 reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.

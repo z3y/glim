@@ -57,16 +57,30 @@ float3 GetDirectionalLightAngle(float3 L, float angle, float2 xi)
     return normalize(wi);
 }
 
-// thanks to error.mdl
-// https://discord.com/channels/419351657743253524/443155141235834881/1429649996084416572
+float LegacyFalloff(float t)
+{
+    const float steepness = 25.0;
+    const float windowStart = 0.64;
+
+    if (t >= 1.0)
+    {
+        return 0.0;
+    }
+
+    float curve = 1.0 / (1.0 + steepness * t);
+
+    if (t <= windowStart)
+    {
+        return curve;
+    }
+
+    float window = (1.0 - t) / (1.0 - windowStart);
+    return curve * window;
+}
+
 float UnityBuiltInLightAttenuation(float distanceSquare, float invRangeSq)
 {
-    float rangeFraction = distanceSquare * invRangeSq;
-    float hyperbolaFalloff = (0.04 / (rangeFraction + 0.04));
-    // starting at around 0.6407, formula linearly blends toward 0 at rangeFraction of 1
-    float lerpToZeroFactor = saturate((rangeFraction - 0.6407) / (1.0 - 0.6407));
-    float unityLightFalloff = lerp(hyperbolaFalloff, 0, lerpToZeroFactor);
-    return unityLightFalloff;
+    return LegacyFalloff(distanceSquare * invRangeSq);
 }
 
 float LightFalloff(float distanceSquare, float invRangeSq, uint falloffType)

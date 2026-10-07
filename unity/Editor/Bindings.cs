@@ -106,7 +106,7 @@ namespace Glim
                 {
                     LightFalloffType.Auto => autoFalloff,
                     LightFalloffType.InverseSquare => 0,
-                    LightFalloffType.UnityBuiltIn => 1,
+                    LightFalloffType.LegacyBIRP => 1,
                     _ => 0,
                 };
             }
