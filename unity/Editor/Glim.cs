@@ -252,7 +252,8 @@ namespace Glim
                     l.area_size = new Vector2(light.areaSize.x, light.areaSize.x);
                 }
 
-                if (light.cookie)
+                bool lightSupportsCookie = light.type == LightType.Spot || light.type == LightType.Directional;
+                if (light.cookie && lightSupportsCookie)
                 {
                     if (uniqueCookies.Contains(light.cookie))
                     {
