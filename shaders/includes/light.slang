@@ -24,9 +24,8 @@ struct Light
     float3 up;
     uint mixed;
 
+    float2 cookieSize;
     uint cookie;
-    float pad0;
-    float pad1;
     float pad2;
 };
 

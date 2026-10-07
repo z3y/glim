@@ -615,8 +615,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
             float3 toPoint = positionWS - light.position;
             float2 xy = float2(dot(toPoint, right), dot(toPoint, up));
 
-            // float2 cookieUV = xy / max(light.cookieSize, 1e-4) + 0.5;
-            float2 cookieUV = xy / max(float2(0.5, 0.5), 1e-4) + 0.5;
+            float2 cookieUV = xy / max(light.cookieSize, 1e-4) + 0.5;
             cookieUV = frac(cookieUV);
 
             cookieColor = SampleCookie(cookieUV, light.cookie).rgb;
