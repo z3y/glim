@@ -245,13 +245,18 @@ pub extern "C" fn app_add_mesh(app: *mut Glim, mesh: FfiMesh) {
 
         let emissive = mesh.emissive;
 
+        let mut fix_seams = mesh.fix_seams;
+
+        if app.config.is_preview {
+            fix_seams = false;
+        }
+
         Mesh::append_ffi_mesh(
             target_mesh,
             mesh,
             app.config.coordinate_system,
             &mut app.seams,
-            // todo add seams per renderer
-            !app.config.is_preview,
+            fix_seams,
             emissive,
         );
     }));

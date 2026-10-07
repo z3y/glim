@@ -332,6 +332,7 @@ mod tests {
                     backface_gi,
                     transparent,
                     emissive: true,
+                    fix_seams: true,
                 };
                 app_add_mesh(app, mesh);
             }

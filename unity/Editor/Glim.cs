@@ -624,6 +624,7 @@ namespace Glim
                     backfaceGI = false,
                     transparent = hasHoles ? true : false,
                     emissive = false,
+                    fixSeams = true
                 };
                 sceneMesh.Add(meshData);
                 GameObject.DestroyImmediate(mesh);
@@ -841,6 +842,7 @@ namespace Glim
             public bool backfaceGI;
             public bool transparent;
             public bool emissive;
+            public bool fixSeams;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -911,6 +913,8 @@ namespace Glim
 
                 int subMeshCount = mesh.subMeshCount;
                 var materials = mr.sharedMaterials;
+
+                bool fixSeams = mr.stitchLightmapSeams;
 
                 for (int i = 0; i < vertices.Count; i++)
                 {
@@ -996,6 +1000,7 @@ namespace Glim
                         backfaceGI = backfaceGI,
                         transparent = transparent,
                         emissive = emissive,
+                        fixSeams = fixSeams,
                     };
 
                     datas.Add(data);

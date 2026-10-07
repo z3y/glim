@@ -22,6 +22,7 @@ pub struct FfiMesh {
     pub backface_gi: bool,
     pub transparent: bool,
     pub emissive: bool,
+    pub fix_seams: bool,
 }
 
 #[repr(C)]
@@ -64,7 +65,7 @@ impl Mesh {
         mesh: FfiMesh,
         system: CoordinateSystem,
         all_seams: &mut Vec<Seam>,
-        add_seams: bool,
+        fix_seams: bool,
         emissive: bool,
     ) {
         let positions =
@@ -76,7 +77,7 @@ impl Mesh {
         // let sample_scale = 20.0;
         let unity = system == CoordinateSystem::Unity;
 
-        if add_seams {
+        if fix_seams {
             let mut flip = true;
             if unity {
                 flip = false;

@@ -671,6 +671,7 @@ namespace Glim
                                     backface_gi = data.backfaceGI,
                                     transparent = data.transparent,
                                     emissive = data.emissive,
+                                    fix_seams = data.fixSeams
                                 };
 
                                 Bindings.app_add_mesh(app, exportedMesh);
