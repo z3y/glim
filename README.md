@@ -73,7 +73,7 @@ Easy to use, lightweight (only ~1MB) and works with Unity light components.
 
 1. Download the Windows `.zip` from [https://github.com/RenderKit/oidn/releases](https://github.com/RenderKit/oidn/releases)
 2. Extract it anywhere on your computer (e.g. `C:\oidn`)
-3. Set the `OpenImageDenoise_DIR` environment variable to that extracted folder:
+3. Set the `OpenImageDenoise_DIR` environment variable to that extracted folder (the folder containing bin, doc, include, lib):
    - Press **Start**, type **"environment variables"**, and open **"Edit environment variables for your account"**
    - Click **New...**
    - Name: `OpenImageDenoise_DIR`

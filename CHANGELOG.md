@@ -2,7 +2,7 @@
 # v0.7.0
 
 - Added Ambient Occlusion baking
- - AO intenisty and range parameters
+ - AO intensity and range parameters
  - Affects indirect light only
 - Implemented faster GPU denoising
   - Open Image Denoise can now use other devices like CUDA, SYCL, HIP, METAL instead of only CPU
@@ -16,17 +16,17 @@
   - Another difference is the spot cone attenuation is always applied, unlike in built-in
   - This behavior matches URP (and is likely more desirable anyways)
 - Added a new component `GlimAdditionalLightSettings`
- - For additional settings for baking you can attatch it to a Unity Light
- - Exposes the inner angle for spot lights and draws a gizmo for the Built-In render pipeline
- - Adds a Rectangle and Disc Light option for a cookie texture
+  - For additional settings for baking you can attach it to a Unity Light
+  - Exposes the inner angle for spot lights and draws a gizmo for the Built-In render pipeline
+  - Adds a Rectangle and Disc Light option for a cookie texture
 - Implemented skybox reflection probe
   - Previously it was missing and was just sampling a default black cubemap
 - Calculate ambient probe (the single global light probe that exists by default) with Unity apis instead of baking it in the lightmapper
-  - This makes it sligtly more consistant, less hacky, and scales with the skybox intensity slider properly
+  - This makes it sligtly more consistent, less hacky, and scales with the skybox intensity slider properly
 - The skybox cubemap now uses the resolution set in the lighting window environment tab
 - Added global multiplier for emissive materials
-- Respect the stitch seams option on unity renderer componenets
+- Respect the stitch seams option on unity renderer components
 - Matched the legacy light falloff of BIRP lights exactly
 - Adjusted the light attenuation for Inverse Square mode to match URP lights
-  - This results in lights being sligtly brighter up close
+  - This results in lights being slightly brighter up close
 - Added more tooltips
