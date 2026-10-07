@@ -86,9 +86,11 @@ Affects lightmaps, light probes and light volumes.")]
 
         [Space]
         [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;
+        public float emissiveMultiplier = 1.0f;
+
+        [Space]
         [Range(0.0f, 1.0f)] public float ambientOcclusion = 0.0f;
         public float ambientOcclusionRange = 1.0f;
-        public float emissiveMultiplier = 1.0f;
 
         [Space]
         public uint lightProbeSamples = 4096;

@@ -48,7 +48,7 @@ Easy to use, lightweight (only ~1MB) and works with Unity light components.
   - [x] Baked Indirect
   - [ ] Shadowmask
   - [ ] Subtractive
-- [ ] Ambient Occlusion
+- [x] Ambient Occlusion
 - [ ] URP Adaptive Probe Volumes
 - [ ] Light Probe Occlusion
 - [x] Emissive Multiplier

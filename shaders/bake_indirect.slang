@@ -94,6 +94,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
                                             CompactedLightmap[(previousOffset + compactIndex) * 3 + 2]);
 
             float3 current = previousDiffuse * bounceAlbedo * color.a;
+            current *= lerp(1.0, ao, AO_INTENSITY);
             color.rgb += current;
             dominantDirection.xyz += ray.D * Luminance(current);
 
@@ -104,8 +105,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
         //     color.rgb += float3(1, 0, 1);
         // }
     }
-
-    color.rgb *= lerp(1.0, ao, AO_INTENSITY);
 
     ValidateSampleColor(color);
 
