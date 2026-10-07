@@ -35,7 +35,7 @@ Easy to use, lightweight (only ~1MB) and works with Unity light components.
   - [x] Point
   - [x] Spot
   - [x] Area
-  - [ ] Disc
+  - [x] Disc
 - [x] Light Cookies
 - [x] Open Image Denoise 2.0
 - [x] Emissive Materials with Multiple Importance Sampling
