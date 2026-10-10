@@ -51,6 +51,7 @@ mod tests {
             denoise: false,
             dilate: false,
             fix_seams: false,
+            discard: false,
         };
 
         let config = GlimConfig {
@@ -112,6 +113,7 @@ mod tests {
             denoise: DENOISE,
             dilate: DILATE,
             fix_seams: FIX_SEAMS,
+            discard: false,
         };
 
         let packed_emission_pixels: Vec<u8> = emission_pixels

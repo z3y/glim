@@ -2382,6 +2382,10 @@ unsafe fn render_lightmaps(app: &mut Glim) {
     let process_lightmap = |group_index: usize, lightmap_type: u32, post_step: u32| {
         let group = &app.groups[group_index].settings;
 
+        if group.discard {
+            return;
+        }
+
         (log)(LogMessage::message(&format!(
             "Processing Lightmap ({}/{})",
             post_step, post_total

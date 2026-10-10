@@ -55,7 +55,7 @@ namespace Glim
         public bool fixSeams = true;
 
         [Tooltip("When enabled the lightmap group will only be used temporarly during the bake, and discarded after without taking up any space. This allows renderers to contribute to lighting during bake, but use light probes or light volumes instead.")]
-        public bool discardLightmap = false;
+        public bool discard = false;
     }
 }
 #endif

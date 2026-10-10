@@ -168,6 +168,8 @@ pub struct LightmapSettings {
     pub dilate: bool,
     pub denoise: bool,
     pub fix_seams: bool,
+
+    pub discard: bool,
 }
 
 #[repr(u32)]

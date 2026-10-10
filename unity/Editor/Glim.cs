@@ -550,7 +550,9 @@ namespace Glim
                     Bake.bakeMessages.AppendLine($"Group {groupIndex} using cached lightmap UVs");
                 }
 
-                if (!config.is_preview)
+                bool saveGroup = !(config.is_preview || lightmapGroup.discard);
+
+                if (saveGroup)
                 {
                     var rendererDataIds = lda.FindProperty("m_LightmappedRendererDataIDs");
                     var rendererData = lda.FindProperty("m_LightmappedRendererData");

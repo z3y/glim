@@ -132,18 +132,20 @@ namespace Glim
             [MarshalAs(UnmanagedType.I1)] public readonly bool dilate;
             [MarshalAs(UnmanagedType.I1)] public readonly bool denoise;
             [MarshalAs(UnmanagedType.I1)] public readonly bool fix_seams;
+            [MarshalAs(UnmanagedType.I1)] public readonly bool discard;
 
-            public LightmapSettings(uint width, uint height, bool dilate, bool denoise, bool fix_seams)
+            public LightmapSettings(uint width, uint height, bool dilate, bool denoise, bool fix_seams, bool discard)
             {
                 this.width = width;
                 this.height = height;
                 this.dilate = dilate;
                 this.denoise = denoise;
                 this.fix_seams = fix_seams;
+                this.discard = discard;
             }
 
             public LightmapSettings(GlimLightmapGroup group) :
-                this(group.Width, group.Height, group.dilate, group.denoise, group.fixSeams)
+                this(group.Width, group.Height, group.dilate, group.denoise, group.fixSeams, group.discard)
             {
                 return;
             }

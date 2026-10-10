@@ -191,8 +191,10 @@ namespace Glim
                 bakeMessages.AppendLine($"Bake Complete in {now - _bakeStartTime}");
 
                 List<LightmapData> lightmapDatas = new();
-                for (int i = 0; i < _context.groups.Count; i++)
+                for (int groupIndex = 0; groupIndex < _context.groups.Count; groupIndex++)
                 {
+                    BakeContextGroup group = _context.groups[groupIndex];
+
                     var lmData = new LightmapData
                     {
                         lightmapColor = null,
@@ -214,6 +216,11 @@ namespace Glim
                 for (int groupIndex = 0; groupIndex < _context.groups.Count; groupIndex++)
                 {
                     BakeContextGroup group = _context.groups[groupIndex];
+
+                    if (group.settings.discard)
+                    {
+                        continue;
+                    }
 
                     var diffuseName = $"Lightmap-{groupIndex}_Diffuse.exr";
                     var directionalName = $"Lightmap-{groupIndex}_Directional.tga";
@@ -245,6 +252,11 @@ namespace Glim
                 for (int groupIndex = 0; groupIndex < _context.groups.Count; groupIndex++)
                 {
                     BakeContextGroup group = _context.groups[groupIndex];
+
+                    if (group.settings.discard)
+                    {
+                        continue;
+                    }
 
                     var groupAsset = _context.groups[groupIndex].groupAsset;
                     var diffuseName = $"Lightmap-{groupIndex}_Diffuse.exr";
