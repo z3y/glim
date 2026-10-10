@@ -28,7 +28,7 @@ float4 ExtractBytes(float value)
 }
 
 #pragma warning(disable: 41035)
-bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
+bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay)
 {
     hit = {};
 
@@ -138,11 +138,11 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
             triGroup.y -= 1u << triangleIndex;
 
             // CWBVHTriangles layout: [e1, e2, v0] each a float4
-            float3 e1 = BVHTriangles[triAddr + 0].xyz;
+            float4 e1 = BVHTriangles[triAddr + 0];
             float4 e2 = BVHTriangles[triAddr + 1];
             float4 v0 = BVHTriangles[triAddr + 2];
 
-            float3 r = cross(D, e1);
+            float3 r = cross(D, e1.xyz);
             float a = dot(e2.xyz, r);
             if (abs(a) > 1e-7f)
             {
@@ -155,10 +155,16 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
                     float v = f * dot(D, q);
                     if (v >= 0.0f && u + v <= 1.0f)
                     {
-                        float d = f * dot(e1, q);
+                        float d = f * dot(e1.xyz, q);
                         if (d > 0.0f && d < tmax)
                         {
                             bool transparent = e2.w != 0;
+                            bool no_shadows = e1.w != 0;
+
+                            if (no_shadows && shadowRay)
+                            {
+                                continue;
+                            }
 
                             [branch]
                             if (transparent)
@@ -172,7 +178,7 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
                                 }
                             }
 
-                            if (anyHit)
+                            if (shadowRay)
                             {
                                 return true;
                             }
