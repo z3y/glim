@@ -232,7 +232,7 @@ namespace Glim
 
             public Vector2 cookieSize;
             public uint cookie;
-            public float pad2;
+            public uint cast_shadows;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 16)]

@@ -230,6 +230,7 @@ namespace Glim
                     shadow_radius_or_angle = radiusOrAngle,
                     mixed = light.lightmapBakeType == LightmapBakeType.Mixed ? 1u : 0u,
                     cookie = uint.MaxValue,
+                    cast_shadows = light.shadows == LightShadows.None ? 0u : 1u
                 };
 
 #if UNITY_2023_1_OR_NEWER

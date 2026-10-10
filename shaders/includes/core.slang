@@ -731,7 +731,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     }
 
     [branch]
-    if (visible > 0.0)
+    if (visible > 0.0 && light.castShadows > 0)
     {
         if (TraceShadowRay(shadowRay))
         {

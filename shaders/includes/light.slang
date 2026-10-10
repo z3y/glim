@@ -27,7 +27,7 @@ struct Light
 
     float2 cookieSize;
     uint cookie;
-    float pad2;
+    uint castShadows;
 };
 
 void CreateOrthoBasis(float3 n, out float3 b1, out float3 b2)

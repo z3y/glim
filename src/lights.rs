@@ -31,7 +31,7 @@ pub struct Light {
 
     pub cookie_size: Vector2,
     pub cookie: u32,
-    pub pad2: f32,
+    pub cast_shadows: u32,
 }
 
 impl Default for Light {
@@ -54,8 +54,8 @@ impl Default for Light {
             mixed: 0,
 
             cookie: u32::MAX,
-            pad2: 0.0,
             cookie_size: Vector2::new(0.5, 0.5),
+            cast_shadows: 1,
         }
     }
 }
