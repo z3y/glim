@@ -174,6 +174,10 @@ impl VulkanAs {
     }
 
     pub fn destroy(&mut self, vk: &VulkanContext) {
+        if self.gpu_address == 0 {
+            return;
+        }
+
         assert!(!self.acceleration_structure.is_null());
         assert!(!self.memory.is_null());
         assert!(!self.buffer.is_null());
@@ -336,6 +340,11 @@ impl GpuMesh {
         vertex_address: vk::DeviceAddress,
         index_address: vk::DeviceAddress,
     ) -> VulkanAs {
+        let total_triangles: usize = meshes.iter().map(|m| m.indices.len() / 3).sum();
+        if total_triangles == 0 {
+            return VulkanAs::null();
+        }
+
         let triangles = vk::AccelerationStructureGeometryTrianglesDataKHR {
             vertex_format: vk::Format::R32G32B32_SFLOAT,
             vertex_data: vk::DeviceOrHostAddressConstKHR {
@@ -586,8 +595,10 @@ pub fn create_tlas(vk: &VulkanContext, blases: &[VulkanAs; 2]) -> VulkanAs {
         None => unreachable!("expected as device"),
     };
 
-    let instances = [
-        vk::AccelerationStructureInstanceKHR {
+    let mut instances = Vec::with_capacity(2);
+
+    if blases[0].gpu_address != 0 {
+        instances.push(vk::AccelerationStructureInstanceKHR {
             transform: vk::TransformMatrixKHR {
                 matrix: [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
             },
@@ -599,8 +610,11 @@ pub fn create_tlas(vk: &VulkanContext, blases: &[VulkanAs; 2]) -> VulkanAs {
             acceleration_structure_reference: vk::AccelerationStructureReferenceKHR {
                 device_handle: blases[0].gpu_address,
             },
-        },
-        vk::AccelerationStructureInstanceKHR {
+        });
+    }
+
+    if blases[1].gpu_address != 0 {
+        instances.push(vk::AccelerationStructureInstanceKHR {
             transform: vk::TransformMatrixKHR {
                 matrix: [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
             },
@@ -612,8 +626,8 @@ pub fn create_tlas(vk: &VulkanContext, blases: &[VulkanAs; 2]) -> VulkanAs {
             acceleration_structure_reference: vk::AccelerationStructureReferenceKHR {
                 device_handle: blases[1].gpu_address,
             },
-        },
-    ];
+        });
+    }
 
     let (as_instance_buffer, as_instance_mem, _) = vk.create_buffer(
         (std::mem::size_of::<vk::AccelerationStructureInstanceKHR>() * instances.len())
