@@ -14,7 +14,14 @@ namespace Glim
     [CustomEditor(typeof(GlimLightmapper))]
     public class GlimLightmapperEditor : Editor
     {
-        SerializedObject _nestedSO;
+        Editor _groupEditor;
+        bool _groupExpanded = true;
+
+        void OnDisable()
+        {
+            if (_groupEditor != null)
+                DestroyImmediate(_groupEditor);
+        }
 
         public override VisualElement CreateInspectorGUI()
         {
@@ -24,39 +31,27 @@ namespace Glim
 
             InspectorElement.FillDefaultInspector(root, serializedObject, this);
 
-            var nestedContainer = new VisualElement();
-            root.Add(nestedContainer);
-
-            void RebuildNested()
+            root.Add(new IMGUIContainer(() =>
             {
-                nestedContainer.Clear();
+                var group = lightmapper.group;
+                if (group == null)
+                    return;
 
-                _nestedSO?.Dispose();
-                _nestedSO = null;
-
-                if (lightmapper.group)
+                _groupExpanded = EditorGUILayout.InspectorTitlebar(_groupExpanded, group);
+                if (_groupExpanded)
                 {
-                    _nestedSO = new SerializedObject(lightmapper.group);
-                    VisualElement nestedInspector = CreateNestedInspector(_nestedSO, this);
-                    nestedContainer.Add(nestedInspector);
+                    CreateCachedEditor(group, null, ref _groupEditor);
+
+                    EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                    var so = _groupEditor.serializedObject;
+                    so.Update();
+                    DrawPropertiesExcluding(so, "m_Script");
+                    so.ApplyModifiedProperties();
+                    EditorGUILayout.EndVertical();
                 }
-            }
 
-            RebuildNested();
-
-            var globalGroupProp = serializedObject.FindProperty(nameof(lightmapper.group));
-            root.TrackPropertyValue(globalGroupProp, _ => RebuildNested());
-
-            {
-                VisualElement element = new()
-                {
-                    style =
-                    {
-                        height = 20
-                    }
-                };
-                root.Add(element);
-            }
+                EditorGUILayout.Space();
+            }));
 
             {
                 Button button = new()
@@ -305,15 +300,6 @@ namespace Glim
             }
 
             return root;
-        }
-
-        public static VisualElement CreateNestedInspector(SerializedObject so, Editor editor)
-        {
-            VisualElement nestedInspector = new();
-            InspectorElement.FillDefaultInspector(nestedInspector, so, editor);
-            nestedInspector.Bind(so);
-            nestedInspector.Q<PropertyField>("PropertyField:m_Script").style.display = DisplayStyle.None;
-            return nestedInspector;
         }
 
         public static void BakeAllReflectionProbesSnapshots(Scene scene, int supersampling, bool specularProbes)

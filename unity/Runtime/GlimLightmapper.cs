@@ -121,11 +121,13 @@ Automatically applied to light volumes based on texel size."
         public uint previewBounces = 2;
 
 
+        // todo this has bugs
+        [Tooltip("(Experimental)\nHashes mesh data in order to skip uv packing if no changes are detected.")]
+        [NonSerialized] public bool enableUVCache = false;
+
         [Header("Default Group")]
         public GlimLightmapGroup group;
 
-        [Tooltip("(Experimental)\nHashes mesh data in order to skip uv packing if no changes are detected.")]
-        public bool enableUVCache = false;
 
         [MenuItem("Tools/Glim/Bake")]
         public static void CreateLightmapBaker()
