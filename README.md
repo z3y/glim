@@ -55,17 +55,13 @@ Easy to use, lightweight (only ~1MB) and works with Unity light components.
 - [x] Skybox Reflection Probe
 - [ ] Double-sided GI
 - [ ] Meta Pass fallback
-
-## How to use
-
-## Notes
-
-- While the lightmapper is fully working, it is still in early stages, theres room for improvement and it might lack some features
-- Glim can work on macOS via MoltenVK with `VK_KHR_ray_query`, however the stock MoltenVK does not yet implement it. There is a [pending PR](https://github.com/KhronosGroup/MoltenVK/pull/2771) that contains the required features. You can temporarily build MoltenVK from that fork, or use the version from https://github.com/owlboy/glim-moltenvk-dist/. Glim releases also do not include macOS builds currently so you would have to also [build](#building) it yourself.
+- [ ] Light Volume Denoising
 
 ## Support
 - If you'd like to see it further improved, consider supporting on [Patreon](https://patreon.com/z3y)
 - Alternatively you can consider buying some of my assets on [Booth](https://z3y.booth.pm/)
+
+## How to use
 
 ### Denoiser Setup
 
@@ -112,6 +108,7 @@ Make sure to also read [Updating](#updating) ⚠️
 - Scale In Lightmap is calculated differently from the Unity lightmapper, readjust it on the renderers if needed
 - Light cookies use the RGB channels by default (unlike built-in where it only uses the alpha)
 - Cookies for spot lights are always masked by the spot cone falloff
+- Glim can work on macOS via MoltenVK with `VK_KHR_ray_query`, however the stock MoltenVK does not yet implement it. There is a [pending PR](https://github.com/KhronosGroup/MoltenVK/pull/2771) that contains the required features. You can temporarily build MoltenVK from that fork, or use the version from https://github.com/owlboy/glim-moltenvk-dist/. Glim releases also do not include macOS builds currently so you would have to also [build](#building) it yourself.
 
 ### Additional Light Settings
 

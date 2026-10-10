@@ -133,7 +133,7 @@ namespace Glim
                     Lightmapping.lightingDataAsset = null;
 
                     var scene = EditorSceneManager.GetActiveScene();
-                    var selectors = scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<LightmapGroupSelector>(true));
+                    var selectors = scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<GlimLightmapGroupSelector>(true));
 
                     foreach (var selector in selectors)
                     {

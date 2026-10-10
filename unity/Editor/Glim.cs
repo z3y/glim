@@ -373,7 +373,7 @@ namespace Glim
 
 
             var allSelectors = rootObjects
-                .SelectMany(x => x.GetComponentsInChildren<LightmapGroupSelector>(false))
+                .SelectMany(x => x.GetComponentsInChildren<GlimLightmapGroupSelector>(false))
                 .Where(x => x.enabled)
                 .ToArray();
 
@@ -665,7 +665,7 @@ namespace Glim
 
             if (groupIndex <= 0)
             {
-                throw new InvalidOperationException("No lightmap groups found.");
+                throw new InvalidOperationException("No static objects or lightmap groups found.");
             }
 
             if (!lightmapper.group)
