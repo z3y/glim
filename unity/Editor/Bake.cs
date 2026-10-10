@@ -688,6 +688,12 @@ namespace Glim
                             fixed (Vector2* uPtr = data.uvs)
                             fixed (int* iPtr = data.indices)
                             {
+                                byte ray_flags = 0x0;
+                                if (data.transparent)
+                                {
+                                    ray_flags |= 0x1;
+                                }
+
                                 var exportedMesh = new Bindings.Mesh
                                 {
                                     vertices = vPtr,
@@ -698,9 +704,9 @@ namespace Glim
                                     indices_length = (uint)data.indices.Length,
                                     lightmap_group = data.groupIndex,
                                     backface_gi = data.backfaceGI,
-                                    transparent = data.transparent,
                                     emissive = data.emissive,
-                                    fix_seams = data.fixSeams
+                                    fix_seams = data.fixSeams,
+                                    ray_flags = ray_flags,
                                 };
 
                                 Bindings.app_add_mesh(app, exportedMesh);

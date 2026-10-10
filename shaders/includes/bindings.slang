@@ -100,6 +100,11 @@ const float AO_INTENSITY;
 [vk::constant_id(33)]
 const float AO_RANGE;
 
+[vk::constant_id(34)]
+const uint GEOMETRIES_0_OFFSET;
+[vk::constant_id(35)]
+const uint GEOMETRIES_1_OFFSET;
+
 enum LightmapMode : uint
 {
     NonDirectional = 0,

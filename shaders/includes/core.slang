@@ -218,6 +218,23 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
 }
 #pragma warning(default: 41035)
 
+uint GlobalPrimitiveID(uint geometryID, uint localPrimitiveID)
+{
+    [flatten]
+    if (geometryID == 1)
+    {
+        return localPrimitiveID + GEOMETRIES_1_OFFSET;
+    }
+    // else if (geometryID == 2)
+    // {
+    //     return localPrimitiveID + GEOMETRIES_2_OFFSET;
+    // }
+    else
+    {
+        return localPrimitiveID; // no offset
+    }
+}
+
 void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 {
     if (query.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE)
@@ -227,10 +244,8 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 
     uint primitiveID = query.CandidatePrimitiveIndex();
     uint geometryID = query.CandidateGeometryIndex();
-    if (geometryID > 0)
-    {
-        primitiveID += TRANSPARENT_PRIMITIVE_ID_OFFSET;
-    }
+    primitiveID = GlobalPrimitiveID(geometryID, primitiveID);
+
     float2 bary = query.CandidateTriangleBarycentrics();
 
     bool visible = TriangleAlphaTest(primitiveID, bary);
@@ -266,10 +281,8 @@ bool TraceRay(Ray ray, out Hit hit)
             hit.bary = query.CommittedTriangleBarycentrics();
             hit.primitiveID = query.CommittedPrimitiveIndex();
             uint geometryID = query.CommittedGeometryIndex();
-            if (geometryID > 0)
-            {
-                hit.primitiveID += TRANSPARENT_PRIMITIVE_ID_OFFSET;
-            }
+            hit.primitiveID = GlobalPrimitiveID(geometryID, hit.primitiveID);
+
             hit.t = query.CommittedRayT();
             hit.frontFace = query.CommittedTriangleFrontFace();
             return true;

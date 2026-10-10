@@ -15,7 +15,7 @@ use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
-use crate::mesh::Vertex;
+use crate::mesh::{RAY_FLAGS_VARIANTS, RayFlag, Vertex};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
@@ -64,8 +64,8 @@ pub struct Glim {
     pub vk: VulkanContext,
     pub window: *mut GLFWwindow,
 
-    pub opaque_mesh: Mesh,
-    pub transparent_mesh: Mesh,
+    pub meshes: [Mesh; RAY_FLAGS_VARIANTS],
+
     pub cpu_lights: Vec<Light>,
     pub light_cookies: Vec<LightCookie>,
     pub emissive_triangles: Vec<u32>,
@@ -259,16 +259,15 @@ fn update_visibility_from_camera(app: &mut Glim, cmd: vk::CommandBuffer) {
 
 // main render function
 fn initialize_render(app: &mut Glim) {
-    assert!(app.opaque_mesh.vertices.len() > 0 || app.transparent_mesh.vertices.len() > 0);
-
-    let message = format!(
-        "Created scene with Opaque (Vertices: {} Triangles: {}) and Transparent (Vertices: {} Triangles: {})",
-        app.opaque_mesh.vertices.len(),
-        app.opaque_mesh.indices.len() / 3,
-        app.transparent_mesh.vertices.len(),
-        app.transparent_mesh.indices.len() / 3,
-    );
-    (app.config.log_callback)(LogMessage::message(&message));
+    for mesh in &app.meshes {
+        let message = format!(
+            "Geometries Group {:08b} (Vertices: {} Triangles: {})",
+            mesh.ray_flags,
+            mesh.vertices.len(),
+            mesh.indices.len() / 3,
+        );
+        (app.config.log_callback)(LogMessage::message(&message));
+    }
 
     extract_emissive_triangles(app);
 
@@ -310,13 +309,7 @@ fn initialize_render(app: &mut Glim) {
 
     let use_ray_query = app.config.hardware_rt && app.vk.as_device.is_some();
 
-    app.gpu_mesh = GpuMesh::new(
-        &app.vk,
-        &app.opaque_mesh,
-        &app.transparent_mesh,
-        &app.groups,
-        use_ray_query,
-    );
+    app.gpu_mesh = GpuMesh::new(&app.vk, &app.meshes, &app.groups, use_ray_query);
 
     match &app.gpu_mesh.acceleration_structure {
         mesh::AccelerationStructureType::RayQuery(vulkan_as) => {
@@ -450,10 +443,17 @@ fn initialize_render(app: &mut Glim) {
 
     let config = &app.config;
 
+    let mut geometries_offsets = [0; RAY_FLAGS_VARIANTS];
+    let mut offset = 0;
+    for i in 0..RAY_FLAGS_VARIANTS {
+        geometries_offsets[i] = offset as u32;
+        let tri_count = app.meshes[i].indices.len() / 3;
+        offset += tri_count;
+    }
+
     app.constants = SpecializationConstants {
         hardware_rt: use_ray_query as u32,
         light_falloff_type: config.light_falloff as u32,
-        transparent_primitive_offset: (app.opaque_mesh.indices.len() / 3) as u32,
         emissive_triangles_count: app.emissive_triangles.len() as u32,
         multiple_importance_sampling: config.mis as u32,
         lightmap_group_count: app.groups.len() as u32,
@@ -475,6 +475,9 @@ fn initialize_render(app: &mut Glim) {
         emissive_multiplier: app.config.emissive_multiplier,
         ao_intensity: config.ao_intensity,
         ao_range: config.ao_range,
+        pad0: 0,
+        geometries_0_offset: geometries_offsets[0],
+        geometries_1_offset: geometries_offsets[1],
     };
 
     if app.config.is_preview {
@@ -1065,11 +1068,9 @@ fn extract_emissive_triangles(app: &mut Glim) {
             }
         };
 
-        extract(&app.opaque_mesh.vertices, &app.opaque_mesh.indices);
-        extract(
-            &app.transparent_mesh.vertices,
-            &app.transparent_mesh.indices,
-        );
+        for mesh in &app.meshes {
+            extract(&mesh.vertices, &mesh.indices);
+        }
     }
 
     if app.config.mis {
@@ -1168,16 +1169,6 @@ impl Glim {
             bounce_count: 0,
         };
 
-        let opaque_mesh = Mesh {
-            vertices: Vec::new(),
-            indices: Vec::new(),
-        };
-
-        let transparent_mesh = Mesh {
-            vertices: Vec::new(),
-            indices: Vec::new(),
-        };
-
         let render_target = RenderTarget {
             visibility: Texture2D::null(),
             diffuse: Texture2D::null(),
@@ -1203,10 +1194,22 @@ impl Glim {
 
         let linear_sampler = unsafe { vk.device.create_sampler(&sampler_info, None).unwrap() };
 
+        let meshes = [
+            Mesh {
+                vertices: Vec::new(),
+                indices: Vec::new(),
+                ray_flags: RayFlag::OPAQUE,
+            },
+            Mesh {
+                vertices: Vec::new(),
+                indices: Vec::new(),
+                ray_flags: RayFlag::TRANSPARENT,
+            },
+        ];
+
         Self {
             vk,
-            opaque_mesh,
-            transparent_mesh,
+            meshes,
             window: window,
             config: config,
             cpu_lights: Vec::new(),

@@ -73,10 +73,10 @@ impl<'a> Default for ShaderBindings<'a> {
 #[repr(C)]
 #[derive(Default)]
 pub struct SpecializationConstants {
-    pub hardware_rt: u32,                  // 0
-    pub light_falloff_type: u32,           // 1
-    pub transparent_primitive_offset: u32, // 2
-    pub emissive_triangles_count: u32,     // 3
+    pub hardware_rt: u32,              // 0
+    pub light_falloff_type: u32,       // 1
+    pub pad0: u32,                     // 2
+    pub emissive_triangles_count: u32, // 3
 
     pub multiple_importance_sampling: u32, // 4
     pub lightmap_group_count: u32,         // 5
@@ -105,6 +105,9 @@ pub struct SpecializationConstants {
 
     pub ao_intensity: f32, // 32
     pub ao_range: f32,     // 33
+
+    pub geometries_0_offset: u32, // 34
+    pub geometries_1_offset: u32, // 35
 }
 
 pub const SPECIALIZATION_MAP_ENTRIES_LEN: usize =

@@ -243,11 +243,7 @@ pub extern "C" fn app_add_mesh(app: *mut Glim, mesh: FfiMesh) {
 
     let app = unsafe { &mut *app };
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let target_mesh = if mesh.transparent {
-            &mut app.transparent_mesh
-        } else {
-            &mut app.opaque_mesh
-        };
+        let target_mesh = &mut app.meshes[mesh.ray_flags as usize];
 
         let emissive = mesh.emissive;
 

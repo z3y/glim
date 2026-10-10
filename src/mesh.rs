@@ -10,6 +10,16 @@ use crate::{
 };
 use core::slice;
 
+pub struct RayFlag;
+
+impl RayFlag {
+    pub const OPAQUE: u8 = 0b0000_0000;
+    pub const TRANSPARENT: u8 = 0b0000_0001;
+    // pub const CAST_SHADOWS: u8 = 0b0000_0010;
+}
+
+pub const RAY_FLAGS_VARIANTS: usize = 2;
+
 #[repr(C)]
 pub struct FfiMesh {
     pub vertices: *const Vector3,
@@ -18,11 +28,14 @@ pub struct FfiMesh {
     pub indices: *const u32,
     pub vertices_length: u32,
     pub indices_length: u32,
+
     pub lightmap_group: u32,
+
     pub backface_gi: bool,
-    pub transparent: bool,
     pub emissive: bool,
     pub fix_seams: bool,
+
+    pub ray_flags: u8,
 }
 
 #[repr(C)]
@@ -38,6 +51,7 @@ pub struct Vertex {
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+    pub ray_flags: u8,
 }
 
 fn sign_not_zero(v: f32) -> f32 {
@@ -204,8 +218,7 @@ pub struct GpuMesh {
 impl GpuMesh {
     pub fn new(
         vk: &VulkanContext,
-        opaque_mesh: &Mesh,
-        transparent_mesh: &Mesh,
+        meshes: &[Mesh; RAY_FLAGS_VARIANTS],
         lightmap_groups: &[LightmapGroup],
         use_ray_query: bool,
     ) -> Self {
@@ -217,14 +230,10 @@ impl GpuMesh {
             usage |= vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR;
         }
 
-        // if vk.as_device.is_some() {
-        // }
-
-        let opaque_triangle_count = (opaque_mesh.indices.len() / 3) as u32;
-        let transparent_triangle_count = (transparent_mesh.indices.len() / 3) as u32;
-
-        let mut merged_mesh = opaque_mesh.clone();
-        merged_mesh.merge_mesh(transparent_mesh);
+        let mut merged_mesh = meshes[0].clone();
+        for mesh in &meshes[1..] {
+            merged_mesh.merge_mesh(mesh);
+        }
 
         let mut group_resolutions = vec![Vector2::ZERO; lightmap_groups.len()];
 
@@ -259,63 +268,41 @@ impl GpuMesh {
             AccelerationStructureType::RayQuery(GpuMesh::create_vulkan_blas(
                 vk,
                 &merged_mesh,
+                meshes,
                 vertex_buffer.gpu_address,
                 index_buffer.gpu_address,
-                opaque_triangle_count,
-                transparent_triangle_count,
             ))
         } else {
-            let mut bvh_triangles =
-                Vec::with_capacity(opaque_mesh.indices.len() + transparent_mesh.indices.len());
+            let total_indices: usize = meshes.iter().map(|m| m.indices.len()).sum();
+            let mut bvh_triangles = Vec::with_capacity(total_indices);
 
-            let vertices = &opaque_mesh.vertices;
-            let indices = &opaque_mesh.indices;
-            for primitive_id in 0..(indices.len() / 3) {
-                let i0 = indices[primitive_id * 3 + 0];
-                let i1 = indices[primitive_id * 3 + 1];
-                let i2 = indices[primitive_id * 3 + 2];
+            let mut primitive_offset = 0usize;
 
-                let v0 = vertices[i0 as usize];
-                let v1 = vertices[i1 as usize];
-                let v2 = vertices[i2 as usize];
+            for mesh in meshes {
+                let transparent = if mesh.ray_flags & RayFlag::TRANSPARENT != 0 {
+                    1.0
+                } else {
+                    0.0
+                };
 
-                let p0 = v0.position;
-                let p1 = v1.position;
-                let p2 = v2.position;
+                let triangle_count = mesh.indices.len() / 3;
+                for local_id in 0..triangle_count {
+                    let i0 = mesh.indices[local_id * 3];
+                    let i1 = mesh.indices[local_id * 3 + 1];
+                    let i2 = mesh.indices[local_id * 3 + 2];
 
-                let transparent = 0.0;
+                    let p0 = mesh.vertices[i0 as usize].position;
+                    let p1 = mesh.vertices[i1 as usize].position;
+                    let p2 = mesh.vertices[i2 as usize].position;
 
-                bvh_triangles.push([p0.x, p0.y, p0.z, f32::from_bits(primitive_id as u32)]);
-                bvh_triangles.push([p1.x, p1.y, p1.z, transparent]);
-                bvh_triangles.push([p2.x, p2.y, p2.z, 0.0]);
-            }
+                    let primitive_id = (primitive_offset + local_id) as u32;
 
-            let vertices = &transparent_mesh.vertices;
-            let indices = &transparent_mesh.indices;
-            let offset = opaque_mesh.indices.len() / 3;
-            for primitive_id in 0..(indices.len() / 3) {
-                let i0 = indices[primitive_id * 3 + 0];
-                let i1 = indices[primitive_id * 3 + 1];
-                let i2 = indices[primitive_id * 3 + 2];
+                    bvh_triangles.push([p0.x, p0.y, p0.z, f32::from_bits(primitive_id)]);
+                    bvh_triangles.push([p1.x, p1.y, p1.z, transparent]);
+                    bvh_triangles.push([p2.x, p2.y, p2.z, 0.0]);
+                }
 
-                let v0 = vertices[i0 as usize];
-                let v1 = vertices[i1 as usize];
-                let v2 = vertices[i2 as usize];
-
-                let p0 = v0.position;
-                let p1 = v1.position;
-                let p2 = v2.position;
-
-                let transparent = 1.0;
-
-                bvh_triangles.push([
-                    p0.x,
-                    p0.y,
-                    p0.z,
-                    f32::from_bits((primitive_id + offset) as u32),
-                ]);
-                bvh_triangles.push([p1.x, p1.y, p1.z, transparent]);
-                bvh_triangles.push([p2.x, p2.y, p2.z, 0.0]);
+                primitive_offset += triangle_count;
             }
 
             let bvh = Cwbvh::build(&bvh_triangles);
@@ -332,13 +319,20 @@ impl GpuMesh {
         }
     }
 
+    fn geometry_flags(ray_flags: u8) -> vk::GeometryFlagsKHR {
+        if ray_flags & RayFlag::TRANSPARENT != 0 {
+            vk::GeometryFlagsKHR::NO_DUPLICATE_ANY_HIT_INVOCATION
+        } else {
+            vk::GeometryFlagsKHR::OPAQUE
+        }
+    }
+
     pub fn create_vulkan_blas(
         vk: &VulkanContext,
-        mesh: &Mesh,
+        merged_mesh: &Mesh,
+        meshes: &[Mesh; RAY_FLAGS_VARIANTS],
         vertex_address: vk::DeviceAddress,
         index_address: vk::DeviceAddress,
-        opaque_triangle_count: u32,
-        transparent_triangle_count: u32,
     ) -> VulkanAs {
         let triangles = vk::AccelerationStructureGeometryTrianglesDataKHR {
             vertex_format: vk::Format::R32G32B32_SFLOAT,
@@ -346,7 +340,7 @@ impl GpuMesh {
                 device_address: vertex_address,
             },
             vertex_stride: std::mem::size_of::<Vertex>() as u64,
-            max_vertex: (mesh.vertices.len() - 1) as u32,
+            max_vertex: (merged_mesh.vertices.len() - 1) as u32,
             index_type: vk::IndexType::UINT32,
             index_data: vk::DeviceOrHostAddressConstKHR {
                 device_address: index_address,
@@ -358,30 +352,25 @@ impl GpuMesh {
         let mut max_primitive_counts = Vec::new();
         let mut ranges = Vec::new();
 
-        if opaque_triangle_count > 0 {
-            let opaque_geometry = vk::AccelerationStructureGeometryKHR {
-                geometry_type: vk::GeometryTypeKHR::TRIANGLES,
-                geometry: vk::AccelerationStructureGeometryDataKHR {
-                    triangles: triangles,
-                },
-                flags: vk::GeometryFlagsKHR::OPAQUE,
-                ..Default::default()
-            };
-            geometries.push(opaque_geometry);
-            max_primitive_counts.push(opaque_triangle_count);
-        }
+        let mut triangle_offset = 0u32;
+        for mesh in meshes {
+            let triangle_count = (mesh.indices.len() / 3) as u32;
 
-        if transparent_triangle_count > 0 {
-            let transparent_geometry = vk::AccelerationStructureGeometryKHR {
+            geometries.push(vk::AccelerationStructureGeometryKHR {
                 geometry_type: vk::GeometryTypeKHR::TRIANGLES,
-                geometry: vk::AccelerationStructureGeometryDataKHR {
-                    triangles: triangles,
-                },
-                flags: vk::GeometryFlagsKHR::NO_DUPLICATE_ANY_HIT_INVOCATION,
+                geometry: vk::AccelerationStructureGeometryDataKHR { triangles },
+                flags: Self::geometry_flags(mesh.ray_flags),
                 ..Default::default()
-            };
-            geometries.push(transparent_geometry);
-            max_primitive_counts.push(transparent_triangle_count);
+            });
+            max_primitive_counts.push(triangle_count);
+            ranges.push(vk::AccelerationStructureBuildRangeInfoKHR {
+                primitive_count: triangle_count,
+                primitive_offset: triangle_offset * 3 * size_of::<u32>() as u32,
+                first_vertex: 0,
+                transform_offset: 0,
+            });
+
+            triangle_offset += triangle_count;
         }
 
         let build_info = vk::AccelerationStructureBuildGeometryInfoKHR::default()
@@ -449,28 +438,6 @@ impl GpuMesh {
             ..Default::default()
         };
         as_build_geometry_info = as_build_geometry_info.geometries(&geometries);
-
-        let opaque_range = vk::AccelerationStructureBuildRangeInfoKHR {
-            primitive_count: opaque_triangle_count,
-            primitive_offset: 0,
-            first_vertex: 0,
-            transform_offset: 0,
-        };
-
-        let transparent_range = vk::AccelerationStructureBuildRangeInfoKHR {
-            primitive_count: transparent_triangle_count,
-            primitive_offset: opaque_triangle_count * 3 * size_of::<u32>() as u32,
-            first_vertex: 0,
-            transform_offset: 0,
-        };
-
-        if opaque_triangle_count > 0 {
-            ranges.push(opaque_range)
-        }
-
-        if transparent_triangle_count > 0 {
-            ranges.push(transparent_range)
-        }
 
         let query_pool_info = vk::QueryPoolCreateInfo::default()
             .query_type(vk::QueryType::ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR)

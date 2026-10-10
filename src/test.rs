@@ -94,7 +94,7 @@ mod tests {
             app,
             &mesh_path,
             false,
-            false,
+            RayFlag::OPAQUE,
             Vector3::new(0.0, 0.0, 0.0),
             0,
             false,
@@ -215,7 +215,7 @@ mod tests {
         app: *mut Glim,
         path: &str,
         flip_uv: bool,
-        transparent: bool,
+        ray_flags: u8,
         position_offset: Vector3,
         group: u32,
         backface_gi: bool,
@@ -337,9 +337,9 @@ mod tests {
                     indices_length: indices.len() as u32,
                     lightmap_group: group,
                     backface_gi,
-                    transparent,
                     emissive: true,
                     fix_seams: true,
+                    ray_flags,
                 };
                 app_add_mesh(app, mesh);
             }
