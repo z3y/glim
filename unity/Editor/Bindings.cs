@@ -200,7 +200,8 @@ namespace Glim
             [MarshalAs(UnmanagedType.I1)] public bool emissive;
             [MarshalAs(UnmanagedType.I1)] public bool fix_seams;
 
-            [MarshalAs(UnmanagedType.I1)] public byte ray_flags;
+            [MarshalAs(UnmanagedType.I1)] public bool transparent;
+            [MarshalAs(UnmanagedType.I1)] public bool no_shadows;
         }
 
         public enum LightType : uint

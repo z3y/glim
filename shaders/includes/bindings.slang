@@ -54,9 +54,6 @@ const uint HARDWARE_RT;
 [vk::constant_id(1)]
 const uint LIGHT_FALLOFF_TYPE;
 
-[vk::constant_id(2)]
-const uint TRANSPARENT_PRIMITIVE_ID_OFFSET;
-
 [vk::constant_id(3)]
 const uint EMISSIVE_TRIANGLES_COUNT;
 
@@ -104,6 +101,10 @@ const float AO_RANGE;
 const uint GEOMETRIES_0_OFFSET;
 [vk::constant_id(35)]
 const uint GEOMETRIES_1_OFFSET;
+[vk::constant_id(36)]
+const uint GEOMETRIES_2_OFFSET;
+[vk::constant_id(37)]
+const uint GEOMETRIES_3_OFFSET;
 
 enum LightmapMode : uint
 {

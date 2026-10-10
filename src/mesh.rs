@@ -10,15 +10,7 @@ use crate::{
 };
 use core::slice;
 
-pub struct RayFlag;
-
-impl RayFlag {
-    pub const OPAQUE: u8 = 0b0000_0000;
-    pub const TRANSPARENT: u8 = 0b0000_0001;
-    // pub const CAST_SHADOWS: u8 = 0b0000_0010;
-}
-
-pub const RAY_FLAGS_VARIANTS: usize = 2;
+pub const GEOMETRIES_VARIANTS: usize = 4;
 
 #[repr(C)]
 pub struct FfiMesh {
@@ -35,7 +27,8 @@ pub struct FfiMesh {
     pub emissive: bool,
     pub fix_seams: bool,
 
-    pub ray_flags: u8,
+    pub transparent: bool,
+    pub no_shadows: bool,
 }
 
 #[repr(C)]
@@ -51,7 +44,9 @@ pub struct Vertex {
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
-    pub ray_flags: u8,
+
+    pub transparent: bool,
+    pub no_shadows: bool,
 }
 
 fn sign_not_zero(v: f32) -> f32 {
@@ -202,7 +197,7 @@ impl VulkanAs {
 }
 
 pub enum AccelerationStructureType {
-    RayQuery(VulkanAs),
+    RayQuery([VulkanAs; 2]),
     BVH { cwbvh: Cwbvh, data: CwbvhData },
 }
 
@@ -218,7 +213,7 @@ pub struct GpuMesh {
 impl GpuMesh {
     pub fn new(
         vk: &VulkanContext,
-        meshes: &[Mesh; RAY_FLAGS_VARIANTS],
+        meshes: &[Mesh; GEOMETRIES_VARIANTS],
         lightmap_groups: &[LightmapGroup],
         use_ray_query: bool,
     ) -> Self {
@@ -248,6 +243,13 @@ impl GpuMesh {
             v.uv *= group_resolutions[group as usize];
         }
 
+        let mut variant_triangle_offsets = [0u32; GEOMETRIES_VARIANTS];
+        let mut running = 0u32;
+        for (i, m) in meshes.iter().enumerate() {
+            variant_triangle_offsets[i] = running;
+            running += (m.indices.len() / 3) as u32;
+        }
+
         // vertices
         let vertex_buffer = Buffer::new(
             vk,
@@ -265,13 +267,23 @@ impl GpuMesh {
         );
 
         let bvh = if use_ray_query {
-            AccelerationStructureType::RayQuery(GpuMesh::create_vulkan_blas(
+            let casts_shadows = GpuMesh::create_vulkan_blas(
                 vk,
                 &merged_mesh,
-                meshes,
+                &meshes[..=1],
+                variant_triangle_offsets[0],
                 vertex_buffer.gpu_address,
                 index_buffer.gpu_address,
-            ))
+            );
+            let no_shadows = GpuMesh::create_vulkan_blas(
+                vk,
+                &merged_mesh,
+                &meshes[2..],
+                variant_triangle_offsets[2],
+                vertex_buffer.gpu_address,
+                index_buffer.gpu_address,
+            );
+            AccelerationStructureType::RayQuery([casts_shadows, no_shadows])
         } else {
             let total_indices: usize = meshes.iter().map(|m| m.indices.len()).sum();
             let mut bvh_triangles = Vec::with_capacity(total_indices);
@@ -279,11 +291,8 @@ impl GpuMesh {
             let mut primitive_offset = 0usize;
 
             for mesh in meshes {
-                let transparent = if mesh.ray_flags & RayFlag::TRANSPARENT != 0 {
-                    1.0
-                } else {
-                    0.0
-                };
+                let transparent = if mesh.transparent { 1.0 } else { 0.0 };
+                let no_shadows = if mesh.no_shadows { 1.0 } else { 0.0 };
 
                 let triangle_count = mesh.indices.len() / 3;
                 for local_id in 0..triangle_count {
@@ -299,7 +308,7 @@ impl GpuMesh {
 
                     bvh_triangles.push([p0.x, p0.y, p0.z, f32::from_bits(primitive_id)]);
                     bvh_triangles.push([p1.x, p1.y, p1.z, transparent]);
-                    bvh_triangles.push([p2.x, p2.y, p2.z, 0.0]);
+                    bvh_triangles.push([p2.x, p2.y, p2.z, no_shadows]);
                 }
 
                 primitive_offset += triangle_count;
@@ -319,18 +328,11 @@ impl GpuMesh {
         }
     }
 
-    fn geometry_flags(ray_flags: u8) -> vk::GeometryFlagsKHR {
-        if ray_flags & RayFlag::TRANSPARENT != 0 {
-            vk::GeometryFlagsKHR::NO_DUPLICATE_ANY_HIT_INVOCATION
-        } else {
-            vk::GeometryFlagsKHR::OPAQUE
-        }
-    }
-
     pub fn create_vulkan_blas(
         vk: &VulkanContext,
         merged_mesh: &Mesh,
-        meshes: &[Mesh; RAY_FLAGS_VARIANTS],
+        meshes: &[Mesh],
+        first_triangle: u32,
         vertex_address: vk::DeviceAddress,
         index_address: vk::DeviceAddress,
     ) -> VulkanAs {
@@ -352,14 +354,20 @@ impl GpuMesh {
         let mut max_primitive_counts = Vec::new();
         let mut ranges = Vec::new();
 
-        let mut triangle_offset = 0u32;
+        let mut triangle_offset = first_triangle;
         for mesh in meshes {
             let triangle_count = (mesh.indices.len() / 3) as u32;
+
+            let flags = if mesh.transparent {
+                vk::GeometryFlagsKHR::NO_DUPLICATE_ANY_HIT_INVOCATION
+            } else {
+                vk::GeometryFlagsKHR::OPAQUE
+            };
 
             geometries.push(vk::AccelerationStructureGeometryKHR {
                 geometry_type: vk::GeometryTypeKHR::TRIANGLES,
                 geometry: vk::AccelerationStructureGeometryDataKHR { triangles },
-                flags: Self::geometry_flags(mesh.ray_flags),
+                flags,
                 ..Default::default()
             });
             max_primitive_counts.push(triangle_count);
@@ -546,7 +554,10 @@ impl GpuMesh {
 
     pub fn null() -> Self {
         Self {
-            acceleration_structure: AccelerationStructureType::RayQuery(VulkanAs::null()),
+            acceleration_structure: AccelerationStructureType::RayQuery([
+                VulkanAs::null(),
+                VulkanAs::null(),
+            ]),
             index_len: 0,
             vertex_buffer: Buffer::null(),
             index_buffer: Buffer::null(),
@@ -556,7 +567,8 @@ impl GpuMesh {
     pub fn destroy(&mut self, vk: &VulkanContext) {
         match &mut self.acceleration_structure {
             AccelerationStructureType::RayQuery(vulkan_blas) => {
-                vulkan_blas.destroy(vk);
+                vulkan_blas[0].destroy(vk);
+                vulkan_blas[1].destroy(vk);
             }
             AccelerationStructureType::BVH { cwbvh, data: _ } => {
                 cwbvh.free();
@@ -568,35 +580,50 @@ impl GpuMesh {
     }
 }
 
-pub fn create_tlas(vk: &VulkanContext, blas: &VulkanAs) -> VulkanAs {
+pub fn create_tlas(vk: &VulkanContext, blases: &[VulkanAs; 2]) -> VulkanAs {
     let as_device = match &vk.as_device {
         Some(x) => x,
         None => unreachable!("expected as device"),
     };
 
-    let as_instance = vk::AccelerationStructureInstanceKHR {
-        transform: vk::TransformMatrixKHR {
-            matrix: [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+    let instances = [
+        vk::AccelerationStructureInstanceKHR {
+            transform: vk::TransformMatrixKHR {
+                matrix: [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            },
+            instance_custom_index_and_mask: vk::Packed24_8::new(0, 0b0000_0011), // all
+            instance_shader_binding_table_record_offset_and_flags: vk::Packed24_8::new(
+                0,
+                vk::GeometryInstanceFlagsKHR::TRIANGLE_FACING_CULL_DISABLE.as_raw() as u8,
+            ),
+            acceleration_structure_reference: vk::AccelerationStructureReferenceKHR {
+                device_handle: blases[0].gpu_address,
+            },
         },
-        instance_custom_index_and_mask: vk::Packed24_8::new(0, 0xFF),
-        instance_shader_binding_table_record_offset_and_flags: vk::Packed24_8::new(
-            0,
-            vk::GeometryInstanceFlagsKHR::TRIANGLE_FACING_CULL_DISABLE.as_raw() as u8,
-        ),
-        acceleration_structure_reference: vk::AccelerationStructureReferenceKHR {
-            device_handle: blas.gpu_address,
+        vk::AccelerationStructureInstanceKHR {
+            transform: vk::TransformMatrixKHR {
+                matrix: [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            },
+            instance_custom_index_and_mask: vk::Packed24_8::new(0, 0b0000_0001), // no shadows
+            instance_shader_binding_table_record_offset_and_flags: vk::Packed24_8::new(
+                0,
+                vk::GeometryInstanceFlagsKHR::TRIANGLE_FACING_CULL_DISABLE.as_raw() as u8,
+            ),
+            acceleration_structure_reference: vk::AccelerationStructureReferenceKHR {
+                device_handle: blases[0].gpu_address,
+            },
         },
-    };
+    ];
 
     let (as_instance_buffer, as_instance_mem, _) = vk.create_buffer(
-        std::mem::size_of::<vk::AccelerationStructureInstanceKHR>() as vk::DeviceSize,
+        (std::mem::size_of::<vk::AccelerationStructureInstanceKHR>() * instances.len())
+            as vk::DeviceSize,
         vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
             | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
 
-    let instances = [as_instance];
     let (_, bytes, _) = unsafe { instances.align_to::<u8>() };
     vk.upload_buffer(bytes, as_instance_buffer);
 
@@ -637,7 +664,7 @@ pub fn create_tlas(vk: &VulkanContext, blas: &VulkanAs) -> VulkanAs {
         ..Default::default()
     };
 
-    let instances_counts = [1];
+    let instances_counts = [instances.len() as u32];
     unsafe {
         as_device.get_acceleration_structure_build_sizes(
             vk::AccelerationStructureBuildTypeKHR::DEVICE,
@@ -684,7 +711,7 @@ pub fn create_tlas(vk: &VulkanContext, blas: &VulkanAs) -> VulkanAs {
     top_build_info.scratch_data.device_address = scratch_address2;
 
     let range_info2 = [vk::AccelerationStructureBuildRangeInfoKHR {
-        primitive_count: 1,
+        primitive_count: instances.len() as u32,
         ..Default::default()
     }];
 

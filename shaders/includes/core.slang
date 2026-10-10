@@ -218,17 +218,23 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool anyHit)
 }
 #pragma warning(default: 41035)
 
-uint GlobalPrimitiveID(uint geometryID, uint localPrimitiveID)
+uint GlobalPrimitiveID(uint group, uint geometryID, uint localPrimitiveID)
 {
+    uint variant = group * 2 + geometryID;
+
     [flatten]
-    if (geometryID == 1)
+    if (variant == 1)
     {
         return localPrimitiveID + GEOMETRIES_1_OFFSET;
     }
-    // else if (geometryID == 2)
-    // {
-    //     return localPrimitiveID + GEOMETRIES_2_OFFSET;
-    // }
+    else if (variant == 2)
+    {
+        return localPrimitiveID + GEOMETRIES_2_OFFSET;
+    }
+    else if (variant == 3)
+    {
+        return localPrimitiveID + GEOMETRIES_3_OFFSET;
+    }
     else
     {
         return localPrimitiveID; // no offset
@@ -244,7 +250,9 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 
     uint primitiveID = query.CandidatePrimitiveIndex();
     uint geometryID = query.CandidateGeometryIndex();
-    primitiveID = GlobalPrimitiveID(geometryID, primitiveID);
+    uint group = query.CandidateInstanceID();
+
+    primitiveID = GlobalPrimitiveID(group, geometryID, primitiveID);
 
     float2 bary = query.CandidateTriangleBarycentrics();
 
@@ -269,7 +277,7 @@ bool TraceRay(Ray ray, out Hit hit)
         rayDesc.TMax = ray.tMax;
 
         RayQuery query;
-        query.TraceRayInline(TopLevelAS, RAY_FLAG_NONE, 0xFF, rayDesc);
+        query.TraceRayInline(TopLevelAS, RAY_FLAG_NONE, 0x01, rayDesc);
 
         while (query.Proceed())
         {
@@ -281,7 +289,9 @@ bool TraceRay(Ray ray, out Hit hit)
             hit.bary = query.CommittedTriangleBarycentrics();
             hit.primitiveID = query.CommittedPrimitiveIndex();
             uint geometryID = query.CommittedGeometryIndex();
-            hit.primitiveID = GlobalPrimitiveID(geometryID, hit.primitiveID);
+            uint group = query.CommittedInstanceID();
+
+            hit.primitiveID = GlobalPrimitiveID(group, geometryID, hit.primitiveID);
 
             hit.t = query.CommittedRayT();
             hit.frontFace = query.CommittedTriangleFrontFace();
@@ -306,7 +316,7 @@ bool TraceShadowRay(Ray ray)
         rayDesc.TMax = ray.tMax;
 
         RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
-        query.TraceRayInline(TopLevelAS, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0xFF, rayDesc);
+        query.TraceRayInline(TopLevelAS, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0x02, rayDesc);
 
         while (query.Proceed())
         {

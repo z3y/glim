@@ -15,7 +15,7 @@ use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
-use crate::mesh::{RAY_FLAGS_VARIANTS, RayFlag, Vertex};
+use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
@@ -64,7 +64,7 @@ pub struct Glim {
     pub vk: VulkanContext,
     pub window: *mut GLFWwindow,
 
-    pub meshes: [Mesh; RAY_FLAGS_VARIANTS],
+    pub meshes: [Mesh; GEOMETRIES_VARIANTS],
 
     pub cpu_lights: Vec<Light>,
     pub light_cookies: Vec<LightCookie>,
@@ -261,8 +261,9 @@ fn update_visibility_from_camera(app: &mut Glim, cmd: vk::CommandBuffer) {
 fn initialize_render(app: &mut Glim) {
     for mesh in &app.meshes {
         let message = format!(
-            "Geometries Group {:08b} (Vertices: {} Triangles: {})",
-            mesh.ray_flags,
+            "Geometries Group Transparent: {}, Cast Shadows: {}, Vertices: {} Triangles: {}",
+            mesh.transparent,
+            !mesh.no_shadows,
             mesh.vertices.len(),
             mesh.indices.len() / 3,
         );
@@ -443,9 +444,9 @@ fn initialize_render(app: &mut Glim) {
 
     let config = &app.config;
 
-    let mut geometries_offsets = [0; RAY_FLAGS_VARIANTS];
+    let mut geometries_offsets = [0; GEOMETRIES_VARIANTS];
     let mut offset = 0;
-    for i in 0..RAY_FLAGS_VARIANTS {
+    for i in 0..GEOMETRIES_VARIANTS {
         geometries_offsets[i] = offset as u32;
         let tri_count = app.meshes[i].indices.len() / 3;
         offset += tri_count;
@@ -478,6 +479,8 @@ fn initialize_render(app: &mut Glim) {
         pad0: 0,
         geometries_0_offset: geometries_offsets[0],
         geometries_1_offset: geometries_offsets[1],
+        geometries_2_offset: geometries_offsets[2],
+        geometries_3_offset: geometries_offsets[3],
     };
 
     if app.config.is_preview {
@@ -1198,12 +1201,26 @@ impl Glim {
             Mesh {
                 vertices: Vec::new(),
                 indices: Vec::new(),
-                ray_flags: RayFlag::OPAQUE,
+                transparent: false,
+                no_shadows: false,
             },
             Mesh {
                 vertices: Vec::new(),
                 indices: Vec::new(),
-                ray_flags: RayFlag::TRANSPARENT,
+                transparent: true,
+                no_shadows: false,
+            },
+            Mesh {
+                vertices: Vec::new(),
+                indices: Vec::new(),
+                transparent: false,
+                no_shadows: true,
+            },
+            Mesh {
+                vertices: Vec::new(),
+                indices: Vec::new(),
+                transparent: true,
+                no_shadows: true,
             },
         ];
 

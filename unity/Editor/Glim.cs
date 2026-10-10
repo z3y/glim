@@ -850,6 +850,7 @@ namespace Glim
             public bool transparent;
             public bool emissive;
             public bool fixSeams;
+            public bool noShadows;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -1008,6 +1009,7 @@ namespace Glim
                         transparent = transparent,
                         emissive = emissive,
                         fixSeams = fixSeams,
+                        noShadows = mr.shadowCastingMode == ShadowCastingMode.Off
                     };
 
                     datas.Add(data);
