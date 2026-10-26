@@ -292,9 +292,8 @@ pub extern "C" fn app_add_light(app: *mut Glim, mut light: Light) {
         light.direction.transform_space(system);
         light.up.transform_space(system);
 
-        light.direction = Vector3::ZERO - light.direction;
-        light.shadow_radius_or_angle = light.shadow_radius_or_angle.max(0.001);
-
+        light.direction = Vector3::ZERO - light.direction; // ??
+        light.shadow_radius_or_angle = light.shadow_radius_or_angle.max(0.0);
         app.cpu_lights.push(light);
     }));
 

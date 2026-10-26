@@ -81,6 +81,13 @@ void CreateOrthoBasis(float3 n, out float3 b1, out float3 b2)
 
 float3 GetDirectionalLightAngle(float3 L, float angle, float2 xi)
 {
+    float3 N = normalize(L);
+
+    if (angle <= 0.0)
+    {
+        return N;
+    }
+
     float cosThetaMax = cos(angle);
 
     float cosTheta = (1.0 - xi.x) + xi.x * cosThetaMax;
@@ -88,12 +95,11 @@ float3 GetDirectionalLightAngle(float3 L, float angle, float2 xi)
     float phi = xi.y * float.getPi() * 2.0;
 
     float3 T, B;
-    CreateOrthoBasis(normalize(L), T, B);
+    CreateOrthoBasis(N, T, B);
 
-    // Compute the jittered sample direction (wi)
     float3 wi = T * (cos(phi) * sinTheta) +
                 B * (sin(phi) * sinTheta) +
-                L * cosTheta;
+                N * cosTheta;
 
     return normalize(wi);
 }
