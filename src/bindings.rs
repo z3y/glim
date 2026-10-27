@@ -324,7 +324,8 @@ pub extern "C" fn app_add_lightmap_group(
         let albedo_pixels =
             unsafe { slice::from_raw_parts(albedo_pixels, albedo_pixels_length as usize) };
 
-        let group = LightmapGroup::new(settings, albedo_pixels, emission_pixels);
+        let mut group = LightmapGroup::new(settings, albedo_pixels, emission_pixels);
+        group.id = app.groups.len() as u32;
         app.groups.push(group);
     }));
 

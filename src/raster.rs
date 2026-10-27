@@ -1,12 +1,22 @@
-use crate::{LightmapGroup, Mesh, Vector2, mesh::decode_normal_octahedron};
+use crate::{LightmapGroup, Mesh, Vector2, math::Vector3, mesh::decode_normal_octahedron};
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct VisibilityTexel {
     pub bary: Vector2,
     pub primitive_id: u32,
     pub x: u16,
     pub y: u16,
+}
+
+impl VisibilityTexel {
+    #[inline]
+    fn index(&self, resolution: usize) -> usize {
+        let x = self.x as usize;
+        let y = resolution - 1 - self.y as usize;
+
+        y * resolution + x
+    }
 }
 
 type P = (f64, f64);
@@ -100,22 +110,19 @@ fn area_centroid(poly: &[P; MAX_VERTS], n: usize, origin: P) -> (f64, P) {
 }
 
 // stride 4
-pub fn visibility_to_normals(
+pub fn render_normals(
     texels: &[VisibilityTexel],
+    coverage: &[f32],
     mesh: &Mesh,
-    groups: &LightmapGroup,
+    group: &LightmapGroup,
 ) -> Vec<f32> {
-    let resolution = groups.settings.width as usize;
+    let resolution = group.settings.width as usize;
+    let group_id = group.id;
     let mut normals = vec![0.0; resolution * resolution * 4];
 
-    for texel in texels {
-        let x = texel.x as usize;
-        let y = resolution - 1 - texel.y as usize;
-
-        let index = y * resolution + x;
-
+    for compacted_index in 0..texels.len() {
+        let texel = &texels[compacted_index];
         let primitive_id = texel.primitive_id as usize;
-
         let i0 = mesh.indices[primitive_id * 3 + 0] as usize;
         let i1 = mesh.indices[primitive_id * 3 + 1] as usize;
         let i2 = mesh.indices[primitive_id * 3 + 2] as usize;
@@ -123,6 +130,10 @@ pub fn visibility_to_normals(
         let v0 = mesh.vertices[i0];
         let v1 = mesh.vertices[i1];
         let v2 = mesh.vertices[i2];
+
+        if v0.group() != group_id {
+            continue;
+        }
 
         let bary = texel.bary;
         let u = bary.x;
@@ -135,17 +146,58 @@ pub fn visibility_to_normals(
 
         let normal = n0 * w + n1 * u + n2 * v;
 
-        normals[index * 4 + 0] = normal.x;
-        normals[index * 4 + 1] = normal.y;
-        normals[index * 4 + 2] = normal.z;
-        normals[index * 4 + 3] = 0.0;
+        let cov = coverage[compacted_index];
+
+        let index = texel.index(resolution);
+        normals[index * 4 + 0] += normal.x * cov;
+        normals[index * 4 + 1] += normal.y * cov;
+        normals[index * 4 + 2] += normal.z * cov;
+        normals[index * 4 + 3] += 1.0;
+    }
+
+    for px in normals.chunks_exact_mut(4) {
+        let w = px[3];
+        if w > 0.0 {
+            let n = Vector3::new(px[0], px[1], px[2]);
+            let n = n.normalize();
+            px[0] = n.x;
+            px[1] = n.y;
+            px[2] = n.z;
+            px[3] = 1.0;
+        }
     }
 
     normals
 }
 
-pub fn rasterize_visibility(mesh: &Mesh, groups: &[LightmapGroup]) -> Vec<VisibilityTexel> {
+// pub fn render_coverage(texels: &[VisibilityTexel], mesh: &Mesh, group: &LightmapGroup) -> Vec<u8> {
+//     let resolution = group.settings.width as usize;
+//     let group_id = group.id;
+//     let mut cov = vec![0u8; resolution * resolution];
+
+//     for texel in texels {
+//         let primitive_id = texel.primitive_id as usize;
+//         let i0 = mesh.indices[primitive_id * 3 + 0] as usize;
+//         let v0 = mesh.vertices[i0];
+
+//         if v0.group() != group_id {
+//             continue;
+//         }
+
+//         let index = texel.index(resolution);
+
+//         cov[index] = cov[index].saturating_add(1u8);
+//     }
+
+//     cov
+// }
+
+pub fn rasterize_visibility(
+    mesh: &Mesh,
+    groups: &[LightmapGroup],
+) -> (Vec<VisibilityTexel>, Vec<f32>) {
     let mut texels = Vec::new();
+    let mut coverage = Vec::new();
 
     let mut resolution_lookup = Vec::with_capacity(groups.len());
     for g in groups {
@@ -264,9 +316,10 @@ pub fn rasterize_visibility(mesh: &Mesh, groups: &[LightmapGroup]) -> Vec<Visibi
                     x: x as u16,
                     y: y as u16,
                 });
+                coverage.push(area.abs().clamp(0.0, 1.0) as f32);
             }
         }
     }
 
-    texels
+    (texels, coverage)
 }

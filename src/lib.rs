@@ -17,7 +17,7 @@ use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
-use crate::raster::{rasterize_visibility, visibility_to_normals};
+use crate::raster::{rasterize_visibility, render_normals};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
@@ -192,6 +192,7 @@ pub struct TexturePixelsData {
 
 pub struct LightmapGroup {
     pub settings: LightmapSettings,
+    pub id: u32,
     pub albedo_pixels: Vec<u8>,
     pub emission_pixels: Vec<u8>,
 }
@@ -1213,6 +1214,7 @@ impl LightmapGroup {
             settings,
             albedo_pixels: albedo_pixels.to_vec(),
             emission_pixels: emission_pixels.to_vec(),
+            id: 0,
         }
     }
 }
@@ -1462,9 +1464,15 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
 }
 
 unsafe fn render_lightmaps2(app: &mut Glim) {
-    let visibility_texels = rasterize_visibility(&app.meshes[0], &app.groups);
+    let (visibility_texels, visibility_coverage) =
+        rasterize_visibility(&app.meshes[0], &app.groups);
 
-    let normal = visibility_to_normals(&visibility_texels, &app.meshes[0], &app.groups[0]);
+    let normal = render_normals(
+        &visibility_texels,
+        &visibility_coverage,
+        &app.meshes[0],
+        &app.groups[0],
+    );
 
     let res = app.groups[0].settings.width as usize;
     save_tga(PathBuf::from("temp/normal.tga"), res, res, &normal, false).unwrap();
