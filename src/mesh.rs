@@ -289,7 +289,7 @@ impl GpuMesh {
 
         if !config.is_preview {
             let flip = config.coordinate_system == CoordinateSystem::Unity;
-            *seams = find_seams(&merged_mesh, flip);
+            *seams = find_seams(&merged_mesh, true);
         }
 
         let mut group_resolutions = vec![Vector2::ZERO; lightmap_groups.len()];

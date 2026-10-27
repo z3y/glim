@@ -1466,258 +1466,6 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
     Ok(())
 }
 
-fn zero_buffer(vk: &VulkanContext, buffer: &Buffer) {
-    let cmd = vk.begin_single_use_cmd();
-
-    unsafe {
-        vk.device
-            .cmd_fill_buffer(cmd, buffer.buffer, 0, buffer.bytes, 0);
-    }
-
-    vk.end_single_use_cmd(cmd);
-}
-
-fn bake_direct_lights(
-    app: &Glim,
-    visibility_texels_count: usize,
-    lights_start: usize,
-    lights_count: usize,
-    samples: u32,
-) {
-    if lights_count == 0 {
-        return;
-    }
-
-    #[repr(C)]
-    pub struct DirectLightPushConstants {
-        pub texel_count: u32,
-        pub sample_index: u32,
-        pub samples: u32,
-        pub mixed: u32,
-
-        pub lights_start: u32,
-        pub lights_count: u32,
-        pub pad1: u32,
-        pub pad2: u32,
-    }
-
-    let mut shader_bindings = ShaderBindings {
-        tlas: app.tlas.acceleration_structure,
-        albedos: &app.albedo_array.views(),
-        emissions: &[],
-        skybox: app.skybox.view(),
-        skybox_sampler: app.skybox.sampler(),
-        visibility: vk::ImageView::null(),
-        preview_diffuse: vk::ImageView::null(),
-        alphas: &app.alphas_array.views(),
-        cookies: &app.cookie_array.views(),
-        linear_sampler: app.linear_sampler,
-    };
-
-    // todo cache
-    let mut bake_direct_light_shader = load_compute_shader(
-        &app.vk,
-        ShaderName::BakeDirectLight,
-        &app.constants,
-        &shader_bindings,
-        size_of::<DirectLightPushConstants>(),
-    );
-    update_compute_shader(&app.vk, &bake_direct_light_shader, &shader_bindings);
-
-    let mut bake_direct_push = DirectLightPushConstants {
-        texel_count: visibility_texels_count as u32,
-        sample_index: 0,
-        samples,
-        mixed: 0, // todo mixed
-        lights_start: lights_start as u32,
-        lights_count: lights_count as u32,
-        pad1: 0,
-        pad2: 0,
-    };
-
-    let groups_x = (visibility_texels_count as u32 + 63) / 64;
-    let shader = &bake_direct_light_shader;
-
-    for sample_index in 0..samples {
-        if is_cancelled() {
-            break;
-        }
-        bake_direct_push.sample_index = sample_index;
-        let bake_direct_push_bytes = as_bytes(&bake_direct_push);
-
-        let vk = &app.vk.device;
-
-        let cmd = app.vk.begin_single_use_cmd();
-        unsafe {
-            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-            vk.cmd_bind_descriptor_sets(
-                cmd,
-                vk::PipelineBindPoint::COMPUTE,
-                shader.pipeline_layout,
-                0,
-                &[shader.descriptor_set],
-                &[],
-            );
-            vk.cmd_push_constants(
-                cmd,
-                shader.pipeline_layout,
-                vk::ShaderStageFlags::COMPUTE,
-                0,
-                &bake_direct_push_bytes,
-            );
-            vk.cmd_dispatch(cmd, groups_x, 1, 1);
-        };
-        app.vk.end_single_use_cmd(cmd);
-    }
-
-    bake_direct_light_shader.destroy(&app.vk);
-    drop(bake_direct_light_shader);
-}
-
-unsafe fn render_lightmaps2(app: &mut Glim) {
-    // todo merged mesh without premultiplied uvs
-    let (visibility_texels, visibility_coverage) =
-        rasterize_visibility(&app.meshes[0], &app.groups);
-
-    let visibility_texels_count = visibility_texels.len();
-
-    // let normal = render_normals(
-    //     &visibility_texels,
-    //     &visibility_coverage,
-    //     &app.meshes[0],
-    //     &app.groups[0],
-    // );
-
-    let mut visibility_buffer = Buffer::new(
-        &app.vk,
-        String::from("Visibility Buffer"),
-        &visibility_texels,
-        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-        vk::MemoryPropertyFlags::DEVICE_LOCAL,
-    );
-    app.constants.compacted_visibility_address = visibility_buffer.gpu_address;
-
-    let mut lightmap_texels = Buffer::empty(
-        &app.vk,
-        "Diffuse Buffer".to_owned(),
-        (visibility_texels.len() * mem::size_of::<f32>() * 3) as u64,
-        vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::TRANSFER_SRC
-            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-        vk::MemoryPropertyFlags::DEVICE_LOCAL,
-    );
-    app.constants.compacted_lightmap_address = lightmap_texels.gpu_address;
-    zero_buffer(&app.vk, &lightmap_texels);
-
-    // let res = app.groups[0].settings.width as usize;
-    // save_tga(PathBuf::from("temp/normal.tga"), res, res, &normal, false).unwrap();
-
-    bake_direct_lights(
-        &app,
-        visibility_texels_count,
-        0,
-        app.cpu_lights.len(),
-        app.config.direct_light_samples,
-    );
-
-    let mut max_resolution = 1;
-    for g in &app.groups {
-        max_resolution = max_resolution.max(g.settings.width as usize);
-    }
-
-    // let mut readback_buffer = Buffer::empty(
-    //     &app.vk,
-    //     "Readback Buffer".to_owned(),
-    //     (max_resolution * max_resolution * mem::size_of::<f32>() * 4) as u64,
-    //     vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-    //     vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-    // );
-
-    let mut readback_buffer = Buffer::empty(
-        &app.vk,
-        "Readback Buffer".to_owned(),
-        lightmap_texels.bytes,
-        vk::BufferUsageFlags::TRANSFER_SRC
-            | vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-    );
-
-    unsafe {
-        let cmd = app.vk.begin_single_use_cmd();
-
-        let region = vk::BufferCopy {
-            src_offset: 0,
-            dst_offset: 0,
-            size: lightmap_texels.bytes,
-        };
-
-        app.vk.device.cmd_copy_buffer(
-            cmd,
-            lightmap_texels.buffer,
-            readback_buffer.buffer,
-            &[region],
-        );
-
-        app.vk.end_single_use_cmd(cmd);
-    }
-
-    let diffuse: &mut [f32] = std::slice::from_raw_parts_mut(
-        readback_buffer.ptr as *mut f32,
-        readback_buffer.bytes as usize,
-    );
-
-    let lightmap_diffuse = decompact_diffuse(
-        &visibility_texels,
-        &visibility_coverage,
-        &diffuse,
-        &app.meshes[0],
-        &app.groups[0],
-    );
-    {
-        use exr::prelude::*;
-        use half::f16;
-
-        let group_index = 0;
-
-        let resolution = app.groups[group_index].settings.width as usize;
-
-        let full_path = app
-            .output_dir
-            .join(format!("Lightmap-{}_Diffuse.exr", group_index));
-
-        let channels = SpecificChannels::rgb(|pos: Vec2<usize>| {
-            let x = pos.x();
-            let flipped_y = resolution - 1 - pos.y();
-            let index = x + flipped_y * resolution;
-
-            (
-                f16::from_f32(lightmap_diffuse[index * 4 + 0]),
-                f16::from_f32(lightmap_diffuse[index * 4 + 1]),
-                f16::from_f32(lightmap_diffuse[index * 4 + 2]),
-            )
-        });
-
-        let layer = Layer::new(
-            (resolution, resolution),
-            LayerAttributes::named("diffuse"),
-            Encoding::FAST_LOSSLESS,
-            channels,
-        );
-
-        Image::from_layer(layer).write().to_file(full_path).unwrap();
-    }
-
-    readback_buffer.destroy(&app.vk);
-    drop(readback_buffer);
-
-    lightmap_texels.destroy(&app.vk);
-    drop(lightmap_texels);
-
-    visibility_buffer.destroy(&app.vk);
-    drop(visibility_buffer);
-}
-
 unsafe fn render_lightmaps(app: &mut Glim) {
     let mut max_resolution = (1, 1);
     let mut total_pixel_count = 0;
@@ -3269,4 +3017,324 @@ fn bake_shadowmask(app: &mut Glim, pixel_buffer: &Buffer, lightmap_index: usize)
     if let Err(err) = save_tga(path, resolution as usize, resolution as usize, pixels, true) {
         Log::msg(&format!("Failed to save shadowmask: {}", err));
     }
+}
+
+fn zero_buffer(vk: &VulkanContext, buffer: &Buffer) {
+    let cmd = vk.begin_single_use_cmd();
+
+    unsafe {
+        vk.device
+            .cmd_fill_buffer(cmd, buffer.buffer, 0, buffer.bytes, 0);
+    }
+
+    vk.end_single_use_cmd(cmd);
+}
+
+fn bake_direct_lights(
+    app: &Glim,
+    visibility_texels_count: usize,
+    lights_start: usize,
+    lights_count: usize,
+    samples: u32,
+) {
+    if lights_count == 0 {
+        return;
+    }
+
+    #[repr(C)]
+    pub struct DirectLightPushConstants {
+        pub texel_count: u32,
+        pub sample_index: u32,
+        pub samples: u32,
+        pub mixed: u32,
+
+        pub lights_start: u32,
+        pub lights_count: u32,
+        pub pad1: u32,
+        pub pad2: u32,
+    }
+
+    let shader_bindings = ShaderBindings {
+        tlas: app.tlas.acceleration_structure,
+        albedos: &app.albedo_array.views(),
+        emissions: &[],
+        skybox: app.skybox.view(),
+        skybox_sampler: app.skybox.sampler(),
+        visibility: vk::ImageView::null(),
+        preview_diffuse: vk::ImageView::null(),
+        alphas: &app.alphas_array.views(),
+        cookies: &app.cookie_array.views(),
+        linear_sampler: app.linear_sampler,
+    };
+
+    // todo cache
+    let mut bake_direct_light_shader = load_compute_shader(
+        &app.vk,
+        ShaderName::BakeDirectLight,
+        &app.constants,
+        &shader_bindings,
+        size_of::<DirectLightPushConstants>(),
+    );
+    update_compute_shader(&app.vk, &bake_direct_light_shader, &shader_bindings);
+
+    let mut bake_direct_push = DirectLightPushConstants {
+        texel_count: visibility_texels_count as u32,
+        sample_index: 0,
+        samples,
+        mixed: 0, // todo mixed
+        lights_start: lights_start as u32,
+        lights_count: lights_count as u32,
+        pad1: 0,
+        pad2: 0,
+    };
+
+    let groups_x = (visibility_texels_count as u32 + 63) / 64;
+    let shader = &bake_direct_light_shader;
+
+    for sample_index in 0..samples {
+        if is_cancelled() {
+            break;
+        }
+        bake_direct_push.sample_index = sample_index;
+        let bake_direct_push_bytes = as_bytes(&bake_direct_push);
+
+        let vk = &app.vk.device;
+
+        let cmd = app.vk.begin_single_use_cmd();
+        unsafe {
+            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                shader.pipeline_layout,
+                0,
+                &[shader.descriptor_set],
+                &[],
+            );
+            vk.cmd_push_constants(
+                cmd,
+                shader.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &bake_direct_push_bytes,
+            );
+            vk.cmd_dispatch(cmd, groups_x, 1, 1);
+        };
+        app.vk.end_single_use_cmd(cmd);
+    }
+
+    bake_direct_light_shader.destroy(&app.vk);
+    drop(bake_direct_light_shader);
+}
+
+unsafe fn render_lightmaps2(app: &mut Glim) {
+    let mut max_resolution = 1;
+    for g in &app.groups {
+        max_resolution = max_resolution.max(g.settings.width as usize);
+    }
+
+    let mut mesh = app.meshes[0].clone();
+    for i in 1..app.meshes.len() {
+        mesh.merge_mesh(&app.meshes[i]);
+    }
+
+    let (visibility_texels, visibility_coverage) = rasterize_visibility(&mesh, &app.groups);
+
+    let visibility_texels_count = visibility_texels.len();
+
+    let mut visibility_buffer = Buffer::new(
+        &app.vk,
+        String::from("Visibility Buffer"),
+        &visibility_texels,
+        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    );
+    app.constants.compacted_visibility_address = visibility_buffer.gpu_address;
+
+    let mut lightmap_texels = Buffer::empty(
+        &app.vk,
+        "Diffuse Buffer".to_owned(),
+        (visibility_texels.len() * mem::size_of::<f32>() * 3) as u64,
+        vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    );
+    app.constants.compacted_lightmap_address = lightmap_texels.gpu_address;
+    zero_buffer(&app.vk, &lightmap_texels);
+
+    // let normal = render_normals(
+    //     &visibility_texels,
+    //     &visibility_coverage,
+    //     &app.meshes[0],
+    //     &app.groups[0],
+    // );
+    // save_tga(PathBuf::from("temp/normal.tga"), res, res, &normal, false).unwrap();
+
+    bake_direct_lights(
+        &app,
+        visibility_texels_count,
+        0,
+        app.cpu_lights.len(),
+        app.config.direct_light_samples,
+    );
+
+    let mut readback_buffer = Buffer::empty(
+        &app.vk,
+        "Readback Buffer".to_owned(),
+        lightmap_texels.bytes,
+        vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    );
+
+    unsafe {
+        let cmd = app.vk.begin_single_use_cmd();
+
+        let region = vk::BufferCopy {
+            src_offset: 0,
+            dst_offset: 0,
+            size: lightmap_texels.bytes,
+        };
+
+        app.vk.device.cmd_copy_buffer(
+            cmd,
+            lightmap_texels.buffer,
+            readback_buffer.buffer,
+            &[region],
+        );
+
+        app.vk.end_single_use_cmd(cmd);
+    }
+
+    let readback_buffer_slice: &mut [f32] = std::slice::from_raw_parts_mut(
+        readback_buffer.ptr as *mut f32,
+        readback_buffer.bytes as usize,
+    );
+
+    let oidn = Oidn::load();
+    let mut oidn = if oidn.is_err() {
+        let err = oidn.err();
+        match err {
+            Some(err) => {
+                let message = "Failed to load Open Image Denoise";
+                Log::msg(&message);
+                Log::msg(&err.to_string());
+            }
+            None => {}
+        };
+        None
+    } else {
+        Some(oidn.unwrap())
+    };
+
+    if let Some(oidn) = oidn.as_mut() {
+        Log::msg(&format!(
+            "Open Image Denoise 2.0 loaded with device {:?}",
+            oidn.device_type()
+        ));
+
+        let size = max_resolution * max_resolution * 4 * size_of::<f32>();
+
+        if !oidn.reserve_buffer(size) {
+            Log::msg(&format!("OIDN: failed to reserve {} bytes", size));
+        }
+    }
+
+    for group_index in 0..app.groups.len() {
+        let group = &app.groups[group_index];
+        let settings = &group.settings;
+        let resolution = group.settings.width as usize;
+
+        let mut pixels = decompact_diffuse(
+            &visibility_texels,
+            &visibility_coverage,
+            &readback_buffer_slice,
+            &mesh,
+            &group,
+        );
+
+        if settings.denoise {
+            match &oidn {
+                Some(oidn) => {
+                    let start_time = std::time::Instant::now();
+
+                    oidn.denoise(&mut pixels, resolution, resolution, false);
+
+                    let now = std::time::Instant::now();
+                    let elapsed = now.duration_since(start_time).as_secs_f32();
+
+                    let message = format!("Denoise Complete {}s", elapsed);
+                    Log::msg(&message);
+                }
+                None => {
+                    let message = format!("<color=red>Denoise Failed</color>");
+                    Log::msg(&message);
+                }
+            }
+        }
+
+        if settings.dilate {
+            dilate(&mut pixels, resolution as u32, resolution as u32, 0.5);
+        }
+
+        if settings.fix_seams {
+            let start_time = std::time::Instant::now();
+            let channels = 3;
+
+            fix_seams(
+                &mut pixels,
+                resolution as u32,
+                resolution as u32,
+                &app.seams,
+                app.config.seams_debug,
+                group_index as u32,
+                channels,
+            );
+
+            let now = std::time::Instant::now();
+            let elapsed = now.duration_since(start_time).as_secs_f32();
+
+            let message = format!("Fixed {} seams in {}s", app.seams.len(), elapsed);
+            Log::msg(&message);
+        }
+
+        use exr::prelude::*;
+        use half::f16;
+
+        let full_path = app
+            .output_dir
+            .join(format!("Lightmap-{}_Diffuse.exr", group_index));
+
+        let channels = SpecificChannels::rgb(|pos: Vec2<usize>| {
+            let x = pos.x();
+            let flipped_y = resolution - 1 - pos.y();
+            let index = x + flipped_y * resolution;
+
+            (
+                f16::from_f32(pixels[index * 4 + 0]),
+                f16::from_f32(pixels[index * 4 + 1]),
+                f16::from_f32(pixels[index * 4 + 2]),
+            )
+        });
+
+        let layer = Layer::new(
+            (resolution, resolution),
+            LayerAttributes::named("diffuse"),
+            Encoding::FAST_LOSSLESS,
+            channels,
+        );
+
+        Image::from_layer(layer).write().to_file(full_path).unwrap();
+    }
+
+    readback_buffer.destroy(&app.vk);
+    drop(readback_buffer);
+
+    lightmap_texels.destroy(&app.vk);
+    drop(lightmap_texels);
+
+    visibility_buffer.destroy(&app.vk);
+    drop(visibility_buffer);
 }
