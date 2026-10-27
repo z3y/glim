@@ -3030,6 +3030,86 @@ fn zero_buffer(vk: &VulkanContext, buffer: &Buffer) {
     vk.end_single_use_cmd(cmd);
 }
 
+fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
+    let message = format!("Baking Direct Emission");
+    Log::msg(&message);
+
+    #[repr(C)]
+    pub struct PushConstants {
+        pub compacted_count: u32,
+        pub sample_index: u32,
+        pub max_samples: u32,
+        pub pad0: u32,
+    }
+
+    let shader_bindings = ShaderBindings {
+        tlas: app.tlas.acceleration_structure,
+        albedos: &app.albedo_array.views(),
+        emissions: &&app.emission_array.views(),
+        skybox: app.skybox.view(),
+        skybox_sampler: app.skybox.sampler(),
+        visibility: vk::ImageView::null(),
+        preview_diffuse: vk::ImageView::null(),
+        alphas: &app.alphas_array.views(),
+        cookies: &app.cookie_array.views(),
+        linear_sampler: app.linear_sampler,
+    };
+
+    let mut bake_direct_emission_shader = load_compute_shader(
+        &app.vk,
+        ShaderName::BakeDirectEmission,
+        &app.constants,
+        &shader_bindings,
+        size_of::<PushConstants>(),
+    );
+    update_compute_shader(&app.vk, &bake_direct_emission_shader, &shader_bindings);
+
+    let mut push = PushConstants {
+        compacted_count: visibility_texels_count as u32,
+        sample_index: 0,
+        max_samples: app.config.direct_emission_samples,
+        pad0: 0,
+    };
+
+    let groups_x = (visibility_texels_count as u32 + 63) / 64;
+    let shader = &bake_direct_emission_shader;
+
+    for sample_index in 0..push.max_samples {
+        if is_cancelled() {
+            break;
+        }
+        push.sample_index = sample_index;
+
+        let vk = &app.vk.device;
+        let push_bytes = as_bytes(&push);
+
+        let cmd = app.vk.begin_single_use_cmd();
+        unsafe {
+            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                shader.pipeline_layout,
+                0,
+                &[shader.descriptor_set],
+                &[],
+            );
+            vk.cmd_push_constants(
+                cmd,
+                shader.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &push_bytes,
+            );
+
+            vk.cmd_dispatch(cmd, groups_x, 1, 1);
+        };
+        app.vk.end_single_use_cmd(cmd);
+    }
+    bake_direct_emission_shader.destroy(&app.vk);
+    drop(bake_direct_emission_shader);
+}
+
 fn bake_direct_lights(
     app: &Glim,
     visibility_texels_count: usize,
@@ -3042,7 +3122,7 @@ fn bake_direct_lights(
     }
 
     #[repr(C)]
-    pub struct DirectLightPushConstants {
+    pub struct PushConstants {
         pub texel_count: u32,
         pub sample_index: u32,
         pub samples: u32,
@@ -3073,11 +3153,11 @@ fn bake_direct_lights(
         ShaderName::BakeDirectLight,
         &app.constants,
         &shader_bindings,
-        size_of::<DirectLightPushConstants>(),
+        size_of::<PushConstants>(),
     );
     update_compute_shader(&app.vk, &bake_direct_light_shader, &shader_bindings);
 
-    let mut bake_direct_push = DirectLightPushConstants {
+    let mut push = PushConstants {
         texel_count: visibility_texels_count as u32,
         sample_index: 0,
         samples,
@@ -3095,8 +3175,8 @@ fn bake_direct_lights(
         if is_cancelled() {
             break;
         }
-        bake_direct_push.sample_index = sample_index;
-        let bake_direct_push_bytes = as_bytes(&bake_direct_push);
+        push.sample_index = sample_index;
+        let push_bytes = as_bytes(&push);
 
         let vk = &app.vk.device;
 
@@ -3116,7 +3196,7 @@ fn bake_direct_lights(
                 shader.pipeline_layout,
                 vk::ShaderStageFlags::COMPUTE,
                 0,
-                &bake_direct_push_bytes,
+                &push_bytes,
             );
             vk.cmd_dispatch(cmd, groups_x, 1, 1);
         };
@@ -3141,6 +3221,11 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
     let (visibility_texels, visibility_coverage) = rasterize_visibility(&mesh, &app.groups);
 
     let visibility_texels_count = visibility_texels.len();
+
+    Log::msg(&format!(
+        "Created {} texels for baking.",
+        visibility_texels_count
+    ));
 
     let mut visibility_buffer = Buffer::new(
         &app.vk,
@@ -3178,6 +3263,8 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         app.cpu_lights.len(),
         app.config.direct_light_samples,
     );
+
+    bake_direct_emission(&app, visibility_texels_count);
 
     let mut readback_buffer = Buffer::empty(
         &app.vk,
