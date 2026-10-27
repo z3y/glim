@@ -34,9 +34,35 @@ void main(uint3 threadID: SV_DispatchThreadID)
     // uint x = asuint(visibility.w) & 0xFFFF;
     // uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
 
-    Surface surface = Surface::Get(primitiveID, bary);
-    float3 positionWS = RayOffset(surface.P, surface.Ng);
-    float3 normalWS = surface.N;
+    uint i0 = Indices[primitiveID * 3 + 0];
+    uint i1 = Indices[primitiveID * 3 + 1];
+    uint i2 = Indices[primitiveID * 3 + 2];
+
+    float3 p0 = Vertices[i0].GetPosition();
+    float3 p1 = Vertices[i1].GetPosition();
+    float3 p2 = Vertices[i2].GetPosition();
+    float2 uv0 = Vertices[i0].GetUV();
+    float2 uv1 = Vertices[i1].GetUV();
+    float2 uv2 = Vertices[i2].GetUV();
+
+    float3 edge1 = p1 - p0;
+    float3 edge2 = p2 - p0;
+    float2 duv1 = uv1 - uv0;
+    float2 duv2 = uv2 - uv0;
+
+    float det = duv1.x * duv2.y - duv1.y * duv2.x;
+    float invDet = 1.0 / (abs(det) + 1e-9);
+    float invDetSigned = abs(det) > 1e-12 ? 1.0 / det : 0.0;
+
+    float3 dPdU = (edge1 * duv2.y - edge2 * duv1.y) * invDet;
+    float3 dPdV = (edge2 * duv1.x - edge1 * duv2.x) * invDet;
+
+    float3 worldTexelU = dPdU;
+    float3 worldTexelV = dPdV;
+
+    // Surface surface = Surface::Get(primitiveID, bary);
+    // float3 positionWS = RayOffset(surface.P, surface.Ng);
+    // float3 normalWS = surface.N;
 
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.sampleCount;
@@ -49,6 +75,25 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint pixelSeed = RNGPixelInit1D(index);
     uint sobolIndexMask = ~0u;
     uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
+
+    float2 xiAA = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
+    float2 jitterTexel = xiAA - 0.5;
+
+    float2 dBary;
+    dBary.x = (duv2.y * jitterTexel.x - duv2.x * jitterTexel.y) * invDetSigned;
+    dBary.y = (-duv1.y * jitterTexel.x + duv1.x * jitterTexel.y) * invDetSigned;
+
+    // Keep the sample inside the triangle
+    float2 jBary = max(bary + dBary, 0.0);
+    float s = jBary.x + jBary.y;
+    if (s > 1.0)
+    {
+        jBary /= s;
+    }
+
+    Surface surface = Surface::Get(primitiveID, jBary);
+    float3 positionWS = RayOffset(surface.P, surface.Ng);
+    float3 normalWS = surface.N;
 
     float2 xiLight = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
 
