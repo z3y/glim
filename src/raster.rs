@@ -198,10 +198,22 @@ pub fn decompact_diffuse(
         let col_z = diffuse[compacted_index * 3 + 2];
 
         let index = texel.index(resolution);
-        color[index * 4 + 0] = col_x;
-        color[index * 4 + 1] = col_y;
-        color[index * 4 + 2] = col_z;
-        color[index * 4 + 3] += 1.0;
+
+        color[index * 4 + 0] += col_x * cov;
+        color[index * 4 + 1] += col_y * cov;
+        color[index * 4 + 2] += col_z * cov;
+        color[index * 4 + 3] += cov;
+    }
+
+    for pixel in color.chunks_exact_mut(4) {
+        let total_cov = pixel[3];
+
+        if total_cov > 0.0 {
+            pixel[0] /= total_cov;
+            pixel[1] /= total_cov;
+            pixel[2] /= total_cov;
+            pixel[3] = 1.0;
+        }
     }
 
     color
