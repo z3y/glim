@@ -19,7 +19,9 @@ use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
-use crate::raster::{VisibilityTexel, decompact_diffuse, rasterize_visibility, render_normals};
+use crate::raster::{
+    VisibilityTexel, decompact_diffuse, dilate_lightmap, rasterize_visibility, render_normals,
+};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
@@ -3334,7 +3336,7 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         let settings = &group.settings;
         let resolution = group.settings.width as usize;
 
-        let mut pixels = decompact_diffuse(
+        let (mut pixels, mut weight) = decompact_diffuse(
             &visibility_texels,
             &visibility_coverage,
             &readback_buffer_slice,
@@ -3363,7 +3365,8 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         }
 
         if settings.dilate {
-            dilate(&mut pixels, resolution as u32, resolution as u32, 0.5);
+            // dilate(&mut pixels, resolution as u32, resolution as u32, 0.5);
+            dilate_lightmap(&mut pixels, resolution, 2);
         }
 
         if settings.fix_seams {

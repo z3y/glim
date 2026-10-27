@@ -176,10 +176,12 @@ pub fn decompact_diffuse(
     diffuse: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
-) -> Vec<f32> {
+) -> (Vec<f32>, Vec<f32>) {
     let resolution = group.settings.width as usize;
     let group_id = group.id;
     let mut color = vec![0.0; resolution * resolution * 4];
+
+    let mut cov_out = vec![0.0f32; resolution * resolution];
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -205,18 +207,101 @@ pub fn decompact_diffuse(
         color[index * 4 + 3] += cov;
     }
 
-    for pixel in color.chunks_exact_mut(4) {
-        let total_cov = pixel[3];
+    for (i, pixel) in color.chunks_exact_mut(4).enumerate() {
+        let total_cov = pixel[3].min(1.0);
 
         if total_cov > 0.0 {
             pixel[0] /= total_cov;
             pixel[1] /= total_cov;
             pixel[2] /= total_cov;
-            pixel[3] = 1.0;
+            pixel[3] = total_cov;
+
+            cov_out[i] = total_cov;
         }
     }
 
-    color
+    (color, cov_out)
+}
+
+/// Dilates an RGBA f32 lightmap (stride 4) where alpha = texel coverage.
+/// Empty texels (alpha == 0) are filled from neighbors, weighted by coverage^2
+/// so well-covered texels dominate and slivers contribute very little.
+/// Real texels are never modified. Filled texels get alpha = 1.0 at the end.
+pub fn dilate_lightmap(color: &mut [f32], resolution: usize, iterations: usize) {
+    const NEIGHBORS: [(i32, i32, f32); 8] = [
+        (-1, 0, 1.0),
+        (1, 0, 1.0),
+        (0, -1, 1.0),
+        (0, 1, 1.0),
+        (-1, -1, 0.7071),
+        (1, -1, 0.7071),
+        (-1, 1, 0.7071),
+        (1, 1, 0.7071),
+    ];
+    let res = resolution as i32;
+
+    let real: Vec<bool> = color.chunks_exact(4).map(|p| p[3] > 0.0).collect();
+    let mut filled = vec![false; resolution * resolution];
+
+    for _ in 0..iterations {
+        let src = color.to_vec();
+        let mut changed = false;
+
+        for y in 0..res {
+            for x in 0..res {
+                let i = (y * res + x) as usize;
+                if real[i] || filled[i] {
+                    continue;
+                }
+
+                // Two tiers: use real neighbors if any exist, otherwise
+                // fall back to previously propagated ones.
+                let mut real_sum = [0.0f32; 3];
+                let mut real_w = 0.0f32;
+                let mut fill_sum = [0.0f32; 3];
+                let mut fill_w = 0.0f32;
+
+                for &(dx, dy, k) in &NEIGHBORS {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= res || ny >= res {
+                        continue;
+                    }
+                    let ni = (ny * res + nx) as usize;
+
+                    if real[ni] {
+                        let cov = src[ni * 4 + 3].min(1.0);
+                        let w = cov * cov * k;
+                        real_sum[0] += src[ni * 4] * w;
+                        real_sum[1] += src[ni * 4 + 1] * w;
+                        real_sum[2] += src[ni * 4 + 2] * w;
+                        real_w += w;
+                    } else if filled[ni] {
+                        fill_sum[0] += src[ni * 4] * k;
+                        fill_sum[1] += src[ni * 4 + 1] * k;
+                        fill_sum[2] += src[ni * 4 + 2] * k;
+                        fill_w += k;
+                    }
+                }
+
+                let (sum, w) = if real_w > 0.0 {
+                    (real_sum, real_w)
+                } else {
+                    (fill_sum, fill_w)
+                };
+                if w > 0.0 {
+                    color[i * 4] = sum[0] / w;
+                    color[i * 4 + 1] = sum[1] / w;
+                    color[i * 4 + 2] = sum[2] / w;
+                    color[i * 4 + 3] = 1.0; // temp marker, tracked via `filled`
+                    filled[i] = true;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
 }
 
 // pub fn render_coverage(texels: &[VisibilityTexel], mesh: &Mesh, group: &LightmapGroup) -> Vec<u8> {
