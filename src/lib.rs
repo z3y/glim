@@ -17,7 +17,7 @@ use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
-use crate::raster::rasterize_visibility;
+use crate::raster::{rasterize_visibility, visibility_to_normals};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
@@ -1462,9 +1462,12 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
 }
 
 unsafe fn render_lightmaps2(app: &mut Glim) {
-    let visibility_texels = rasterize_visibility(&app.meshes, &app.groups);
+    let visibility_texels = rasterize_visibility(&app.meshes[0], &app.groups);
 
-    println!("{}", visibility_texels.len());
+    let normal = visibility_to_normals(&visibility_texels, &app.meshes[0], &app.groups[0]);
+
+    let res = app.groups[0].settings.width as usize;
+    save_tga(PathBuf::from("temp/normal.tga"), res, res, &normal, false).unwrap();
 }
 
 unsafe fn render_lightmaps(app: &mut Glim) {

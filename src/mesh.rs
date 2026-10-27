@@ -67,6 +67,7 @@ pub struct Mesh {
     pub no_shadows: bool,
 }
 
+#[inline]
 fn sign_not_zero(v: f32) -> f32 {
     if v >= 0.0 { 1.0 } else { -1.0 }
 }
@@ -84,6 +85,20 @@ pub fn encode_normal_octahedron(n: Vector3) -> Vector2 {
     }
 
     p
+}
+
+pub fn decode_normal_octahedron(p: Vector2) -> Vector3 {
+    let mut n = Vector3::new(p.x, p.y, 1.0 - p.x.abs() - p.y.abs());
+
+    if n.z < 0.0 {
+        let x = (1.0 - n.y.abs()) * sign_not_zero(n.x);
+        let y = (1.0 - n.x.abs()) * sign_not_zero(n.y);
+
+        n.x = x;
+        n.y = y;
+    }
+
+    n.normalize()
 }
 
 impl Mesh {
