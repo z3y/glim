@@ -15,7 +15,7 @@ mod tests {
     use crate::texture2d::encode_r11g11b10;
     use crate::*;
 
-    const TEST_NAME: &str = "monkey_2";
+    const TEST_NAME: &str = "raster_test";
 
     const DIRECT_LIGHT_SAMPLES: u32 = 256 * 4;
     const DIRECT_EMISSION_SAMPLES: u32 = 1024 * 4;

@@ -17,6 +17,7 @@ use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
+use crate::raster::rasterize_visibility;
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
@@ -49,6 +50,7 @@ mod math;
 mod mesh;
 mod oidn;
 mod pack;
+mod raster;
 mod seams;
 mod sh;
 mod shader;
@@ -492,6 +494,7 @@ fn initialize_render(app: &mut Glim) {
     }
 
     staging_buffer.destroy(&app.vk);
+    drop(staging_buffer);
 
     let config = &app.config;
 
@@ -538,7 +541,8 @@ fn initialize_render(app: &mut Glim) {
     if app.config.is_preview {
         render_preview(app);
     } else {
-        unsafe { render_lightmaps(app) };
+        // unsafe { render_lightmaps(app) };
+        unsafe { render_lightmaps2(app) };
     }
     unsafe {
         app.vk.device.device_wait_idle().unwrap();
@@ -1455,6 +1459,12 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
     }
 
     Ok(())
+}
+
+unsafe fn render_lightmaps2(app: &mut Glim) {
+    let visibility_texels = rasterize_visibility(&app.meshes, &app.groups);
+
+    println!("{}", visibility_texels.len());
 }
 
 unsafe fn render_lightmaps(app: &mut Glim) {
