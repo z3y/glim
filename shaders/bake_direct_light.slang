@@ -6,9 +6,9 @@ PushConstants Push;
 
 struct PushConstants
 {
-    uint compactedCount;
+    uint texelCount;
     uint sampleIndex;
-    uint maxSamples;
+    uint sampleCount;
     uint mixed;
 
     uint lightsStart;
@@ -23,18 +23,23 @@ void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint index = threadID.x;
 
-    if (index >= Push.compactedCount)
+    if (index >= Push.texelCount)
     {
         return;
     }
 
     float4 visibility = CompactedVisibility[index];
+    float2 bary = visibility.xy;
+    uint primitiveID = asuint(visibility.z);
+    // uint x = asuint(visibility.w) & 0xFFFF;
+    // uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
 
-    float3 positionWS = visibility.xyz;
-    float3 normalWS = UnpackNormalOctahedron(visibility.w);
+    Surface surface = Surface::Get(primitiveID, bary);
+    float3 positionWS = RayOffset(surface.P, surface.Ng);
+    float3 normalWS = surface.N;
 
     uint sampleIndex = Push.sampleIndex;
-    uint sampleCount = Push.maxSamples;
+    uint sampleCount = Push.sampleCount;
     uint lightsStart = Push.lightsStart;
     uint lightsCount = Push.lightsCount;
     bool mixed = Push.mixed == 1;
@@ -64,46 +69,46 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 
-    ValidateSampleColor(color);
+    // ValidateSampleColor(color);
 
-    uint2 bounceOffset = GetBounceBufferOffsets(Push.compactedCount);
+    // uint2 bounceOffset = GetBounceBufferOffsets(Push.compactedCount);
 
-    if (mixed)
-    {
-        index += bounceOffset.x;
-    }
+    // if (mixed)
+    // {
+    //     index += bounceOffset.x;
+    // }
 
     CompactedLightmap[index * 3 + 0] += color.x * sampleScale;
     CompactedLightmap[index * 3 + 1] += color.y * sampleScale;
     CompactedLightmap[index * 3 + 2] += color.z * sampleScale;
 
-    if (!mixed)
-    {
-        if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
-        {
-            float3 L0 = sh.sh[0].xyz * sampleScale;
+    // if (!mixed)
+    // {
+    //     if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
+    //     {
+    //         float3 L0 = sh.sh[0].xyz * sampleScale;
 
-            // write L0
-            uint index = index + Push.compactedCount;
-            CompactedLightmap[index * 3 + 0] += L0.x;
-            CompactedLightmap[index * 3 + 1] += L0.y;
-            CompactedLightmap[index * 3 + 2] += L0.z;
+    //         // write L0
+    //         uint index = index + Push.compactedCount;
+    //         CompactedLightmap[index * 3 + 0] += L0.x;
+    //         CompactedLightmap[index * 3 + 1] += L0.y;
+    //         CompactedLightmap[index * 3 + 2] += L0.z;
 
-            float3 combinedSH = EncodeCombinedSHL1(sh);
-            combinedSH *= sampleScale;
+    //         float3 combinedSH = EncodeCombinedSHL1(sh);
+    //         combinedSH *= sampleScale;
 
-            // write L1
-            index += Push.compactedCount;
-            CompactedLightmap[index * 3 + 0] += combinedSH.x;
-            CompactedLightmap[index * 3 + 1] += combinedSH.y;
-            CompactedLightmap[index * 3 + 2] += combinedSH.z;
-        }
-        else if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
-        {
-            uint index = index + Push.compactedCount;
-            CompactedLightmap[index * 3 + 0] += dominantDirection.x;
-            CompactedLightmap[index * 3 + 1] += dominantDirection.y;
-            CompactedLightmap[index * 3 + 2] += dominantDirection.z;
-        }
-    }
+    //         // write L1
+    //         index += Push.compactedCount;
+    //         CompactedLightmap[index * 3 + 0] += combinedSH.x;
+    //         CompactedLightmap[index * 3 + 1] += combinedSH.y;
+    //         CompactedLightmap[index * 3 + 2] += combinedSH.z;
+    //     }
+    //     else if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
+    //     {
+    //         uint index = index + Push.compactedCount;
+    //         CompactedLightmap[index * 3 + 0] += dominantDirection.x;
+    //         CompactedLightmap[index * 3 + 1] += dominantDirection.y;
+    //         CompactedLightmap[index * 3 + 2] += dominantDirection.z;
+    //     }
+    // }
 }

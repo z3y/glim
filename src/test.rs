@@ -234,9 +234,9 @@ mod tests {
 
             if let Some(gltf_light) = node.light() {
                 let c = gltf_light.color();
-                let mut intensity = gltf_light.intensity();
+                let mut intensity = gltf_light.intensity() / 1000.0; // todo
 
-                intensity *= 1.0 / f32::consts::PI;
+                // intensity *= 1.0 / f32::consts::PI;
 
                 let mut light = Light {
                     position: position,

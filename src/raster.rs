@@ -170,6 +170,43 @@ pub fn render_normals(
     normals
 }
 
+pub fn decompact_diffuse(
+    texels: &[VisibilityTexel],
+    coverage: &[f32],
+    diffuse: &[f32],
+    mesh: &Mesh,
+    group: &LightmapGroup,
+) -> Vec<f32> {
+    let resolution = group.settings.width as usize;
+    let group_id = group.id;
+    let mut color = vec![0.0; resolution * resolution * 4];
+
+    for compacted_index in 0..texels.len() {
+        let texel = &texels[compacted_index];
+
+        let primitive_id = texel.primitive_id as usize;
+        let i0 = mesh.indices[primitive_id * 3 + 0] as usize;
+        let v0 = mesh.vertices[i0];
+
+        if v0.group() != group_id {
+            continue;
+        }
+
+        let cov = coverage[compacted_index];
+        let col_x = diffuse[compacted_index * 3 + 0];
+        let col_y = diffuse[compacted_index * 3 + 1];
+        let col_z = diffuse[compacted_index * 3 + 2];
+
+        let index = texel.index(resolution);
+        color[index * 4 + 0] = col_x;
+        color[index * 4 + 1] = col_y;
+        color[index * 4 + 2] = col_z;
+        color[index * 4 + 3] += 1.0;
+    }
+
+    color
+}
+
 // pub fn render_coverage(texels: &[VisibilityTexel], mesh: &Mesh, group: &LightmapGroup) -> Vec<u8> {
 //     let resolution = group.settings.width as usize;
 //     let group_id = group.id;
