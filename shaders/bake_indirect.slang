@@ -68,10 +68,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint pixelSeed = RNGPixelInit1D(index);
     uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
 
-    uint dimension = 3 + bounceIndex * 2;
+    uint dimension = 4 + bounceIndex * 2;
     float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
 
-    float2 xiAA = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z); // todo unique dimension
+    float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
     float2 jitterTexel = xiAA - 0.5;
 
     float2 dBary;

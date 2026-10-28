@@ -76,7 +76,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint sobolIndexMask = ~0u;
     uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
 
-    float2 xiAA = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
+    float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
     float2 jitterTexel = xiAA - 0.5;
 
     float2 dBary;
@@ -113,7 +113,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 positionWS = RayOffset(surface.P, surface.Ng);
     float3 normalWS = surface.N;
 
-    float2 xiLight = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
+    float2 xiLight = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
 
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0);
