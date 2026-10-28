@@ -41,7 +41,7 @@ struct LightmapInfo
 {
     uint2 resolution;
     uint compactionOffset;
-    uint pad;
+    uint cellTableBase;
 };
 
 #define DECLARE_CONST_PTR(name, type, lo_id) \

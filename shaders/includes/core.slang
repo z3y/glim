@@ -545,7 +545,7 @@ bool UseSmoothPosition(Surface surface)
 }
 
 // uv already multiplied with resolution
-uint GetCompactedIndex(float2 uv, uint lightmapGroup, bool flipY = true)
+uint GetCompactedIndex(float2 uv, uint lightmapGroup, uint primitiveID, bool flipY = true)
 {
     uint2 coords = uint2(floor(uv));
     LightmapInfo info = LightmapsInfo[lightmapGroup];
@@ -573,8 +573,18 @@ uint GetCompactedIndex(float2 uv, uint lightmapGroup, bool flipY = true)
     }
 
     uint rank = countbits(entry.x & ((1u << bit) - 1));
-    uint compactIndex = entry.y + rank;
-    return compactIndex;
+    uint cellRank = entry.y + rank;
+
+    uint2 run = CompactionBuffer[info.cellTableBase + cellRank];
+    uint end = CompactionBuffer[info.cellTableBase + cellRank + 1].x;
+
+    // Prefer the texel that belongs to the triangle we actually hit.
+    for (uint i = run.x; i < end; i++)
+    {
+        if (asuint(CompactedVisibility[i].z) == primitiveID)
+            return i;
+    }
+    return run.y; // otherwise the best-covered texel
 }
 
 float MISWeight(float pdf1, float pdf2)

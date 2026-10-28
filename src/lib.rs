@@ -21,7 +21,7 @@ use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
     VisibilityTexel, build_compaction, decompact_diffuse, dilate_lightmap, rasterize_visibility,
-    render_normals,
+    render_normals, sort_visibility,
 };
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
@@ -208,7 +208,7 @@ pub struct LightmapGroup {
 pub struct LightmapInfo {
     pub resolution: [u32; 2],
     pub compaction_offset: u32,
-    pub pad: u32,
+    pub table_base: u32,
 }
 
 #[inline]
@@ -2307,7 +2307,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             infos.push(LightmapInfo {
                 resolution: [group.width, group.height],
                 compaction_offset: expanded_groups_start[group_index] as u32,
-                pad: 0,
+                table_base: 0,
             });
         }
 
@@ -3356,11 +3356,17 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         mesh.merge_mesh(&app.meshes[i]);
     }
 
-    let (visibility_texels, visibility_coverage) = rasterize_visibility(&mesh, &app.groups);
+    let (mut visibility_texels, mut visibility_coverage) = rasterize_visibility(&mesh, &app.groups);
+    sort_visibility(
+        &mut visibility_texels,
+        &mut visibility_coverage,
+        &mesh,
+        &app.groups,
+    );
     let visibility_texels_count = visibility_texels.len();
 
-    let (comaction_buffer_data, offsets, _) =
-        build_compaction(&visibility_texels, &mesh, &app.groups);
+    let (comaction_buffer_data, offsets, table_base) =
+        build_compaction(&visibility_texels, &visibility_coverage, &mesh, &app.groups);
     let mut lightmaps_info = {
         let mut infos = Vec::with_capacity(app.groups.len());
         for group_index in 0..app.groups.len() {
@@ -3368,7 +3374,7 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             infos.push(LightmapInfo {
                 resolution: [group.width, group.height],
                 compaction_offset: offsets[group_index],
-                pad: 0,
+                table_base: table_base,
             });
         }
 
