@@ -173,7 +173,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         }
         else
         {
-            color.rgb += float3(1, 0, 1);
+            // color.rgb += float3(1, 0, 1);
         }
     }
 
