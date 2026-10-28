@@ -224,9 +224,10 @@ pub fn decompact_diffuse(
 }
 
 /// Dilates an RGBA f32 lightmap (stride 4) where alpha = texel coverage.
-/// Empty texels (alpha == 0) are filled from neighbors, weighted by coverage^2
-/// so well-covered texels dominate and slivers contribute very little.
-/// Real texels are never modified. Filled texels get alpha = 1.0 at the end.
+/// Each empty texel copies the color of ONE neighbor, never a blend.
+/// Real texels always beat propagated ones; among real texels the best
+/// coverage (scaled by distance) wins. Real texels are never modified.
+/// Filled texels get alpha = 1.0.
 pub fn dilate_lightmap(color: &mut [f32], resolution: usize, iterations: usize) {
     const NEIGHBORS: [(i32, i32, f32); 8] = [
         (-1, 0, 1.0),
@@ -242,24 +243,25 @@ pub fn dilate_lightmap(color: &mut [f32], resolution: usize, iterations: usize) 
 
     let real: Vec<bool> = color.chunks_exact(4).map(|p| p[3] > 0.0).collect();
     let mut filled = vec![false; resolution * resolution];
+    // Coverage of the original real texel each filled texel was copied from,
+    // so propagated texels keep ranking by the quality of their source.
+    let mut inherited = vec![0.0f32; resolution * resolution];
 
     for _ in 0..iterations {
         let src = color.to_vec();
+        let src_filled = filled.clone();
+        let src_inherited = inherited.clone();
         let mut changed = false;
 
         for y in 0..res {
             for x in 0..res {
                 let i = (y * res + x) as usize;
-                if real[i] || filled[i] {
+                if real[i] || src_filled[i] {
                     continue;
                 }
 
-                // Two tiers: use real neighbors if any exist, otherwise
-                // fall back to previously propagated ones.
-                let mut real_sum = [0.0f32; 3];
-                let mut real_w = 0.0f32;
-                let mut fill_sum = [0.0f32; 3];
-                let mut fill_w = 0.0f32;
+                // Best candidate as (tier, score): tier 1 = real, 0 = propagated.
+                let mut best: Option<(u8, f32, usize, f32)> = None; // tier, score, index, source coverage
 
                 for &(dx, dy, k) in &NEIGHBORS {
                     let (nx, ny) = (x + dx, y + dy);
@@ -268,32 +270,34 @@ pub fn dilate_lightmap(color: &mut [f32], resolution: usize, iterations: usize) 
                     }
                     let ni = (ny * res + nx) as usize;
 
-                    if real[ni] {
-                        let cov = src[ni * 4 + 3].min(1.0);
-                        let w = cov * cov * k;
-                        real_sum[0] += src[ni * 4] * w;
-                        real_sum[1] += src[ni * 4 + 1] * w;
-                        real_sum[2] += src[ni * 4 + 2] * w;
-                        real_w += w;
-                    } else if filled[ni] {
-                        fill_sum[0] += src[ni * 4] * k;
-                        fill_sum[1] += src[ni * 4 + 1] * k;
-                        fill_sum[2] += src[ni * 4 + 2] * k;
-                        fill_w += k;
+                    let (tier, cov) = if real[ni] {
+                        (1u8, src[ni * 4 + 3].min(1.0))
+                    } else if src_filled[ni] {
+                        (0u8, src_inherited[ni])
+                    } else {
+                        continue;
+                    };
+
+                    // Coverage scaled by distance: a cardinal neighbor wins ties,
+                    // but a clearly better covered diagonal can still win.
+                    let score = cov * k;
+
+                    let better = match best {
+                        None => true,
+                        Some((bt, bs, _, _)) => tier > bt || (tier == bt && score > bs),
+                    };
+                    if better {
+                        best = Some((tier, score, ni, cov));
                     }
                 }
 
-                let (sum, w) = if real_w > 0.0 {
-                    (real_sum, real_w)
-                } else {
-                    (fill_sum, fill_w)
-                };
-                if w > 0.0 {
-                    color[i * 4] = sum[0] / w;
-                    color[i * 4 + 1] = sum[1] / w;
-                    color[i * 4 + 2] = sum[2] / w;
-                    color[i * 4 + 3] = 1.0; // temp marker, tracked via `filled`
+                if let Some((_, _, ni, cov)) = best {
+                    color[i * 4] = src[ni * 4];
+                    color[i * 4 + 1] = src[ni * 4 + 1];
+                    color[i * 4 + 2] = src[ni * 4 + 2];
+                    color[i * 4 + 3] = 1.0;
                     filled[i] = true;
+                    inherited[i] = cov;
                     changed = true;
                 }
             }

@@ -3344,6 +3344,11 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             &group,
         );
 
+        if settings.dilate {
+            // dilate(&mut pixels, resolution as u32, resolution as u32, 0.5);
+            dilate_lightmap(&mut pixels, resolution, 2);
+        }
+
         if settings.denoise {
             match &oidn {
                 Some(oidn) => {
@@ -3362,11 +3367,6 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                     Log::msg(&message);
                 }
             }
-        }
-
-        if settings.dilate {
-            // dilate(&mut pixels, resolution as u32, resolution as u32, 0.5);
-            dilate_lightmap(&mut pixels, resolution, 2);
         }
 
         if settings.fix_seams {
