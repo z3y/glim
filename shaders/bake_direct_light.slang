@@ -83,8 +83,26 @@ void main(uint3 threadID: SV_DispatchThreadID)
     dBary.x = (duv2.y * jitterTexel.x - duv2.x * jitterTexel.y) * invDetSigned;
     dBary.y = (-duv1.y * jitterTexel.x + duv1.x * jitterTexel.y) * invDetSigned;
 
-    // Keep the sample inside the triangle
-    float2 jBary = max(bary + dBary, 0.0);
+    float3 w0 = float3(1.0 - bary.x - bary.y, bary.x, bary.y);
+    float3 dw = float3(-dBary.x - dBary.y, dBary.x, dBary.y);
+
+    // Clip the jitter segment [bary, bary + dBary] to the triangle instead of
+    // projecting the end point. Barycentrics: w = (1 - x - y, x, y)
+    float t = 1.0;
+    [unroll]
+    for (int k = 0; k < 3; k++)
+    {
+        if (dw[k] < 0.0)
+        {
+            // largest t where w0[k] + t * dw[k] >= 0
+            t = min(t, max(w0[k], 0.0) / -dw[k]);
+        }
+    }
+
+    float2 jBary = bary + dBary * t;
+
+    // float-error safety only
+    jBary = max(jBary, 0.0);
     float s = jBary.x + jBary.y;
     if (s > 1.0)
     {
