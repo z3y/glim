@@ -576,15 +576,17 @@ uint GetCompactedIndex(float2 uv, uint lightmapGroup, uint primitiveID, bool fli
     uint cellRank = entry.y + rank;
 
     uint2 run = CompactionBuffer[info.cellTableBase + cellRank];
-    uint end = CompactionBuffer[info.cellTableBase + cellRank + 1].x;
 
     // Prefer the texel that belongs to the triangle we actually hit.
+    uint end = run.x + run.y;
     for (uint i = run.x; i < end; i++)
     {
         if (asuint(CompactedVisibility[i].z) == primitiveID)
+        {
             return i;
+        }
     }
-    return run.y; // otherwise the best-covered texel
+    return run.x; // first in the run is the best-covered texel
 }
 
 float MISWeight(float pdf1, float pdf2)

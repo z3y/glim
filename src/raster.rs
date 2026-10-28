@@ -627,7 +627,6 @@ pub fn build_compaction(
     groups: &[LightmapGroup],
 ) -> (Vec<[u32; 2]>, Vec<u32>, u32) {
     let visibility = &texels.visibility;
-    let coverage = &texels.coverage;
 
     let mut per_group: Vec<Vec<[u32; 2]>> = groups
         .iter()
@@ -637,10 +636,11 @@ pub fn build_compaction(
         })
         .collect();
 
-    // One entry per occupied cell: [first texel, best-coverage texel]
+    // One entry per occupied cell: [start, count].
+    // Relies on rasterize_texels output being sorted by (group, cell),
+    // with the best-coverage texel first in each run.
     let mut table: Vec<[u32; 2]> = Vec::new();
     let mut run: Option<(usize, usize)> = None;
-    let mut best_cov = 0.0f32;
 
     for (i, t) in visibility.iter().enumerate() {
         let v0 = &mesh.vertices[mesh.indices[t.primitive_id as usize * 3] as usize];
@@ -651,14 +651,11 @@ pub fn build_compaction(
 
         if run != Some((g, cell)) {
             run = Some((g, cell));
-            best_cov = coverage[i];
-            table.push([i as u32, i as u32]);
-        } else if coverage[i] > best_cov {
-            best_cov = coverage[i];
-            table.last_mut().unwrap()[1] = i as u32;
+            table.push([i as u32, 1]);
+        } else {
+            table.last_mut().unwrap()[1] += 1;
         }
     }
-    table.push([visibility.len() as u32, 0]); // sentinel gives the end of the last run
 
     let mut words: Vec<[u32; 2]> = Vec::new();
     let mut offsets = Vec::with_capacity(groups.len());
@@ -671,7 +668,7 @@ pub fn build_compaction(
         }
         words.extend_from_slice(g_words);
     }
-    assert_eq!(cells as usize + 1, table.len());
+    assert_eq!(cells as usize, table.len());
 
     let table_base = words.len() as u32;
     words.extend_from_slice(&table);
