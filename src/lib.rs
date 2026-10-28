@@ -18,7 +18,9 @@ use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
-use crate::raster::{build_compaction, decompact_diffuse, dilate_lightmap, rasterize_texels};
+use crate::raster::{
+    build_compaction, decompact_diffuse, decompact_directional, dilate_lightmap, rasterize_texels,
+};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
@@ -3411,10 +3413,16 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
     );
     app.constants.compacted_visibility_address = visibility_buffer.gpu_address;
 
+    let lightmap_texels_channels = match app.config.lightmap_mode {
+        LightmapMode::NonDirectional => 3,
+        LightmapMode::DominantDirection => 6,
+        LightmapMode::CombinedSH => 9,
+    };
+
     let mut lightmap_texels = Buffer::empty(
         &app.vk,
-        "Diffuse Buffer".to_owned(),
-        (texels_count * mem::size_of::<f32>() * 3) as u64,
+        "Lightmap Texels".to_owned(),
+        (texels_count * mem::size_of::<f32>() * lightmap_texels_channels) as u64,
         vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
@@ -3422,14 +3430,6 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
     );
     app.constants.compacted_lightmap_address = lightmap_texels.gpu_address;
     zero_buffer(&app.vk, &lightmap_texels);
-
-    // let normal = render_normals(
-    //     &visibility_texels,
-    //     &visibility_coverage,
-    //     &app.meshes[0],
-    //     &app.groups[0],
-    // );
-    // save_tga(PathBuf::from("temp/normal.tga"), res, res, &normal, false).unwrap();
 
     bake_direct_lights(
         &app,
@@ -3525,22 +3525,13 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         );
 
         if settings.dilate {
-            // dilate(&mut pixels, resolution as u32, resolution as u32, 0.5);
             dilate_lightmap(&mut pixels, resolution, 2);
         }
 
         if settings.denoise {
             match &oidn {
                 Some(oidn) => {
-                    let start_time = std::time::Instant::now();
-
                     oidn.denoise(&mut pixels, resolution, resolution, false);
-
-                    let now = std::time::Instant::now();
-                    let elapsed = now.duration_since(start_time).as_secs_f32();
-
-                    let message = format!("Denoise Complete {}s", elapsed);
-                    Log::msg(&message);
                 }
                 None => {
                     let message = format!("<color=red>Denoise Failed</color>");
@@ -3550,7 +3541,6 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         }
 
         if settings.fix_seams {
-            let start_time = std::time::Instant::now();
             let channels = 3;
 
             fix_seams(
@@ -3562,12 +3552,6 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                 group_index as u32,
                 channels,
             );
-
-            let now = std::time::Instant::now();
-            let elapsed = now.duration_since(start_time).as_secs_f32();
-
-            let message = format!("Fixed {} seams in {}s", app.seams.len(), elapsed);
-            Log::msg(&message);
         }
 
         use exr::prelude::*;
@@ -3597,14 +3581,57 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         );
 
         Image::from_layer(layer).write().to_file(full_path).unwrap();
+
+        if app.config.lightmap_mode == LightmapMode::DominantDirection {
+            let mut pixels = decompact_directional(
+                &texels.visibility,
+                &texels.coverage,
+                &readback_buffer_slice,
+                &mesh,
+                &group,
+            );
+
+            if settings.dilate {
+                dilate_lightmap(&mut pixels, resolution, 2);
+            }
+
+            if settings.denoise {
+                match &oidn {
+                    Some(oidn) => {
+                        oidn.denoise(&mut pixels, resolution, resolution, true);
+                    }
+                    None => {
+                        let message = format!("<color=red>Denoise Failed</color>");
+                        Log::msg(&message);
+                    }
+                }
+            }
+
+            if settings.fix_seams {
+                let channels = 4;
+
+                fix_seams(
+                    &mut pixels,
+                    resolution as u32,
+                    resolution as u32,
+                    &app.seams,
+                    app.config.seams_debug,
+                    group_index as u32,
+                    channels,
+                );
+            }
+
+            let full_path = app
+                .output_dir
+                .join(format!("Lightmap-{}_Directional.tga", group_index));
+            save_tga(full_path, resolution, resolution, &pixels, true).unwrap();
+        }
     }
 
     readback_buffer.destroy(&app.vk);
     drop(readback_buffer);
-
     lightmap_texels.destroy(&app.vk);
     drop(lightmap_texels);
-
     visibility_buffer.destroy(&app.vk);
     drop(visibility_buffer);
 }

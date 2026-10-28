@@ -174,7 +174,7 @@ pub fn render_normals(
 pub fn decompact_diffuse(
     texels: &[VisibilityTexel],
     coverage: &[f32],
-    diffuse: &[f32],
+    lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
 ) -> (Vec<f32>, Vec<f32>) {
@@ -196,9 +196,9 @@ pub fn decompact_diffuse(
         }
 
         let cov = coverage[compacted_index];
-        let col_x = diffuse[compacted_index * 3 + 0];
-        let col_y = diffuse[compacted_index * 3 + 1];
-        let col_z = diffuse[compacted_index * 3 + 2];
+        let col_x = lightmap_texels[compacted_index * 3 + 0];
+        let col_y = lightmap_texels[compacted_index * 3 + 1];
+        let col_z = lightmap_texels[compacted_index * 3 + 2];
 
         let index = texel.index(resolution);
 
@@ -222,6 +222,72 @@ pub fn decompact_diffuse(
     }
 
     (color, cov_out)
+}
+
+pub fn decompact_directional(
+    texels: &[VisibilityTexel],
+    coverage: &[f32],
+    lightmap_texels: &[f32],
+    mesh: &Mesh,
+    group: &LightmapGroup,
+) -> Vec<f32> {
+    let resolution = group.settings.width as usize;
+    let group_id = group.id;
+    let mut color = vec![0.0; resolution * resolution * 4];
+
+    let directional_offset = texels.len();
+
+    for compacted_index in 0..texels.len() {
+        let texel = &texels[compacted_index];
+
+        let primitive_id = texel.primitive_id as usize;
+        let i0 = mesh.indices[primitive_id * 3 + 0] as usize;
+        let v0 = mesh.vertices[i0];
+
+        if v0.group() != group_id {
+            continue;
+        }
+
+        let cov = coverage[compacted_index];
+        let diffuse = Vector3::new(
+            lightmap_texels[compacted_index * 3 + 0],
+            lightmap_texels[compacted_index * 3 + 1],
+            lightmap_texels[compacted_index * 3 + 2],
+        );
+        let directional = Vector3::new(
+            lightmap_texels[(compacted_index + directional_offset) * 3 + 0],
+            lightmap_texels[(compacted_index + directional_offset) * 3 + 1],
+            lightmap_texels[(compacted_index + directional_offset) * 3 + 2],
+        );
+
+        let luminance = diffuse.luminance();
+        if luminance > 0.0 {
+            let dir = (directional / luminance).normalize();
+            let index = texel.index(resolution);
+
+            color[index * 4 + 0] += dir.x * cov;
+            color[index * 4 + 1] += dir.y * cov;
+            color[index * 4 + 2] += dir.z * cov;
+            color[index * 4 + 3] += cov;
+        }
+    }
+
+    for px in color.chunks_exact_mut(4) {
+        let w = px[3];
+        if w > 0.0 {
+            let dir = Vector3::new(px[0], px[1], px[2]);
+            let dir = dir.normalize();
+            px[0] = dir.x;
+            px[1] = dir.y;
+            px[2] = dir.z;
+        } else {
+            px[0] = 0.5;
+            px[1] = 0.5;
+            px[2] = 0.5;
+        }
+    }
+
+    color
 }
 
 /// Dilates an RGBA f32 lightmap (stride 4) where alpha = texel coverage.

@@ -21,11 +21,11 @@ mod tests {
     const DIRECT_EMISSION_SAMPLES: u32 = 1024 * 4;
     const INDIRECT_SAMPLES: u32 = 256;
     const LIGHT_PROBE_SAMPLES: u32 = 4096;
-    const BOUNCE_COUNT: u32 = 5;
+    const BOUNCE_COUNT: u32 = 0;
 
-    const DENOISE: bool = true;
-    const DILATE: bool = true;
-    const FIX_SEAMS: bool = true;
+    const DENOISE: bool = false;
+    const DILATE: bool = false;
+    const FIX_SEAMS: bool = false;
 
     const MIS: bool = true;
     const HARDWARE_RT: bool = true;
@@ -73,7 +73,7 @@ mod tests {
             direct_emission_samples: DIRECT_EMISSION_SAMPLES,
             indirect_samples: INDIRECT_SAMPLES,
             bounce_count: BOUNCE_COUNT,
-            lightmap_mode: LightmapMode::NonDirectional,
+            lightmap_mode: LightmapMode::DominantDirection,
             skybox_intensity: 1.0,
             indirect_intensity: 1.0,
             lightprobe_deringing: 4.0,

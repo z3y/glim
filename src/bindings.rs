@@ -54,7 +54,7 @@ pub struct GlimConfig {
 }
 
 #[repr(u32)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum LightmapMode {
     NonDirectional = 0,
     DominantDirection = 1,
