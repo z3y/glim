@@ -1,7 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use ash::vk::{self, AMD_PIPELINE_COMPILER_CONTROL_SPEC_VERSION, Handle};
-use exr::image::read;
+use ash::vk::{self, Handle};
 use std::io::{self, Write};
 use std::mem;
 use std::path::PathBuf;
@@ -19,10 +18,7 @@ use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
-use crate::raster::{
-    VisibilityTexel, build_compaction, decompact_diffuse, dilate_lightmap, rasterize_visibility,
-    render_normals, sort_visibility,
-};
+use crate::raster::{build_compaction, decompact_diffuse, dilate_lightmap, rasterize_texels};
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
 
@@ -3356,17 +3352,14 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         mesh.merge_mesh(&app.meshes[i]);
     }
 
-    let (mut visibility_texels, mut visibility_coverage) = rasterize_visibility(&mesh, &app.groups);
-    sort_visibility(
-        &mut visibility_texels,
-        &mut visibility_coverage,
-        &mesh,
-        &app.groups,
-    );
-    let visibility_texels_count = visibility_texels.len();
+    const COVERAGE_THRESHOLD: f32 = 0.05;
+    const MAX_COVERAGE: u32 = 4;
+    let texels = rasterize_texels(&mesh, &app.groups, COVERAGE_THRESHOLD, MAX_COVERAGE);
+    let texels_count = texels.visibility.len();
 
     let (comaction_buffer_data, offsets, table_base) =
-        build_compaction(&visibility_texels, &visibility_coverage, &mesh, &app.groups);
+        build_compaction(&texels, &mesh, &app.groups);
+
     let mut lightmaps_info = {
         let mut infos = Vec::with_capacity(app.groups.len());
         for group_index in 0..app.groups.len() {
@@ -3407,15 +3400,12 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
     );
     app.constants.compaction_buffer_address = compaction_buffer.gpu_address;
 
-    Log::msg(&format!(
-        "Created {} texels for baking.",
-        visibility_texels_count
-    ));
+    Log::msg(&format!("Created {} texels for baking.", texels_count));
 
     let mut visibility_buffer = Buffer::new(
         &app.vk,
         String::from("Visibility Buffer"),
-        &visibility_texels,
+        &texels.visibility,
         vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
@@ -3424,7 +3414,7 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
     let mut lightmap_texels = Buffer::empty(
         &app.vk,
         "Diffuse Buffer".to_owned(),
-        (visibility_texels.len() * mem::size_of::<f32>() * 3) as u64,
+        (texels_count * mem::size_of::<f32>() * 3) as u64,
         vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
@@ -3443,15 +3433,15 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
 
     bake_direct_lights(
         &app,
-        visibility_texels_count,
+        texels_count,
         0,
         app.cpu_lights.len(),
         app.config.direct_light_samples,
     );
 
-    bake_direct_emission(&app, visibility_texels_count);
+    bake_direct_emission(&app, texels_count);
 
-    bake_indirect(&app, &lightmap_texels, visibility_texels_count);
+    bake_indirect(&app, &lightmap_texels, texels_count);
 
     compaction_buffer.destroy(&app.vk);
     drop(compaction_buffer);
@@ -3527,8 +3517,8 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         let resolution = group.settings.width as usize;
 
         let (mut pixels, mut weight) = decompact_diffuse(
-            &visibility_texels,
-            &visibility_coverage,
+            &texels.visibility,
+            &texels.coverage,
             &readback_buffer_slice,
             &mesh,
             &group,

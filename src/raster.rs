@@ -330,16 +330,39 @@ pub fn dilate_lightmap(color: &mut [f32], resolution: usize, iterations: usize) 
 //     cov
 // }
 
-pub fn rasterize_visibility(
+pub struct Texels {
+    // vecs with equal len
+    pub visibility: Vec<VisibilityTexel>,
+    pub coverage: Vec<f32>,
+
+    // corresponds to each lightmap group
+    pub coverage_counts: Vec<Vec<u8>>,
+}
+
+pub fn rasterize_texels(
     mesh: &Mesh,
     groups: &[LightmapGroup],
-) -> (Vec<VisibilityTexel>, Vec<f32>) {
-    let mut texels = Vec::new();
-    let mut coverage = Vec::new();
+    coverage_threshold: f32,
+    max_coverage: u32,
+) -> Texels {
+    // avoids too many reallocations
+    let approx_texels = {
+        let mut sum = 0;
+        for g in groups {
+            sum += g.settings.width * g.settings.width;
+        }
+        sum as usize
+    };
 
-    let mut resolution_lookup = Vec::with_capacity(groups.len());
+    let mut visibility_and_coverage = Vec::with_capacity(approx_texels);
+    // let mut coverage = Vec::with_capacity(approx_texels);
+
+    let mut coverage_counts = Vec::with_capacity(groups.len());
+    let mut resolution_lookups = Vec::with_capacity(groups.len());
     for g in groups {
-        resolution_lookup.push(g.settings.width); // w and h same
+        let res = g.settings.width as usize;
+        coverage_counts.push(vec![0u8; res * res]);
+        resolution_lookups.push(res);
     }
 
     let mut primitive_id: u32 = 0;
@@ -353,7 +376,7 @@ pub fn rasterize_visibility(
         let v2 = &mesh.vertices[tri[2] as usize];
 
         let group = v0.group() as usize;
-        let res = resolution_lookup[group] as i64;
+        let res = resolution_lookups[group] as i64;
         let resf = res as f64;
 
         // UV -> texel space in f64. Pixel (x, y) covers [x, x+1] x [y, y+1].
@@ -445,7 +468,7 @@ pub fn rasterize_visibility(
                     v /= sum;
                 }
 
-                texels.push(VisibilityTexel {
+                let texel = VisibilityTexel {
                     bary: Vector2 {
                         x: u as f32,
                         y: v as f32,
@@ -453,62 +476,111 @@ pub fn rasterize_visibility(
                     primitive_id: prim,
                     x: x as u16,
                     y: y as u16,
-                });
-                coverage.push(area.abs().clamp(0.0, 1.0) as f32);
+                };
+
+                let coverage_count = &mut coverage_counts[group];
+                let index = texel.index(res as usize);
+                coverage_count[index] = coverage_count[index].saturating_add(1u8);
+
+                let c = area.abs().clamp(0.0, 1.0) as f32;
+                visibility_and_coverage.push((texel, c));
             }
         }
     }
 
-    (texels, coverage)
-}
-
-/// Sorts texels and coverage together by (group, cell, rasterizer order).
-/// In place: only a u32 permutation is allocated.
-pub fn sort_visibility(
-    texels: &mut [VisibilityTexel],
-    coverage: &mut [f32],
-    mesh: &Mesh,
-    groups: &[LightmapGroup],
-) {
-    assert_eq!(texels.len(), coverage.len());
-    let n = texels.len();
-
-    // Tiny per-primitive and per-group tables so the key function stays cheap.
-    let prim_group: Vec<u32> = mesh
-        .indices
-        .chunks_exact(3)
-        .map(|t| mesh.vertices[t[0] as usize].group() as u32)
-        .collect();
-    let res_of: Vec<usize> = groups.iter().map(|g| g.settings.width as usize).collect();
-
-    let key = |t: &VisibilityTexel| -> u64 {
-        let g = prim_group[t.primitive_id as usize];
-        ((g as u64) << 40) | t.index(res_of[g as usize]) as u64
+    let key = |x: &(VisibilityTexel, f32)| -> u64 {
+        let t = &x.0;
+        let primitive_id = t.primitive_id;
+        let vertex_index = mesh.indices[primitive_id as usize * 3];
+        let group_index = mesh.vertices[vertex_index as usize].group();
+        let resolution = resolution_lookups[group_index as usize];
+        let texel_index = t.index(resolution);
+        ((group_index as u64) << 32) | texel_index as u64
     };
+    visibility_and_coverage
+        .sort_unstable_by(|a, b| key(a).cmp(&key(b)).then_with(|| b.1.total_cmp(&a.1)));
 
-    // perm[i] = old index of the texel that should end up at position i.
-    let mut perm: Vec<u32> = (0..n as u32).collect();
-    // The original index as tiebreak keeps duplicates in rasterizer order.
-    perm.sort_unstable_by_key(|&i| (key(&texels[i as usize]), i));
+    let mut visibility = Vec::with_capacity(visibility_and_coverage.len());
+    let mut coverage = Vec::with_capacity(visibility_and_coverage.len());
 
-    // Apply the permutation in place by following cycles: new[i] = old[perm[i]].
-    for i in 0..n {
-        if perm[i] as usize == i {
-            continue;
+    let mut prev_key = (u32::MAX, usize::MAX);
+    let mut current_coverage = 0;
+    for (texel, cov) in visibility_and_coverage {
+        let primitive_id = texel.primitive_id;
+        let vertex_index = mesh.indices[primitive_id as usize * 3];
+        let group_index = mesh.vertices[vertex_index as usize].group();
+        let resolution = resolution_lookups[group_index as usize];
+        let texel_index = texel.index(resolution);
+        let key = (group_index, texel_index);
+
+        if key != prev_key {
+            current_coverage = 0;
+            prev_key = key;
         }
-        let mut cur = i;
-        loop {
-            let next = perm[cur] as usize;
-            perm[cur] = cur as u32; // mark as done
-            if next == i {
-                break;
-            }
-            texels.swap(cur, next);
-            coverage.swap(cur, next);
-            cur = next;
+
+        if (cov >= coverage_threshold && current_coverage < max_coverage) || current_coverage == 0 {
+            visibility.push(texel);
+            coverage.push(cov);
+            current_coverage += 1;
         }
     }
+
+    // todo maybe trim
+
+    Texels {
+        visibility,
+        coverage,
+        coverage_counts,
+    }
 }
+
+// /// Sorts texels and coverage together by (group, cell, rasterizer order).
+// /// In place: only a u32 permutation is allocated.
+// pub fn sort_visibility(
+//     texels: &mut [VisibilityTexel],
+//     coverage: &mut [f32],
+//     mesh: &Mesh,
+//     groups: &[LightmapGroup],
+// ) {
+//     assert_eq!(texels.len(), coverage.len());
+//     let n = texels.len();
+
+//     // Tiny per-primitive and per-group tables so the key function stays cheap.
+//     let prim_group: Vec<u32> = mesh
+//         .indices
+//         .chunks_exact(3)
+//         .map(|t| mesh.vertices[t[0] as usize].group() as u32)
+//         .collect();
+//     let res_of: Vec<usize> = groups.iter().map(|g| g.settings.width as usize).collect();
+
+//     let key = |t: &VisibilityTexel| -> u64 {
+//         let g = prim_group[t.primitive_id as usize];
+//         ((g as u64) << 40) | t.index(res_of[g as usize]) as u64
+//     };
+
+//     // perm[i] = old index of the texel that should end up at position i.
+//     let mut perm: Vec<u32> = (0..n as u32).collect();
+//     // The original index as tiebreak keeps duplicates in rasterizer order.
+//     perm.sort_unstable_by_key(|&i| (key(&texels[i as usize]), i));
+
+//     // Apply the permutation in place by following cycles: new[i] = old[perm[i]].
+//     for i in 0..n {
+//         if perm[i] as usize == i {
+//             continue;
+//         }
+//         let mut cur = i;
+//         loop {
+//             let next = perm[cur] as usize;
+//             perm[cur] = cur as u32; // mark as done
+//             if next == i {
+//                 break;
+//             }
+//             texels.swap(cur, next);
+//             coverage.swap(cur, next);
+//             cur = next;
+//         }
+//     }
+// }
 
 // pub fn build_compaction(
 //     texels: &[VisibilityTexel],
@@ -550,11 +622,13 @@ pub fn sort_visibility(
 // }
 
 pub fn build_compaction(
-    texels: &[VisibilityTexel],
-    coverage: &[f32],
+    texels: &Texels,
     mesh: &Mesh,
     groups: &[LightmapGroup],
 ) -> (Vec<[u32; 2]>, Vec<u32>, u32) {
+    let visibility = &texels.visibility;
+    let coverage = &texels.coverage;
+
     let mut per_group: Vec<Vec<[u32; 2]>> = groups
         .iter()
         .map(|g| {
@@ -568,7 +642,7 @@ pub fn build_compaction(
     let mut run: Option<(usize, usize)> = None;
     let mut best_cov = 0.0f32;
 
-    for (i, t) in texels.iter().enumerate() {
+    for (i, t) in visibility.iter().enumerate() {
         let v0 = &mesh.vertices[mesh.indices[t.primitive_id as usize * 3] as usize];
         let g = v0.group() as usize;
         let res = groups[g].settings.width as usize;
@@ -584,7 +658,7 @@ pub fn build_compaction(
             table.last_mut().unwrap()[1] = i as u32;
         }
     }
-    table.push([texels.len() as u32, 0]); // sentinel gives the end of the last run
+    table.push([visibility.len() as u32, 0]); // sentinel gives the end of the last run
 
     let mut words: Vec<[u32; 2]> = Vec::new();
     let mut offsets = Vec::with_capacity(groups.len());
