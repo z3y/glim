@@ -110,6 +110,7 @@ fn area_centroid(poly: &[P; MAX_VERTS], n: usize, origin: P) -> (f64, P) {
 }
 
 // stride 4
+#[allow(dead_code)]
 pub fn render_normals(
     texels: &[VisibilityTexel],
     coverage: &[f32],
@@ -307,28 +308,6 @@ pub fn dilate_lightmap(color: &mut [f32], resolution: usize, iterations: usize) 
         }
     }
 }
-
-// pub fn render_coverage(texels: &[VisibilityTexel], mesh: &Mesh, group: &LightmapGroup) -> Vec<u8> {
-//     let resolution = group.settings.width as usize;
-//     let group_id = group.id;
-//     let mut cov = vec![0u8; resolution * resolution];
-
-//     for texel in texels {
-//         let primitive_id = texel.primitive_id as usize;
-//         let i0 = mesh.indices[primitive_id * 3 + 0] as usize;
-//         let v0 = mesh.vertices[i0];
-
-//         if v0.group() != group_id {
-//             continue;
-//         }
-
-//         let index = texel.index(resolution);
-
-//         cov[index] = cov[index].saturating_add(1u8);
-//     }
-
-//     cov
-// }
 
 pub struct Texels {
     // vecs with equal len
@@ -533,93 +512,6 @@ pub fn rasterize_texels(
         coverage_counts,
     }
 }
-
-// /// Sorts texels and coverage together by (group, cell, rasterizer order).
-// /// In place: only a u32 permutation is allocated.
-// pub fn sort_visibility(
-//     texels: &mut [VisibilityTexel],
-//     coverage: &mut [f32],
-//     mesh: &Mesh,
-//     groups: &[LightmapGroup],
-// ) {
-//     assert_eq!(texels.len(), coverage.len());
-//     let n = texels.len();
-
-//     // Tiny per-primitive and per-group tables so the key function stays cheap.
-//     let prim_group: Vec<u32> = mesh
-//         .indices
-//         .chunks_exact(3)
-//         .map(|t| mesh.vertices[t[0] as usize].group() as u32)
-//         .collect();
-//     let res_of: Vec<usize> = groups.iter().map(|g| g.settings.width as usize).collect();
-
-//     let key = |t: &VisibilityTexel| -> u64 {
-//         let g = prim_group[t.primitive_id as usize];
-//         ((g as u64) << 40) | t.index(res_of[g as usize]) as u64
-//     };
-
-//     // perm[i] = old index of the texel that should end up at position i.
-//     let mut perm: Vec<u32> = (0..n as u32).collect();
-//     // The original index as tiebreak keeps duplicates in rasterizer order.
-//     perm.sort_unstable_by_key(|&i| (key(&texels[i as usize]), i));
-
-//     // Apply the permutation in place by following cycles: new[i] = old[perm[i]].
-//     for i in 0..n {
-//         if perm[i] as usize == i {
-//             continue;
-//         }
-//         let mut cur = i;
-//         loop {
-//             let next = perm[cur] as usize;
-//             perm[cur] = cur as u32; // mark as done
-//             if next == i {
-//                 break;
-//             }
-//             texels.swap(cur, next);
-//             coverage.swap(cur, next);
-//             cur = next;
-//         }
-//     }
-// }
-
-// pub fn build_compaction(
-//     texels: &[VisibilityTexel],
-//     mesh: &Mesh,
-//     groups: &[LightmapGroup],
-// ) -> (Vec<[u32; 2]>, Vec<u32>, u32) {
-//     // Per-group occupancy words.
-//     let mut per_group: Vec<Vec<[u32; 2]>> = groups
-//         .iter()
-//         .map(|g| {
-//             let res = g.settings.width as usize;
-//             vec![[0u32; 2]; (res * res).div_ceil(32)]
-//         })
-//         .collect();
-
-//     for t in texels {
-//         let v0 = &mesh.vertices[mesh.indices[t.primitive_id as usize * 3] as usize];
-//         let g = v0.group() as usize;
-//         let res = groups[g].settings.width as usize;
-//         let cell = t.index(res); // (res-1-y)*res + x, same flip as the shader
-//         per_group[g][cell >> 5][0] |= 1u32 << (cell & 31);
-//     }
-
-//     // Prefix over all groups, so slots are global.
-//     let mut words: Vec<[u32; 2]> = Vec::new();
-//     let mut offsets: Vec<u32> = Vec::with_capacity(groups.len());
-//     let mut slots = 0u32;
-
-//     for g_words in per_group.iter_mut() {
-//         offsets.push(words.len() as u32);
-//         for w in g_words.iter_mut() {
-//             w[1] = slots;
-//             slots += w[0].count_ones();
-//         }
-//         words.extend_from_slice(g_words);
-//     }
-
-//     (words, offsets, slots)
-// }
 
 pub fn build_compaction(
     texels: &Texels,

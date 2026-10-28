@@ -874,3 +874,82 @@ bool ShadowMaskVisibility(Light light, float3 positionWS, out float3 L)
 
     return !TraceShadowRay(shadowRay);
 }
+
+Vertex[3] TriangleVertices(uint primitiveID)
+{
+    uint i0 = Indices[primitiveID * 3 + 0];
+    uint i1 = Indices[primitiveID * 3 + 1];
+    uint i2 = Indices[primitiveID * 3 + 2];
+
+    return { Vertices[i0], Vertices[i1], Vertices[i2] };
+}
+
+void CreateSample(uint index, float2 xi, out float3 positionWS, out float3 normalWS)
+{
+    float4 visibility = CompactedVisibility[index];
+    float2 bary = visibility.xy;
+    uint primitiveID = asuint(visibility.z);
+    // uint x = asuint(visibility.w) & 0xFFFF;
+    // uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
+
+    Vertex[3] v = TriangleVertices(primitiveID);
+
+    float3 p0 = v[0].GetPosition();
+    float3 p1 = v[1].GetPosition();
+    float3 p2 = v[2].GetPosition();
+    float2 uv0 = v[0].GetUV();
+    float2 uv1 = v[1].GetUV();
+    float2 uv2 = v[2].GetUV();
+
+    float3 edge1 = p1 - p0;
+    float3 edge2 = p2 - p0;
+    float2 duv1 = uv1 - uv0;
+    float2 duv2 = uv2 - uv0;
+
+    float det = duv1.x * duv2.y - duv1.y * duv2.x;
+    float invDet = 1.0 / (abs(det) + 1e-9);
+    float invDetSigned = abs(det) > 1e-12 ? 1.0 / det : 0.0;
+
+    float3 dPdU = (edge1 * duv2.y - edge2 * duv1.y) * invDet;
+    float3 dPdV = (edge2 * duv1.x - edge1 * duv2.x) * invDet;
+
+    float3 worldTexelU = dPdU;
+    float3 worldTexelV = dPdV;
+
+    float2 jitterTexel = xi - 0.5;
+
+    float2 dBary;
+    dBary.x = (duv2.y * jitterTexel.x - duv2.x * jitterTexel.y) * invDetSigned;
+    dBary.y = (-duv1.y * jitterTexel.x + duv1.x * jitterTexel.y) * invDetSigned;
+
+    float3 w0 = float3(1.0 - bary.x - bary.y, bary.x, bary.y);
+    float3 dw = float3(-dBary.x - dBary.y, dBary.x, dBary.y);
+
+    // Clip the jitter segment [bary, bary + dBary] to the triangle instead of
+    // projecting the end point. Barycentrics: w = (1 - x - y, x, y)
+    float t = 1.0;
+    [unroll]
+    for (int k = 0; k < 3; k++)
+    {
+        if (dw[k] < 0.0)
+        {
+            // largest t where w0[k] + t * dw[k] >= 0
+            t = min(t, max(w0[k], 0.0) / -dw[k]);
+        }
+    }
+
+    float2 jBary = bary + dBary * t;
+
+    // float-error safety only
+    jBary = max(jBary, 0.0);
+    float s = jBary.x + jBary.y;
+    if (s > 1.0)
+    {
+        jBary /= s;
+    }
+
+    Surface surface = Surface::Get(primitiveID, jBary);
+
+    positionWS = RayOffset(surface.P, surface.Ng);
+    normalWS = surface.N;
+}
