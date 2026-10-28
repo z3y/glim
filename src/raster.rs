@@ -461,3 +461,42 @@ pub fn rasterize_visibility(
 
     (texels, coverage)
 }
+
+pub fn build_compaction(
+    texels: &[VisibilityTexel],
+    mesh: &Mesh,
+    groups: &[LightmapGroup],
+) -> (Vec<[u32; 2]>, Vec<u32>, u32) {
+    // Per-group occupancy words.
+    let mut per_group: Vec<Vec<[u32; 2]>> = groups
+        .iter()
+        .map(|g| {
+            let res = g.settings.width as usize;
+            vec![[0u32; 2]; (res * res).div_ceil(32)]
+        })
+        .collect();
+
+    for t in texels {
+        let v0 = &mesh.vertices[mesh.indices[t.primitive_id as usize * 3] as usize];
+        let g = v0.group() as usize;
+        let res = groups[g].settings.width as usize;
+        let cell = t.index(res); // (res-1-y)*res + x, same flip as the shader
+        per_group[g][cell >> 5][0] |= 1u32 << (cell & 31);
+    }
+
+    // Prefix over all groups, so slots are global.
+    let mut words: Vec<[u32; 2]> = Vec::new();
+    let mut offsets: Vec<u32> = Vec::with_capacity(groups.len());
+    let mut slots = 0u32;
+
+    for g_words in per_group.iter_mut() {
+        offsets.push(words.len() as u32);
+        for w in g_words.iter_mut() {
+            w[1] = slots;
+            slots += w[0].count_ones();
+        }
+        words.extend_from_slice(g_words);
+    }
+
+    (words, offsets, slots)
+}

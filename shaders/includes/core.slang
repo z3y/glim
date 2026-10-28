@@ -560,7 +560,7 @@ uint GetCompactedIndex(float2 uv, uint lightmapGroup, bool flipY = true)
         coords.y = info.resolution.y - 1 - coords.y;
     }
 
-    uint index = InterleaveWithZero(coords.x) | (InterleaveWithZero(coords.y) << 1);
+    uint index = coords.y * info.resolution.x + coords.x;
 
     uint word = index >> 5;
     uint bit = index & 31;

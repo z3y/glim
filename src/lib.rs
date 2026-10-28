@@ -20,7 +20,8 @@ use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
-    VisibilityTexel, decompact_diffuse, dilate_lightmap, rasterize_visibility, render_normals,
+    VisibilityTexel, build_compaction, decompact_diffuse, dilate_lightmap, rasterize_visibility,
+    render_normals,
 };
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
@@ -3209,6 +3210,141 @@ fn bake_direct_lights(
     drop(bake_direct_light_shader);
 }
 
+fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: usize) {
+    if app.config.bounce_count == 0 {
+        return;
+    }
+
+    let indirect_count = match app.config.lightmap_mode {
+        LightmapMode::NonDirectional => visibility_texels_count * 2,
+        LightmapMode::DominantDirection => todo!(),
+        LightmapMode::CombinedSH => todo!(),
+    } as usize;
+
+    let mut indirect_buffer = Buffer::empty(
+        &app.vk,
+        "Indirect Buffer".to_owned(),
+        (indirect_count * size_of::<f32>() * 3) as u64,
+        vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::TRANSFER_DST,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    );
+    zero_buffer(&app.vk, &indirect_buffer);
+
+    let cmd = app.vk.begin_single_use_cmd();
+    let region = vk::BufferCopy {
+        src_offset: 0,
+        dst_offset: (size_of::<f32>() * 3 * visibility_texels_count) as u64,
+        size: (size_of::<f32>() * 3 * visibility_texels_count) as u64,
+    };
+    unsafe {
+        app.vk
+            .device
+            .cmd_copy_buffer(cmd, direct_buffer.buffer, indirect_buffer.buffer, &[region])
+    };
+    app.vk.end_single_use_cmd(cmd);
+
+    // todo
+    // if mixed_count > 0 {
+    //     render_direct_light(
+    //         lights_count as u32 - mixed_count,
+    //         lights_count as u32,
+    //         app.config.direct_light_samples,
+    //         true,
+    //         &mut progress,
+    //     );
+    // }
+
+    #[repr(C)]
+    pub struct PushConstants {
+        pub compacted_count: u32,
+        pub sample_index: u32,
+        pub max_samples: u32,
+        pub bounce_index: u32,
+
+        pub indirect_address: u64,
+        pub pad0: u32,
+        pub pad1: u32,
+    }
+
+    let shader_bindings = ShaderBindings {
+        tlas: app.tlas.acceleration_structure,
+        albedos: &app.albedo_array.views(),
+        emissions: &app.emission_array.views(),
+        skybox: app.skybox.view(),
+        skybox_sampler: app.skybox.sampler(),
+        visibility: vk::ImageView::null(),
+        preview_diffuse: vk::ImageView::null(),
+        cookies: &app.cookie_array.views(),
+        alphas: &app.alphas_array.views(),
+        linear_sampler: app.linear_sampler,
+    };
+
+    let mut indirect_shader = load_compute_shader(
+        &app.vk,
+        ShaderName::BakeIndirect,
+        &app.constants,
+        &shader_bindings,
+        size_of::<PushConstants>(),
+    );
+    update_compute_shader(&app.vk, &indirect_shader, &shader_bindings);
+
+    let groups_x = (visibility_texels_count as u32 + 63) / 64;
+
+    let mut push = PushConstants {
+        compacted_count: visibility_texels_count as u32,
+        sample_index: 0,
+        max_samples: app.config.indirect_samples,
+        bounce_index: 0,
+        indirect_address: indirect_buffer.gpu_address,
+        pad0: 0,
+        pad1: 0,
+    };
+
+    'bounces: for bounce_index in 0..app.config.bounce_count {
+        push.bounce_index = bounce_index;
+
+        let message = format!("Baking Bounce {}", bounce_index + 1);
+        Log::msg(&message);
+
+        // let last_sample = app.config.indirect_samples - 1;
+        for sample_index in 0..app.config.indirect_samples {
+            if is_cancelled() {
+                break 'bounces;
+            }
+            push.sample_index = sample_index;
+            let push_bytes = as_bytes(&push);
+
+            let vk = &app.vk.device;
+            let shader = &indirect_shader;
+
+            let cmd = app.vk.begin_single_use_cmd();
+            unsafe {
+                vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+                vk.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    shader.pipeline_layout,
+                    0,
+                    &[shader.descriptor_set],
+                    &[],
+                );
+                vk.cmd_push_constants(
+                    cmd,
+                    shader.pipeline_layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &push_bytes,
+                );
+                vk.cmd_dispatch(cmd, groups_x, 1, 1);
+            };
+            app.vk.end_single_use_cmd(cmd);
+        }
+    }
+
+    indirect_shader.destroy(&app.vk);
+    indirect_buffer.destroy(&app.vk);
+}
+
 unsafe fn render_lightmaps2(app: &mut Glim) {
     let mut max_resolution = 1;
     for g in &app.groups {
@@ -3221,8 +3357,49 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
     }
 
     let (visibility_texels, visibility_coverage) = rasterize_visibility(&mesh, &app.groups);
-
     let visibility_texels_count = visibility_texels.len();
+
+    let (comaction_buffer_data, offsets, _) =
+        build_compaction(&visibility_texels, &mesh, &app.groups);
+    let mut lightmaps_info = {
+        let mut infos = Vec::with_capacity(app.groups.len());
+        for group_index in 0..app.groups.len() {
+            let group = &app.groups[group_index].settings;
+            infos.push(LightmapInfo {
+                resolution: [group.width, group.height],
+                compaction_offset: offsets[group_index],
+                pad: 0,
+            });
+        }
+
+        let lightmaps_info = Buffer::empty(
+            &app.vk,
+            "Lightmap Info".into(),
+            (infos.len() * std::mem::size_of::<LightmapInfo>()) as u64,
+            vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT, // todo device local
+        );
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                infos.as_ptr() as *const u8,
+                lightmaps_info.ptr as *mut u8,
+                infos.len() * std::mem::size_of::<LightmapInfo>(),
+            );
+        }
+        lightmaps_info
+    };
+    app.constants.lightmaps_info_address = lightmaps_info.gpu_address;
+
+    let mut compaction_buffer = Buffer::new(
+        &app.vk,
+        "Compaction Buffer".to_owned(),
+        &comaction_buffer_data,
+        vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    );
+    app.constants.compaction_buffer_address = compaction_buffer.gpu_address;
 
     Log::msg(&format!(
         "Created {} texels for baking.",
@@ -3267,6 +3444,13 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
     );
 
     bake_direct_emission(&app, visibility_texels_count);
+
+    bake_indirect(&app, &lightmap_texels, visibility_texels_count);
+
+    compaction_buffer.destroy(&app.vk);
+    drop(compaction_buffer);
+    lightmaps_info.destroy(&app.vk);
+    drop(lightmaps_info);
 
     let mut readback_buffer = Buffer::empty(
         &app.vk,
