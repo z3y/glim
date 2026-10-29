@@ -948,15 +948,17 @@ void CreateSample(uint index, float2 xi, out float3 positionWS, out float3 norma
 
     float2 jBary = bary + dBary * t;
 
-    // float-error safety only
-    jBary = max(jBary, 0.0);
-    float s = jBary.x + jBary.y;
-    if (s > 1.0)
+    const bool jitterBary = true;
+    if (jitterBary)
     {
-        jBary /= s;
+        bool inside = jBary.x > 0.0 && jBary.y > 0.0 && (jBary.x + jBary.y) < 1.0;
+        if (inside)
+        {
+            bary = jBary;
+        }
     }
 
-    Surface surface = Surface::Get(primitiveID, jBary);
+    Surface surface = Surface::Get(primitiveID, bary);
 
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
