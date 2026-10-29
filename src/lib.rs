@@ -3214,16 +3214,13 @@ fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: us
         return;
     }
 
-    let indirect_count = match app.config.lightmap_mode {
-        LightmapMode::NonDirectional => visibility_texels_count * 2,
-        LightmapMode::DominantDirection => todo!(),
-        LightmapMode::CombinedSH => todo!(),
-    } as usize;
+    // 2 buffers to keep previous and next bounce diffuse
+    let indirect_texels_count = visibility_texels_count * 2;
 
     let mut indirect_buffer = Buffer::empty(
         &app.vk,
         "Indirect Buffer".to_owned(),
-        (indirect_count * size_of::<f32>() * 3) as u64,
+        (indirect_texels_count * size_of::<f32>() * 3) as u64,
         vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::TRANSFER_DST,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
