@@ -223,6 +223,27 @@ pub fn decompact_diffuse(
     (color, cov_out)
 }
 
+pub fn encode_directional(pixels: &mut [f32], normals: &[f32]) {
+    for (i, px) in pixels.chunks_exact_mut(4).enumerate() {
+        let w = px[3];
+        if w > 0.0 {
+            let dir = Vector3::new(px[0], px[1], px[2]).normalize();
+            let n = Vector3::new(normals[i * 4 + 0], normals[i * 4 + 1], normals[i * 4 + 2]);
+            let nol = dir.dot(n).clamp(0.0, 1.0);
+
+            px[0] = dir.x * 0.5 + 0.5;
+            px[1] = dir.y * 0.5 + 0.5;
+            px[2] = (-dir.z) * 0.5 + 0.5;
+            px[3] = nol * 0.5 + 0.5;
+        } else {
+            px[0] = 0.5;
+            px[1] = 0.5;
+            px[2] = 0.5;
+            px[3] = 0.5;
+        }
+    }
+}
+
 pub fn decompact_directional(
     texels: &[VisibilityTexel],
     coverage: &[f32],

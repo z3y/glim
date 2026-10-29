@@ -19,8 +19,8 @@ use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
-    build_compaction, decompact_diffuse, decompact_directional, dilate_texture, rasterize_texels,
-    render_normals,
+    build_compaction, decompact_diffuse, decompact_directional, dilate_texture, encode_directional,
+    rasterize_texels, render_normals,
 };
 use crate::seams::{Seam, dilate, fix_seams};
 use crate::sh::SHProbeL2;
@@ -3591,11 +3591,11 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                 &group,
             );
 
-            let mut normal = render_normals(&texels.visibility, &texels.coverage, &mesh, &group);
+            let mut normals = render_normals(&texels.visibility, &texels.coverage, &mesh, &group);
 
             if settings.dilate {
                 dilate_texture(&mut pixels, resolution, 2);
-                dilate_texture(&mut normal, resolution, 2);
+                dilate_texture(&mut normals, resolution, 2);
             }
 
             if settings.denoise {
@@ -3609,6 +3609,14 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                     }
                 }
             }
+
+            // let full_path = app
+            //     .output_dir
+            //     .join(format!("Lightmap-{}_Normal.tga", group_index));
+            // save_tga(full_path, resolution, resolution, &normals, false).unwrap();
+
+            encode_directional(&mut pixels, &normals);
+            drop(normals);
 
             if settings.fix_seams {
                 let channels = 4;
@@ -3627,11 +3635,6 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                 .output_dir
                 .join(format!("Lightmap-{}_Directional.tga", group_index));
             save_tga(full_path, resolution, resolution, &pixels, true).unwrap();
-
-            let full_path = app
-                .output_dir
-                .join(format!("Lightmap-{}_Normal.tga", group_index));
-            save_tga(full_path, resolution, resolution, &normal, false).unwrap();
         }
     }
 

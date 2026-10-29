@@ -24,7 +24,7 @@ mod tests {
     const BOUNCE_COUNT: u32 = 0;
 
     const DENOISE: bool = false;
-    const DILATE: bool = false;
+    const DILATE: bool = true;
     const FIX_SEAMS: bool = false;
 
     const MIS: bool = true;
