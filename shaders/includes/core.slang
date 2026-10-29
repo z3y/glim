@@ -586,12 +586,8 @@ uint GetCompactedIndex(float2 uv, uint lightmapGroup, uint primitiveID, bool fli
             return i;
         }
     }
-    if (asuint(CompactedVisibility[run.x].z) != uint::maxValue)
-    {
-        // first in the run is the best-covered texel
-        return run.x;
-    }
-    return uint::maxValue;
+    // first in the run is the best-covered texel
+    return run.x;
 }
 
 float MISWeight(float pdf1, float pdf2)
@@ -889,18 +885,18 @@ Vertex[3] TriangleVertices(uint primitiveID)
     return { Vertices[i0], Vertices[i1], Vertices[i2] };
 }
 
-bool CreateSample(uint index, float2 xi, out float3 positionWS, out float3 normalWS)
+void CreateSample(uint index, float2 xi, out float3 positionWS, out float3 normalWS)
 {
     float4 visibility = CompactedVisibility[index];
     float2 bary = visibility.xy;
     uint primitiveID = asuint(visibility.z);
 
-    if (primitiveID == uint::maxValue)
-    {
-        positionWS = 0.0;
-        normalWS = 0.0;
-        return false;
-    }
+    // if (primitiveID == uint::maxValue)
+    // {
+    //     positionWS = 0.0;
+    //     normalWS = 0.0;
+    //     return false;
+    // }
     // uint x = asuint(visibility.w) & 0xFFFF;
     // uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
 
@@ -998,6 +994,4 @@ bool CreateSample(uint index, float2 xi, out float3 positionWS, out float3 norma
             }
         }
     }
-
-    return true;
 }
