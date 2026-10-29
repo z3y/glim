@@ -186,8 +186,11 @@ pub fn decompact_diffuse(
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
 
-        let primitive_id = texel.primitive_id as usize;
-        let i0 = mesh.indices[primitive_id * 3 + 0] as usize;
+        let primitive_id = texel.primitive_id;
+        if primitive_id == u32::MAX {
+            continue;
+        }
+        let i0 = mesh.indices[(primitive_id as usize) * 3 + 0] as usize;
         let v0 = mesh.vertices[i0];
 
         if v0.group() != group_id {
@@ -198,6 +201,10 @@ pub fn decompact_diffuse(
         let col_x = lightmap_texels[compacted_index * 3 + 0];
         let col_y = lightmap_texels[compacted_index * 3 + 1];
         let col_z = lightmap_texels[compacted_index * 3 + 2];
+
+        if !col_x.is_finite() || !col_y.is_finite() || !col_z.is_finite() {
+            continue;
+        }
 
         let index = texel.index(resolution);
 
@@ -260,8 +267,11 @@ pub fn decompact_directional(
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
 
-        let primitive_id = texel.primitive_id as usize;
-        let i0 = mesh.indices[primitive_id * 3 + 0] as usize;
+        let primitive_id = texel.primitive_id;
+        if primitive_id == u32::MAX {
+            continue;
+        }
+        let i0 = mesh.indices[(primitive_id as usize) * 3 + 0] as usize;
         let v0 = mesh.vertices[i0];
 
         if v0.group() != group_id {
@@ -274,11 +284,20 @@ pub fn decompact_directional(
             lightmap_texels[compacted_index * 3 + 1],
             lightmap_texels[compacted_index * 3 + 2],
         );
+
+        if !diffuse.x.is_finite() || !diffuse.y.is_finite() || !diffuse.z.is_finite() {
+            continue;
+        }
+
         let directional = Vector3::new(
             lightmap_texels[(compacted_index + directional_offset) * 3 + 0],
             lightmap_texels[(compacted_index + directional_offset) * 3 + 1],
             lightmap_texels[(compacted_index + directional_offset) * 3 + 2],
         );
+
+        if !directional.x.is_finite() || !directional.y.is_finite() || !directional.z.is_finite() {
+            continue;
+        }
 
         let luminance = diffuse.luminance();
         if luminance > 0.0 {

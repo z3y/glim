@@ -43,7 +43,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
     float3 positionWS;
     float3 normalWS;
-    CreateSample(index, xiAA, positionWS, normalWS);
+    if (!CreateSample(index, xiAA, positionWS, normalWS))
+    {
+        return;
+    }
 
     Ray ray;
     ray.P = positionWS;

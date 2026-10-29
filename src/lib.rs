@@ -3032,7 +3032,7 @@ fn zero_buffer(vk: &VulkanContext, buffer: &Buffer) {
     vk.end_single_use_cmd(cmd);
 }
 
-fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
+fn bake_direct_emission(app: &Glim, texel_validity: &Buffer, visibility_texels_count: usize) {
     let message = format!("Baking Direct Emission");
     Log::msg(&message);
 
@@ -3042,6 +3042,10 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
         pub sample_index: u32,
         pub max_samples: u32,
         pub pad0: u32,
+
+        pub texel_validity_address: u64,
+        pub pad1: u32,
+        pub pad2: u32,
     }
 
     let shader_bindings = ShaderBindings {
@@ -3071,6 +3075,9 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
         sample_index: 0,
         max_samples: app.config.direct_emission_samples,
         pad0: 0,
+        texel_validity_address: texel_validity.gpu_address,
+        pad1: 0,
+        pad2: 0,
     };
 
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
@@ -3429,6 +3436,20 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
     app.constants.compacted_lightmap_address = lightmap_texels.gpu_address;
     zero_buffer(&app.vk, &lightmap_texels);
 
+    let mut texel_validity = Buffer::empty(
+        &app.vk,
+        "Texel Validity".to_owned(),
+        (texels_count * mem::size_of::<f32>()) as u64,
+        vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    );
+    zero_buffer(&app.vk, &texel_validity);
+    bake_direct_emission(&app, &texel_validity, texels_count);
+    texel_validity.destroy(&app.vk);
+    drop(texel_validity);
+
     bake_direct_lights(
         &app,
         texels_count,
@@ -3436,8 +3457,6 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         app.cpu_lights.len(),
         app.config.direct_light_samples,
     );
-
-    bake_direct_emission(&app, texels_count);
 
     bake_indirect(&app, &lightmap_texels, texels_count);
 

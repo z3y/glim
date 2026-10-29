@@ -10,6 +10,10 @@ struct PushConstants
     uint sampleIndex;
     uint maxSamples;
     uint pad0;
+
+    float *texelValidity;
+    uint pad1;
+    uint pad2;
 };
 
 [shader("compute")]
@@ -70,6 +74,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 
+    float validity = sampleScale;
+
     Hit hit;
     if (TraceRay(ray, hit))
     {
@@ -79,7 +85,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
         {
             if (!surface.backfaceGI)
             {
-                color.a = 0;
+                color.a = 0.0;
+                validity = 0.0;
             }
         }
 
@@ -123,6 +130,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
     }
 
+    Push.texelValidity[index] += validity;
+
     // ValidateSampleColor(color);
 
     CompactedLightmap[index * 3 + 0] += color.x * sampleScale;
@@ -156,4 +165,20 @@ void main(uint3 threadID: SV_DispatchThreadID)
     //     CompactedLightmap[index * 3 + 1] += dominantDirection.y;
     //     CompactedLightmap[index * 3 + 2] += dominantDirection.z;
     // }
+
+    bool lastSample = sampleIndex == (sampleCount - 1);
+    [branch]
+    if (lastSample)
+    {
+        const float validityThreshold = 0.8;
+        if (Push.texelValidity[index] < validityThreshold)
+        {
+            // set primitive id to max value
+            float4 visibility = CompactedVisibility[index];
+            visibility.z = asfloat(uint::maxValue);
+            CompactedVisibility[index] = visibility;
+
+            CompactedLightmap[index * 3 + 0] = asfloat(uint::maxValue);
+        }
+    }
 }
