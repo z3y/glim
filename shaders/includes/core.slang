@@ -965,5 +965,39 @@ bool CreateSample(uint index, float2 xi, out float3 positionWS, out float3 norma
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
 
+    const bool leakDetection = true;
+    if (leakDetection)
+    {
+        float rayLength = (length(worldTexelU) + length(worldTexelV)) * sqrt(0.5);
+        float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
+        float3 v = normalize(worldTexelV - dot(worldTexelV, surface.Ng) * surface.Ng);
+        float3 rayDirs[4] = { u, -u, v, -v };
+
+        Ray ray;
+        ray.P = positionWS;
+        ray.tMin = 0;
+        ray.tMax = rayLength;
+        Hit leakHit;
+
+        [loop]
+        for (int i = 0; i < 4; i++)
+        {
+            ray.D = rayDirs[i];
+
+            if (TraceRay(ray, leakHit))
+            {
+                if (!leakHit.frontFace)
+                {
+                    Surface hitSurf = Surface::Get(leakHit.primitiveID, leakHit.bary, true);
+                    if (!hitSurf.backfaceGI)
+                    {
+                        positionWS = RayOffset(hitSurf.P, hitSurf.Ng);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     return true;
 }

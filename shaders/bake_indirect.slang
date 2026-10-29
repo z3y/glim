@@ -104,12 +104,15 @@ void main(uint3 threadID: SV_DispatchThreadID)
                                             bounceBuffer[(previousOffset + compactIndex) * 3 + 1],
                                             bounceBuffer[(previousOffset + compactIndex) * 3 + 2]);
 
-            float3 current = previousDiffuse * bounceAlbedo * color.a;
-            current *= lerp(1.0, ao, AO_INTENSITY);
-            color.rgb += current;
-            dominantDirection.xyz += ray.D * Luminance(current);
+            if (all(isfinite(previousDiffuse)))
+            {
+                float3 current = previousDiffuse * bounceAlbedo * color.a;
+                current *= lerp(1.0, ao, AO_INTENSITY);
+                color.rgb += current;
+                dominantDirection.xyz += ray.D * Luminance(current);
 
-            AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
+                AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
+            }
         }
         else
         {

@@ -176,9 +176,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
             // set primitive id to max value
             float4 visibility = CompactedVisibility[index];
             visibility.z = asfloat(uint::maxValue);
-            CompactedVisibility[index] = visibility;
+            // CompactedVisibility[index] = visibility;
 
-            CompactedLightmap[index * 3 + 0] = asfloat(uint::maxValue);
+            // CompactedLightmap[index * 3 + 0] = asfloat(uint::maxValue);
         }
     }
 }
