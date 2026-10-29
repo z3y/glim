@@ -116,7 +116,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         }
     }
 
-    // ValidateSampleColor(color);
+    ValidateSampleColor(color);
 
     float4 previous = float4(
         bounceBuffer[(currentOffset + index) * 3 + 0],

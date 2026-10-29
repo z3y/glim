@@ -132,7 +132,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     // Push.texelValidity[index] += validity;
 
-    // ValidateSampleColor(color);
+    ValidateSampleColor(color);
 
     CompactedLightmap[index * 3 + 0] += color.x * sampleScale;
     CompactedLightmap[index * 3 + 1] += color.y * sampleScale;

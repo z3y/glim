@@ -64,7 +64,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 
-    // ValidateSampleColor(color);
+    ValidateSampleColor(color);
 
     // uint2 bounceOffset = GetBounceBufferOffsets(Push.compactedCount);
 
