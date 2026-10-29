@@ -153,7 +153,7 @@ pub fn render_normals(
         normals[index * 4 + 0] += normal.x * cov;
         normals[index * 4 + 1] += normal.y * cov;
         normals[index * 4 + 2] += normal.z * cov;
-        normals[index * 4 + 3] += 1.0;
+        normals[index * 4 + 3] += cov;
     }
 
     for px in normals.chunks_exact_mut(4) {
@@ -164,7 +164,6 @@ pub fn render_normals(
             px[0] = n.x;
             px[1] = n.y;
             px[2] = n.z;
-            px[3] = 1.0;
         }
     }
 
@@ -290,12 +289,12 @@ pub fn decompact_directional(
     color
 }
 
-/// Dilates an RGBA f32 lightmap (stride 4) where alpha = texel coverage.
+/// Dilates an RGBA f32 texture (stride 4) where alpha = texel coverage.
 /// Each empty texel copies the color of ONE neighbor, never a blend.
 /// Real texels always beat propagated ones; among real texels the best
 /// coverage (scaled by distance) wins. Real texels are never modified.
 /// Filled texels get alpha = 1.0.
-pub fn dilate_lightmap(color: &mut [f32], resolution: usize, iterations: usize) {
+pub fn dilate_texture(color: &mut [f32], resolution: usize, iterations: usize) {
     const NEIGHBORS: [(i32, i32, f32); 8] = [
         (-1, 0, 1.0),
         (1, 0, 1.0),
@@ -570,7 +569,10 @@ pub fn rasterize_texels(
         }
     }
 
-    // todo maybe trim
+    // todo set coverage to 1.0 for texels with only one triangle
+    // for higher precision when decompacting
+
+    // todo maybe trim the vecs to avoid larger peak memory
 
     Texels {
         visibility,
