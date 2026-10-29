@@ -43,7 +43,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
     float3 positionWS;
     float3 normalWS;
-    CreateSample(index, xiAA, positionWS, normalWS);
+    CreateSample(index, sampleIndex, xiAA, positionWS, normalWS);
 
     float2 xiLight = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
 

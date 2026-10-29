@@ -885,7 +885,7 @@ Vertex[3] TriangleVertices(uint primitiveID)
     return { Vertices[i0], Vertices[i1], Vertices[i2] };
 }
 
-void CreateSample(uint index, float2 xi, out float3 positionWS, out float3 normalWS)
+void CreateSample(uint index, uint sampleIndex, float2 xi, out float3 positionWS, out float3 normalWS)
 {
     float4 visibility = CompactedVisibility[index];
     float2 bary = visibility.xy;
@@ -949,7 +949,7 @@ void CreateSample(uint index, float2 xi, out float3 positionWS, out float3 norma
     float2 jBary = bary + dBary * t;
 
     const bool jitterBary = true;
-    if (jitterBary)
+    if (jitterBary && sampleIndex > 0)
     {
         bool inside = jBary.x > 0.0 && jBary.y > 0.0 && (jBary.x + jBary.y) < 1.0;
         if (inside)
@@ -964,7 +964,9 @@ void CreateSample(uint index, float2 xi, out float3 positionWS, out float3 norma
     normalWS = surface.N;
 
     const bool leakDetection = true;
-    if (leakDetection)
+    bool skipLeakRay = asuint(visibility.w) == uint::maxValue;
+    [branch]
+    if (leakDetection && !skipLeakRay)
     {
         float rayLength = (length(worldTexelU) + length(worldTexelV)) * sqrt(0.5);
         float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
@@ -977,6 +979,7 @@ void CreateSample(uint index, float2 xi, out float3 positionWS, out float3 norma
         ray.tMax = rayLength;
         Hit leakHit;
 
+        bool canLeak = false;
         [loop]
         for (int i = 0; i < 4; i++)
         {
@@ -984,6 +987,7 @@ void CreateSample(uint index, float2 xi, out float3 positionWS, out float3 norma
 
             if (TraceRay(ray, leakHit))
             {
+                canLeak = true;
                 if (!leakHit.frontFace)
                 {
                     Surface hitSurf = Surface::Get(leakHit.primitiveID, leakHit.bary, true);
@@ -994,6 +998,13 @@ void CreateSample(uint index, float2 xi, out float3 positionWS, out float3 norma
                     }
                 }
             }
+        }
+
+        [branch]
+        if (sampleIndex == 0 && !canLeak)
+        {
+            visibility.w = asfloat(uint::maxValue);
+            CompactedVisibility[index] = visibility;
         }
     }
 }

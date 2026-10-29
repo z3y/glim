@@ -39,7 +39,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
     float3 positionWS;
     float3 normalWS;
-    CreateSample(index, xiAA, positionWS, normalWS);
+    CreateSample(index, sampleIndex, xiAA, positionWS, normalWS);
 
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0);
