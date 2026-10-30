@@ -288,7 +288,6 @@ impl GpuMesh {
         }
 
         if !config.is_preview {
-            let flip = config.coordinate_system == CoordinateSystem::Unity;
             *seams = find_seams(&merged_mesh, true);
         }
 

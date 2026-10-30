@@ -109,17 +109,21 @@ fn area_centroid(poly: &[P; MAX_VERTS], n: usize, origin: P) -> (f64, P) {
     (a2 * 0.5, (origin.0 + cx * inv, origin.1 + cy * inv))
 }
 
-// stride 4
-#[allow(dead_code)]
 pub fn render_normals(
+    buffer: &mut [f32],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
-) -> Vec<f32> {
+) {
     let resolution = group.settings.width as usize;
     let group_id = group.id;
-    let mut normals = vec![0.0; resolution * resolution * 4];
+
+    let count = resolution * resolution * 4;
+    assert!(buffer.len() >= count);
+
+    let buffer = &mut buffer[0..count];
+    buffer.fill(0.0);
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -150,13 +154,13 @@ pub fn render_normals(
         let cov = coverage[compacted_index];
 
         let index = texel.index(resolution);
-        normals[index * 4 + 0] += normal.x * cov;
-        normals[index * 4 + 1] += normal.y * cov;
-        normals[index * 4 + 2] += normal.z * cov;
-        normals[index * 4 + 3] += cov;
+        buffer[index * 4 + 0] += normal.x * cov;
+        buffer[index * 4 + 1] += normal.y * cov;
+        buffer[index * 4 + 2] += normal.z * cov;
+        buffer[index * 4 + 3] += cov;
     }
 
-    for px in normals.chunks_exact_mut(4) {
+    for px in buffer.chunks_exact_mut(4) {
         let w = px[3];
         if w > 0.0 {
             let n = Vector3::new(px[0], px[1], px[2]);
@@ -166,20 +170,23 @@ pub fn render_normals(
             px[2] = n.z;
         }
     }
-
-    normals
 }
 
 pub fn decompact_diffuse(
+    buffer: &mut [f32],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
-) -> Vec<f32> {
+) {
     let resolution = group.settings.width as usize;
     let group_id = group.id;
-    let mut color = vec![0.0; resolution * resolution * 4];
+
+    let count = resolution * resolution * 4;
+
+    let buffer = &mut buffer[0..count];
+    buffer.fill(0.0);
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -206,13 +213,13 @@ pub fn decompact_diffuse(
 
         let index = texel.index(resolution);
 
-        color[index * 4 + 0] += col_x * cov;
-        color[index * 4 + 1] += col_y * cov;
-        color[index * 4 + 2] += col_z * cov;
-        color[index * 4 + 3] += cov;
+        buffer[index * 4 + 0] += col_x * cov;
+        buffer[index * 4 + 1] += col_y * cov;
+        buffer[index * 4 + 2] += col_z * cov;
+        buffer[index * 4 + 3] += cov;
     }
 
-    for px in color.chunks_exact_mut(4) {
+    for px in buffer.chunks_exact_mut(4) {
         let w = px[3].min(1.0);
 
         if w > 0.0 {
@@ -222,13 +229,11 @@ pub fn decompact_diffuse(
             px[3] = w;
         }
     }
-
-    color
 }
 
 pub fn encode_directional(pixels: &mut [f32], normals: &[f32]) {
     for (i, px) in pixels.chunks_exact_mut(4).enumerate() {
-        let w = px[3];
+        // let w = px[3];
         // if w > 0.0 {
         let mut dir = Vector3::new(px[0], px[1], px[2]);
 
@@ -251,15 +256,20 @@ pub fn encode_directional(pixels: &mut [f32], normals: &[f32]) {
 }
 
 pub fn decompact_directional(
+    buffer: &mut [f32],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
-) -> Vec<f32> {
+) {
     let resolution = group.settings.width as usize;
     let group_id = group.id;
-    let mut color = vec![0.0; resolution * resolution * 4];
+
+    let count = resolution * resolution * 4;
+
+    let buffer = &mut buffer[0..count];
+    buffer.fill(0.0);
 
     let directional_offset = texels.len();
 
@@ -303,14 +313,14 @@ pub fn decompact_directional(
             let dir = (directional / luminance).normalize();
             let index = texel.index(resolution);
 
-            color[index * 4 + 0] += dir.x * cov;
-            color[index * 4 + 1] += dir.y * cov;
-            color[index * 4 + 2] += dir.z * cov;
-            color[index * 4 + 3] += cov;
+            buffer[index * 4 + 0] += dir.x * cov;
+            buffer[index * 4 + 1] += dir.y * cov;
+            buffer[index * 4 + 2] += dir.z * cov;
+            buffer[index * 4 + 3] += cov;
         }
     }
 
-    for px in color.chunks_exact_mut(4) {
+    for px in buffer.chunks_exact_mut(4) {
         let w = px[3].min(1.0);
 
         if w > 0.0 {
@@ -326,8 +336,6 @@ pub fn decompact_directional(
             px[2] = 0.5;
         }
     }
-
-    color
 }
 
 pub fn dilate_texture(pixels: &mut [f32], resolution: usize, radius: usize) {
@@ -398,9 +406,8 @@ pub struct Texels {
     // vecs with equal len
     pub visibility: Vec<VisibilityTexel>,
     pub coverage: Vec<f32>,
-
     // corresponds to each lightmap group
-    pub coverage_counts: Vec<Vec<u8>>,
+    // pub coverage_counts: Vec<Vec<u8>>,
 }
 
 pub fn rasterize_texels(
@@ -421,11 +428,11 @@ pub fn rasterize_texels(
     let mut visibility_and_coverage = Vec::with_capacity(approx_texels);
     // let mut coverage = Vec::with_capacity(approx_texels);
 
-    let mut coverage_counts = Vec::with_capacity(groups.len());
+    // let mut coverage_counts = Vec::with_capacity(groups.len());
     let mut resolution_lookups = Vec::with_capacity(groups.len());
     for g in groups {
         let res = g.settings.width as usize;
-        coverage_counts.push(vec![0u8; res * res]);
+        // coverage_counts.push(vec![0u8; res * res]);
         resolution_lookups.push(res);
     }
 
@@ -542,9 +549,9 @@ pub fn rasterize_texels(
                     y: y as u16,
                 };
 
-                let coverage_count = &mut coverage_counts[group];
-                let index = texel.index(res as usize);
-                coverage_count[index] = coverage_count[index].saturating_add(1u8);
+                // let coverage_count = &mut coverage_counts[group];
+                // let index = texel.index(res as usize);
+                // coverage_count[index] = coverage_count[index].saturating_add(1u8);
 
                 let c = area.abs().clamp(0.0, 1.0) as f32;
                 visibility_and_coverage.push((texel, c));
@@ -599,7 +606,7 @@ pub fn rasterize_texels(
     Texels {
         visibility,
         coverage,
-        coverage_counts,
+        // coverage_counts,
     }
 }
 

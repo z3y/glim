@@ -22,10 +22,9 @@ use crate::raster::{
     build_compaction, decompact_diffuse, decompact_directional, dilate_texture, encode_directional,
     rasterize_texels, render_normals,
 };
-use crate::seams::{Seam, dilate, fix_seams};
+use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
 
-use crate::shader::ShaderName::CompactVisibility;
 use crate::shader::{
     PreviewPushConstants, ShaderBindings, ShaderName, SpecializationConstants, load_compute_shader,
     update_compute_shader,
@@ -2670,7 +2669,7 @@ unsafe fn render_lightmaps(app: &mut Glim) {
             }
 
             if group.dilate {
-                dilate(pixels, group.width, group.height, 0.5);
+                // dilate(pixels, group.width, group.height, 0.5);
             }
 
             // for baking light probes the denoised lightmap could also be used
@@ -3530,12 +3529,20 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         }
     }
 
+    let mut buffer = vec![0.0; max_resolution * max_resolution * 4];
+    let mut buffer_normal = if app.config.lightmap_mode == LightmapMode::DominantDirection {
+        vec![0.0; max_resolution * max_resolution * 4]
+    } else {
+        Vec::new()
+    };
+
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index];
         let settings = &group.settings;
         let resolution = group.settings.width as usize;
 
-        let mut pixels = decompact_diffuse(
+        decompact_diffuse(
+            &mut buffer,
             &texels.visibility,
             &texels.coverage,
             &readback_buffer_slice,
@@ -3546,11 +3553,11 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         if settings.denoise {
             // fix denoiser artifacts on edges
             if settings.dilate {
-                dilate_texture(&mut pixels, resolution, 2);
+                dilate_texture(&mut buffer, resolution, 2);
             }
             match &oidn {
                 Some(oidn) => {
-                    oidn.denoise(&mut pixels, resolution, resolution, false);
+                    oidn.denoise(&mut buffer, resolution, resolution, false);
                 }
                 None => {
                     let message = format!("<color=red>Denoise Failed</color>");
@@ -3560,13 +3567,13 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         }
 
         if settings.dilate {
-            dilate_texture(&mut pixels, resolution, 4);
+            dilate_texture(&mut buffer, resolution, 4);
         }
 
         if settings.fix_seams {
             let channels = 3;
             fix_seams(
-                &mut pixels,
+                &mut buffer,
                 resolution as u32,
                 resolution as u32,
                 &app.seams,
@@ -3589,9 +3596,9 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             let index = x + flipped_y * resolution;
 
             (
-                f16::from_f32(pixels[index * 4 + 0]),
-                f16::from_f32(pixels[index * 4 + 1]),
-                f16::from_f32(pixels[index * 4 + 2]),
+                f16::from_f32(buffer[index * 4 + 0]),
+                f16::from_f32(buffer[index * 4 + 1]),
+                f16::from_f32(buffer[index * 4 + 2]),
             )
         });
 
@@ -3605,7 +3612,8 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         Image::from_layer(layer).write().to_file(full_path).unwrap();
 
         if app.config.lightmap_mode == LightmapMode::DominantDirection {
-            let mut pixels = decompact_directional(
+            decompact_directional(
+                &mut buffer,
                 &texels.visibility,
                 &texels.coverage,
                 &readback_buffer_slice,
@@ -3616,11 +3624,11 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             if settings.denoise {
                 // fix denoiser artifacts on edges
                 if settings.dilate {
-                    dilate_texture(&mut pixels, resolution, 2);
+                    dilate_texture(&mut buffer, resolution, 2);
                 }
                 match &oidn {
                     Some(oidn) => {
-                        oidn.denoise(&mut pixels, resolution, resolution, true);
+                        oidn.denoise(&mut buffer, resolution, resolution, true);
                     }
                     None => {
                         let message = format!("<color=red>Denoise Failed</color>");
@@ -3629,25 +3637,30 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                 }
             }
 
-            let mut normals = render_normals(&texels.visibility, &texels.coverage, &mesh, &group);
+            render_normals(
+                &mut buffer_normal,
+                &texels.visibility,
+                &texels.coverage,
+                &mesh,
+                &group,
+            );
 
             if settings.dilate {
-                dilate_texture(&mut pixels, resolution, 4);
-                dilate_texture(&mut normals, resolution, 4);
+                dilate_texture(&mut buffer, resolution, 4);
+                dilate_texture(&mut buffer_normal, resolution, 4);
             }
 
-            // let full_path = app
-            //     .output_dir
-            //     .join(format!("Lightmap-{}_Normal.tga", group_index));
-            // save_tga(full_path, resolution, resolution, &normals, false).unwrap();
+            let full_path = app
+                .output_dir
+                .join(format!("Lightmap-{}_Normal.tga", group_index));
+            save_tga(full_path, resolution, resolution, &buffer_normal, false).unwrap();
 
-            encode_directional(&mut pixels, &normals);
-            drop(normals);
+            encode_directional(&mut buffer, &buffer_normal);
 
             if settings.fix_seams {
                 let channels = 4;
                 fix_seams(
-                    &mut pixels,
+                    &mut buffer,
                     resolution as u32,
                     resolution as u32,
                     &app.seams,
@@ -3660,9 +3673,12 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             let full_path = app
                 .output_dir
                 .join(format!("Lightmap-{}_Directional.tga", group_index));
-            save_tga(full_path, resolution, resolution, &pixels, true).unwrap();
+            save_tga(full_path, resolution, resolution, &buffer, true).unwrap();
         }
     }
+
+    drop(buffer);
+    drop(buffer_normal);
 
     readback_buffer.destroy(&app.vk);
     drop(readback_buffer);
