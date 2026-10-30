@@ -544,8 +544,7 @@ fn initialize_render(app: &mut Glim) {
     if app.config.is_preview {
         render_preview(app);
     } else {
-        // unsafe { render_lightmaps(app) };
-        unsafe { render_lightmaps2(app) };
+        render_lightmaps(app)
     }
     unsafe {
         app.vk.device.device_wait_idle().unwrap();
@@ -1903,7 +1902,148 @@ fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: us
     indirect_buffer.destroy(&app.vk);
 }
 
-unsafe fn render_lightmaps2(app: &mut Glim) {
+fn bake_light_probes(app: &mut Glim) {
+    if app.probes.len() == 0 || is_cancelled() {
+        return;
+    }
+
+    Log::msg(&format!("Baking Light Probes"));
+
+    let mut probes_buffer = Buffer::new(
+        &app.vk,
+        String::from("Light Probes"),
+        &app.probes,
+        vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+            | vk::BufferUsageFlags::TRANSFER_SRC,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    );
+
+    #[repr(C)]
+    pub struct PushConstants {
+        pub lights_count: u32,
+        pub max_samples: u32,
+        pub sample_index: u32,
+        pub probes_count: u32,
+
+        pub sh_probes_address: u64,
+        pub pad0: u64,
+    }
+
+    let shader_bindings = ShaderBindings {
+        tlas: app.tlas.acceleration_structure,
+        albedos: &app.albedo_array.views(),
+        emissions: &app.emission_array.views(),
+        skybox: app.skybox.view(),
+        skybox_sampler: app.skybox.sampler(),
+        visibility: vk::ImageView::null(),
+        preview_diffuse: vk::ImageView::null(),
+        cookies: &app.cookie_array.views(),
+        alphas: &app.alphas_array.views(),
+        linear_sampler: app.linear_sampler,
+    };
+
+    let mut shader = load_compute_shader(
+        &app.vk,
+        ShaderName::BakeLightProbes,
+        &app.constants,
+        &shader_bindings,
+        size_of::<PushConstants>(),
+    );
+    update_compute_shader(&app.vk, &shader, &shader_bindings);
+
+    let mut push = PushConstants {
+        lights_count: app.cpu_lights.len() as u32,
+        max_samples: app.config.probe_samples,
+        sample_index: 0,
+        probes_count: app.probes.len() as u32,
+        sh_probes_address: probes_buffer.gpu_address,
+        pad0: 0,
+    };
+
+    let probes_count = app.probes.len() as u32;
+    let groups_x = (probes_count + 63) / 64;
+    let vk = &app.vk.device;
+
+    let mut progress = 0.0;
+    let progress_scale = 1.0 / app.config.probe_samples as f32;
+    let last_sample = app.config.probe_samples - 1;
+
+    for sample_index in 0..app.config.probe_samples {
+        if is_cancelled() {
+            break;
+        }
+        push.sample_index = sample_index;
+        let constants_bytes = as_bytes(&push);
+
+        if sample_index % 4 == 0 || sample_index == last_sample {
+            Log::progress(progress * progress_scale);
+        }
+        progress += 1.0;
+
+        let cmd = app.vk.begin_single_use_cmd();
+
+        unsafe {
+            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                shader.pipeline_layout,
+                0,
+                &[shader.descriptor_set],
+                &[],
+            );
+
+            vk.cmd_push_constants(
+                cmd,
+                shader.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &constants_bytes,
+            );
+
+            vk.cmd_dispatch(cmd, groups_x, 1, 1);
+        }
+        app.vk.end_single_use_cmd(cmd);
+    }
+
+    let mut staging_buffer_light_probes = Buffer::empty(
+        &app.vk,
+        "Staging Buffer Light Probes".to_owned(),
+        probes_buffer.bytes,
+        vk::BufferUsageFlags::TRANSFER_DST,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    );
+
+    let cmd = app.vk.begin_single_use_cmd();
+    let region = vk::BufferCopy {
+        src_offset: 0,
+        dst_offset: 0,
+        size: probes_buffer.bytes,
+    };
+    unsafe {
+        app.vk.device.cmd_copy_buffer(
+            cmd,
+            probes_buffer.buffer,
+            staging_buffer_light_probes.buffer,
+            &[region],
+        )
+    };
+    app.vk.end_single_use_cmd(cmd);
+
+    let readback_data = LightprobesReadbackData {
+        probes: staging_buffer_light_probes.ptr as *const SHProbeL2,
+        pixels_count: app.probes.len() as u32,
+    };
+
+    (app.config.lightprobes_read_callback)(readback_data);
+    shader.destroy(&app.vk);
+    staging_buffer_light_probes.destroy(&app.vk);
+    probes_buffer.destroy(&app.vk);
+}
+
+fn render_lightmaps(app: &mut Glim) {
     let mut max_resolution = 1;
     for g in &app.groups {
         max_resolution = max_resolution.max(g.settings.width as usize);
@@ -2018,11 +2158,6 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
 
     bake_indirect(&app, &lightmap_texels, texels_count);
 
-    compaction_buffer.destroy(&app.vk);
-    drop(compaction_buffer);
-    lightmaps_info.destroy(&app.vk);
-    drop(lightmaps_info);
-
     let mut readback_buffer = Buffer::empty(
         &app.vk,
         "Readback Buffer".to_owned(),
@@ -2052,10 +2187,12 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         app.vk.end_single_use_cmd(cmd);
     }
 
-    let readback_buffer_slice: &mut [f32] = std::slice::from_raw_parts_mut(
-        readback_buffer.ptr as *mut f32,
-        readback_buffer.bytes as usize,
-    );
+    let readback_buffer_slice: &mut [f32] = unsafe {
+        std::slice::from_raw_parts_mut(
+            readback_buffer.ptr as *mut f32,
+            readback_buffer.bytes as usize,
+        )
+    };
 
     let oidn = Oidn::load();
     let mut oidn = if oidn.is_err() {
@@ -2289,11 +2426,17 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
 
     drop(buffer);
     drop(buffer_normal);
-
     readback_buffer.destroy(&app.vk);
     drop(readback_buffer);
-    lightmap_texels.destroy(&app.vk);
-    drop(lightmap_texels);
+
+    bake_light_probes(app);
+
     visibility_buffer.destroy(&app.vk);
     drop(visibility_buffer);
+    compaction_buffer.destroy(&app.vk);
+    drop(compaction_buffer);
+    lightmaps_info.destroy(&app.vk);
+    drop(lightmaps_info);
+    lightmap_texels.destroy(&app.vk);
+    drop(lightmap_texels);
 }
