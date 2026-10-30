@@ -307,6 +307,7 @@ fn initialize_render(app: &mut Glim) {
 
     // upload lights
     if app.cpu_lights.len() > 0 {
+        // first other lights, then area, then mixed
         app.cpu_lights.sort_unstable_by_key(|x| {
             if x.ty == LightType::Area || x.ty == LightType::Disc {
                 1u8
@@ -1643,6 +1644,8 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
         }
         push.sample_index = sample_index;
 
+        Log::progress(push.sample_index as f32 / push.max_samples as f32);
+
         let vk = &app.vk.device;
         let push_bytes = as_bytes(&push);
 
@@ -1679,6 +1682,7 @@ fn bake_direct_lights(
     lights_start: usize,
     lights_count: usize,
     samples: u32,
+    mixed: bool,
 ) {
     if lights_count == 0 {
         return;
@@ -1688,7 +1692,7 @@ fn bake_direct_lights(
     pub struct PushConstants {
         pub texel_count: u32,
         pub sample_index: u32,
-        pub samples: u32,
+        pub max_samples: u32,
         pub mixed: u32,
 
         pub lights_start: u32,
@@ -1723,8 +1727,8 @@ fn bake_direct_lights(
     let mut push = PushConstants {
         texel_count: visibility_texels_count as u32,
         sample_index: 0,
-        samples,
-        mixed: 0, // todo mixed
+        max_samples: samples,
+        mixed: mixed as u32,
         lights_start: lights_start as u32,
         lights_count: lights_count as u32,
         pad1: 0,
@@ -1742,6 +1746,8 @@ fn bake_direct_lights(
         let push_bytes = as_bytes(&push);
 
         let vk = &app.vk.device;
+
+        Log::progress(push.sample_index as f32 / push.max_samples as f32);
 
         let cmd = app.vk.begin_single_use_cmd();
         unsafe {
@@ -1857,6 +1863,8 @@ fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: us
         pad1: 0,
     };
 
+    let total_steps = (app.config.bounce_count * app.config.indirect_samples) as f32;
+
     'bounces: for bounce_index in 0..app.config.bounce_count {
         push.bounce_index = bounce_index;
 
@@ -1870,6 +1878,10 @@ fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: us
             }
             push.sample_index = sample_index;
             let push_bytes = as_bytes(&push);
+
+            Log::progress(
+                (bounce_index * app.config.indirect_samples + sample_index) as f32 / total_steps,
+            );
 
             let vk = &app.vk.device;
             let shader = &indirect_shader;
@@ -1965,10 +1977,6 @@ fn bake_light_probes(app: &mut Glim) {
     let groups_x = (probes_count + 63) / 64;
     let vk = &app.vk.device;
 
-    let mut progress = 0.0;
-    let progress_scale = 1.0 / app.config.probe_samples as f32;
-    let last_sample = app.config.probe_samples - 1;
-
     for sample_index in 0..app.config.probe_samples {
         if is_cancelled() {
             break;
@@ -1976,10 +1984,7 @@ fn bake_light_probes(app: &mut Glim) {
         push.sample_index = sample_index;
         let constants_bytes = as_bytes(&push);
 
-        if sample_index % 4 == 0 || sample_index == last_sample {
-            Log::progress(progress * progress_scale);
-        }
-        progress += 1.0;
+        Log::progress(push.sample_index as f32 / push.max_samples as f32);
 
         let cmd = app.vk.begin_single_use_cmd();
 
@@ -2134,29 +2139,65 @@ fn render_lightmaps(app: &mut Glim) {
     app.constants.compacted_lightmap_address = lightmap_texels.gpu_address;
     zero_buffer(&app.vk, &lightmap_texels);
 
-    // let mut texel_validity = Buffer::empty(
-    //     &app.vk,
-    //     "Texel Validity".to_owned(),
-    //     (texels_count * mem::size_of::<f32>()) as u64,
-    //     vk::BufferUsageFlags::TRANSFER_DST
-    //         | vk::BufferUsageFlags::TRANSFER_SRC
-    //         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-    //     vk::MemoryPropertyFlags::DEVICE_LOCAL,
-    // );
-    // zero_buffer(&app.vk, &texel_validity);
-    bake_direct_emission(&app, texels_count);
-    // texel_validity.destroy(&app.vk);
-    // drop(texel_validity);
+    bake_direct_emission(app, texels_count);
 
+    // todo area lights with more samples
+    let mut mixed_start = 0;
+    let mut area_start = 0;
+    let mut area_count = 0;
+    let mut mixed_count = 0;
+
+    for i in 0..app.cpu_lights.len() {
+        let light = &app.cpu_lights[i];
+
+        if light.ty == LightType::Area || light.ty == LightType::Disc {
+            if area_count == 0 {
+                area_start = i;
+            }
+            area_count += 1;
+        }
+
+        if light.mixed {
+            if mixed_count == 0 {
+                mixed_start = i;
+            }
+            mixed_count += 1;
+        }
+    }
+
+    let count = app.cpu_lights.len() - area_count - mixed_count;
+    Log::msg(&format!("Baking {} Direct Lights", count));
     bake_direct_lights(
-        &app,
+        app,
         texels_count,
         0,
-        app.cpu_lights.len(),
+        count,
         app.config.direct_light_samples,
+        false,
     );
 
-    bake_indirect(&app, &lightmap_texels, texels_count);
+    Log::msg(&format!("Baking {} Area Lights", area_count));
+    bake_direct_lights(
+        app,
+        texels_count,
+        area_start,
+        area_count,
+        app.config.direct_emission_samples,
+        false,
+    );
+
+    Log::msg(&format!("Baking {} Mixed Lights", mixed_count));
+    // todo mixed
+    // bake_direct_lights(
+    //     app,
+    //     texels_count,
+    //     mixed_start,
+    //     mixed_count,
+    //     app.config.direct_light_samples,
+    //     true,
+    // );
+
+    bake_indirect(app, &lightmap_texels, texels_count);
 
     let mut readback_buffer = Buffer::empty(
         &app.vk,
