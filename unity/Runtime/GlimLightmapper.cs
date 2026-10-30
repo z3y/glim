@@ -31,8 +31,6 @@ namespace Glim
 
     public class GlimLightmapper : MonoBehaviour
     {
-        [Header("Bake Settings")]
-
         [Tooltip(
 @"- Non-Directional
 Bakes a single diffuse lightmap texture.
@@ -84,13 +82,13 @@ Affects lightmaps, light probes and light volumes.")]
         public uint bounces = 5;
 
         [Space]
-        [Tooltip("Minimum texel coverage of a triangle. Texels covered by only one triangle are always kept.")]
+        [Tooltip("Minimum texel coverage of a triangle. Texels covered by only one triangle are always kept. Lower threshold uses more memory and slows down baking.")]
         [Range(0.0f, 1.0f)] public float coverageMinThreshold = 0.05f;
 
-        [Tooltip("Maximum number of samples created at a lightmap texel during baking. Texels are sorted by their coverage, ones above this number get discarded. Results get weighted by their coverage.")]
+        [Tooltip("Maximum number of samples created at a lightmap texel during baking. Texels are sorted by their coverage, ones above this number get discarded. Results get weighted by their coverage. Higher sample count uses more memory and slows down baking.")]
         [Range(1, 32)] public uint coverageMaxSamples = 4;
 
-        [Tooltip("Jitters barycentrics inside a triangle per sample.")]
+        [Tooltip("Jitter barycentrics inside a triangle per sample.")]
         public bool antiAliasing = true;
 
 
@@ -106,7 +104,7 @@ Affects lightmaps, light probes and light volumes.")]
         [Space]
         public uint lightProbeSamples = 4096;
         [Tooltip(
-@"Jitters light probe samples by defined radius in meters.
+@"Jitter light probe samples by defined radius in meters.
 Probe positions are also moved outside of geometry defined by this radius.
 Automatically applied to light volumes based on texel size."
 )]
@@ -124,8 +122,7 @@ Automatically applied to light volumes based on texel size."
         public bool reflectionProbesSpecular = false; // todo URP Shader
 
 
-
-        [Header("Preview Settings")]
+        [Space]
         public uint previewWidth = 1024;
         public uint previewHeight = 1024;
         public uint previewThrottle = 2;
@@ -137,9 +134,8 @@ Automatically applied to light volumes based on texel size."
         [Tooltip("(Experimental)\nHashes mesh data in order to skip uv packing if no changes are detected.")]
         [NonSerialized] public bool enableUVCache = false;
 
-        [Header("Default Group")]
+        [Space]
         public GlimLightmapGroup group;
-
 
         [MenuItem("Tools/Glim/Bake")]
         public static void CreateLightmapBaker()

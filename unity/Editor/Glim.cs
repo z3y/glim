@@ -504,7 +504,6 @@ namespace Glim
 
                 if (true)
                 {
-
                     if (lightmapGroup.packingType == UVPackingType.ScaleOffset || lightmapGroup.packingType == UVPackingType.SplitCharts)
                     {
                         var sw = new Stopwatch();
@@ -621,10 +620,10 @@ namespace Glim
                         }
                     }
                 }
-                else
-                {
-                    Bake.bakeMessages.AppendLine($"Group {groupIndex} using cached lightmap UVs");
-                }
+                // else
+                // {
+                //     Bake.bakeMessages.AppendLine($"Group {groupIndex} using cached lightmap UVs");
+                // }
 
                 bool saveGroup = !(config.is_preview || lightmapGroup.discard);
 
