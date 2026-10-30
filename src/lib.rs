@@ -3532,7 +3532,7 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         let settings = &group.settings;
         let resolution = group.settings.width as usize;
 
-        let (mut pixels, mut weight) = decompact_diffuse(
+        let mut pixels = decompact_diffuse(
             &texels.visibility,
             &texels.coverage,
             &readback_buffer_slice,
@@ -3554,6 +3554,8 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                     Log::msg(&message);
                 }
             }
+            // fix denoiser artifacts on edges
+            dilate_texture(&mut pixels, resolution, 2);
         }
 
         if settings.fix_seams {
@@ -3623,6 +3625,7 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                         Log::msg(&message);
                     }
                 }
+                dilate_texture(&mut pixels, resolution, 2);
             }
 
             // let full_path = app

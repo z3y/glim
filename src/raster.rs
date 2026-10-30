@@ -176,12 +176,10 @@ pub fn decompact_diffuse(
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
-) -> (Vec<f32>, Vec<f32>) {
+) -> Vec<f32> {
     let resolution = group.settings.width as usize;
     let group_id = group.id;
     let mut color = vec![0.0; resolution * resolution * 4];
-
-    let mut cov_out = vec![0.0f32; resolution * resolution];
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -214,27 +212,28 @@ pub fn decompact_diffuse(
         color[index * 4 + 3] += cov;
     }
 
-    for (i, pixel) in color.chunks_exact_mut(4).enumerate() {
-        let total_cov = pixel[3].min(1.0);
+    for px in color.chunks_exact_mut(4) {
+        let w = px[3].min(1.0);
 
-        if total_cov > 0.0 {
-            pixel[0] /= total_cov;
-            pixel[1] /= total_cov;
-            pixel[2] /= total_cov;
-            pixel[3] = total_cov;
-
-            cov_out[i] = total_cov;
+        if w > 0.0 {
+            px[0] /= w;
+            px[1] /= w;
+            px[2] /= w;
+            px[3] = w;
         }
     }
 
-    (color, cov_out)
+    color
 }
 
 pub fn encode_directional(pixels: &mut [f32], normals: &[f32]) {
     for (i, px) in pixels.chunks_exact_mut(4).enumerate() {
         let w = px[3];
-        if w > 0.0 {
-            let dir = Vector3::new(px[0], px[1], px[2]).normalize();
+        // if w > 0.0 {
+        let mut dir = Vector3::new(px[0], px[1], px[2]);
+
+        if dir.length() > 0.0 {
+            dir = dir.normalize();
             let n = Vector3::new(normals[i * 4 + 0], normals[i * 4 + 1], normals[i * 4 + 2]);
             let nol = dir.dot(n).clamp(0.0, 1.0);
 
@@ -312,13 +311,15 @@ pub fn decompact_directional(
     }
 
     for px in color.chunks_exact_mut(4) {
-        let w = px[3];
+        let w = px[3].min(1.0);
+
         if w > 0.0 {
             let dir = Vector3::new(px[0], px[1], px[2]);
             let dir = dir.normalize();
             px[0] = dir.x;
             px[1] = dir.y;
             px[2] = dir.z;
+            px[3] = w;
         } else {
             px[0] = 0.5;
             px[1] = 0.5;
@@ -329,87 +330,61 @@ pub fn decompact_directional(
     color
 }
 
-/// Dilates an RGBA f32 texture (stride 4) where alpha = texel coverage.
-/// Each empty texel copies the color of ONE neighbor, never a blend.
-/// Real texels always beat propagated ones; among real texels the best
-/// coverage (scaled by distance) wins. Real texels are never modified.
-/// Filled texels get alpha = 1.0.
-pub fn dilate_texture(color: &mut [f32], resolution: usize, iterations: usize) {
-    const NEIGHBORS: [(i32, i32, f32); 8] = [
-        (-1, 0, 1.0),
-        (1, 0, 1.0),
-        (0, -1, 1.0),
-        (0, 1, 1.0),
-        (-1, -1, 0.7071),
-        (1, -1, 0.7071),
-        (-1, 1, 0.7071),
-        (1, 1, 0.7071),
-    ];
-    let res = resolution as i32;
+pub fn dilate_texture(pixels: &mut [f32], resolution: usize, radius: usize) {
+    let r2 = radius * radius;
 
-    let real: Vec<bool> = color.chunks_exact(4).map(|p| p[3] > 0.0).collect();
-    let mut filled = vec![false; resolution * resolution];
-    // Coverage of the original real texel each filled texel was copied from,
-    // so propagated texels keep ranking by the quality of their source.
-    let mut inherited = vec![0.0f32; resolution * resolution];
+    for y in 0..resolution {
+        for x in 0..resolution {
+            let i = (y * resolution + x) * 4;
 
-    for _ in 0..iterations {
-        let src = color.to_vec();
-        let src_filled = filled.clone();
-        let src_inherited = inherited.clone();
-        let mut changed = false;
+            let cov = pixels[i + 3];
+            if cov > 0.0 {
+                continue;
+            }
 
-        for y in 0..res {
-            for x in 0..res {
-                let i = (y * res + x) as usize;
-                if real[i] || src_filled[i] {
-                    continue;
-                }
+            let mut best_index = None;
+            let mut best_dist = usize::MAX;
+            let mut best_cov = 0.0;
 
-                // Best candidate as (tier, score): tier 1 = real, 0 = propagated.
-                let mut best: Option<(u8, f32, usize, f32)> = None; // tier, score, index, source coverage
+            let min_x = x.saturating_sub(radius);
+            let max_x = (x + radius).min(resolution - 1);
+            let min_y = y.saturating_sub(radius);
+            let max_y = (y + radius).min(resolution - 1);
 
-                for &(dx, dy, k) in &NEIGHBORS {
-                    let (nx, ny) = (x + dx, y + dy);
-                    if nx < 0 || ny < 0 || nx >= res || ny >= res {
+            for sy in min_y..=max_y {
+                for sx in min_x..=max_x {
+                    let dx = sx.abs_diff(x);
+                    let dy = sy.abs_diff(y);
+                    let dist = dx * dx + dy * dy;
+
+                    if dist > r2 {
                         continue;
                     }
-                    let ni = (ny * res + nx) as usize;
 
-                    let (tier, cov) = if real[ni] {
-                        (1u8, src[ni * 4 + 3].min(1.0))
-                    } else if src_filled[ni] {
-                        (0u8, src_inherited[ni])
-                    } else {
+                    let si = (sy * resolution + sx) * 4;
+                    let sample_cov = pixels[si + 3];
+
+                    if sample_cov <= 0.0 {
                         continue;
-                    };
-
-                    // Coverage scaled by distance: a cardinal neighbor wins ties,
-                    // but a clearly better covered diagonal can still win.
-                    let score = cov * k;
-
-                    let better = match best {
-                        None => true,
-                        Some((bt, bs, _, _)) => tier > bt || (tier == bt && score > bs),
-                    };
-                    if better {
-                        best = Some((tier, score, ni, cov));
                     }
-                }
 
-                if let Some((_, _, ni, cov)) = best {
-                    color[i * 4] = src[ni * 4];
-                    color[i * 4 + 1] = src[ni * 4 + 1];
-                    color[i * 4 + 2] = src[ni * 4 + 2];
-                    color[i * 4 + 3] = 1.0;
-                    filled[i] = true;
-                    inherited[i] = cov;
-                    changed = true;
+                    if dist < best_dist || (dist == best_dist && sample_cov > best_cov) {
+                        best_index = Some(si);
+                        best_dist = dist;
+                        best_cov = sample_cov;
+                    }
                 }
             }
-        }
-        if !changed {
-            break;
+
+            if let Some(si) = best_index {
+                pixels[i + 0] = pixels[si + 0];
+                pixels[i + 1] = pixels[si + 1];
+                pixels[i + 2] = pixels[si + 2];
+            } else {
+                pixels[i + 0] = 0.0;
+                pixels[i + 1] = 0.0;
+                pixels[i + 2] = 0.0;
+            }
         }
     }
 }
