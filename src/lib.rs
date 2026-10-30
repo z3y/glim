@@ -3540,11 +3540,11 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             &group,
         );
 
-        if settings.dilate {
-            dilate_texture(&mut pixels, resolution, 2);
-        }
-
         if settings.denoise {
+            // fix denoiser artifacts on edges
+            if settings.dilate {
+                dilate_texture(&mut pixels, resolution, 2);
+            }
             match &oidn {
                 Some(oidn) => {
                     oidn.denoise(&mut pixels, resolution, resolution, false);
@@ -3554,7 +3554,9 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                     Log::msg(&message);
                 }
             }
-            // fix denoiser artifacts on edges
+        }
+
+        if settings.dilate {
             dilate_texture(&mut pixels, resolution, 2);
         }
 
@@ -3608,14 +3610,11 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                 &group,
             );
 
-            let mut normals = render_normals(&texels.visibility, &texels.coverage, &mesh, &group);
-
-            if settings.dilate {
-                dilate_texture(&mut pixels, resolution, 2);
-                dilate_texture(&mut normals, resolution, 2);
-            }
-
             if settings.denoise {
+                // fix denoiser artifacts on edges
+                if settings.dilate {
+                    dilate_texture(&mut pixels, resolution, 2);
+                }
                 match &oidn {
                     Some(oidn) => {
                         oidn.denoise(&mut pixels, resolution, resolution, true);
@@ -3625,7 +3624,13 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                         Log::msg(&message);
                     }
                 }
+            }
+
+            let mut normals = render_normals(&texels.visibility, &texels.coverage, &mesh, &group);
+
+            if settings.dilate {
                 dilate_texture(&mut pixels, resolution, 2);
+                dilate_texture(&mut normals, resolution, 2);
             }
 
             // let full_path = app

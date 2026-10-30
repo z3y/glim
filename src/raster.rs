@@ -331,8 +331,6 @@ pub fn decompact_directional(
 }
 
 pub fn dilate_texture(pixels: &mut [f32], resolution: usize, radius: usize) {
-    let r2 = radius * radius;
-
     for y in 0..resolution {
         for x in 0..resolution {
             let i = (y * resolution + x) * 4;
@@ -343,8 +341,9 @@ pub fn dilate_texture(pixels: &mut [f32], resolution: usize, radius: usize) {
             }
 
             let mut best_index = None;
+            let mut best_ring = usize::MAX;
+            let mut best_cov = 0.0f32;
             let mut best_dist = usize::MAX;
-            let mut best_cov = 0.0;
 
             let min_x = x.saturating_sub(radius);
             let max_x = (x + radius).min(resolution - 1);
@@ -355,23 +354,29 @@ pub fn dilate_texture(pixels: &mut [f32], resolution: usize, radius: usize) {
                 for sx in min_x..=max_x {
                     let dx = sx.abs_diff(x);
                     let dy = sy.abs_diff(y);
-                    let dist = dx * dx + dy * dy;
+                    let ring = dx.max(dy);
 
-                    if dist > r2 {
+                    if ring > best_ring {
                         continue;
                     }
 
                     let si = (sy * resolution + sx) * 4;
                     let sample_cov = pixels[si + 3];
-
                     if sample_cov <= 0.0 {
                         continue;
                     }
 
-                    if dist < best_dist || (dist == best_dist && sample_cov > best_cov) {
+                    let dist = dx * dx + dy * dy;
+
+                    let better = ring < best_ring
+                        || sample_cov > best_cov
+                        || (sample_cov == best_cov && dist < best_dist);
+
+                    if better {
                         best_index = Some(si);
-                        best_dist = dist;
+                        best_ring = ring;
                         best_cov = sample_cov;
+                        best_dist = dist;
                     }
                 }
             }
