@@ -2,16 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[derive(PartialEq)]
-enum ShaderType {
-    Compute,
-    Vertex,
-    Fragment,
-    Geometry,
-}
-
 struct Shader {
-    ty: ShaderType,
     src: String,
     dst: String,
 }
@@ -25,79 +16,41 @@ fn main() {
     let mut shaders = Vec::new();
 
     shaders.push(Shader {
-        ty: ShaderType::Compute,
         src: "initialize_preview.slang".into(),
         dst: "initialize_preview.spv".into(),
     });
 
     shaders.push(Shader {
-        ty: ShaderType::Compute,
         src: "preview.slang".into(),
         dst: "preview.spv".into(),
     });
 
     shaders.push(Shader {
-        ty: ShaderType::Compute,
         src: "bake_direct_emission.slang".into(),
         dst: "bake_direct_emission.spv".into(),
     });
 
     shaders.push(Shader {
-        ty: ShaderType::Compute,
         src: "bake_direct_light.slang".into(),
         dst: "bake_direct_light.spv".into(),
     });
 
     shaders.push(Shader {
-        ty: ShaderType::Compute,
         src: "bake_indirect.slang".into(),
         dst: "bake_indirect.spv".into(),
     });
 
     shaders.push(Shader {
-        ty: ShaderType::Compute,
         src: "adjust_samples.slang".into(),
         dst: "adjust_samples.spv".into(),
     });
 
     shaders.push(Shader {
-        ty: ShaderType::Compute,
         src: "bake_sh.slang".into(),
         dst: "bake_sh.spv".into(),
     });
 
     shaders.push(Shader {
-        ty: ShaderType::Vertex,
-        src: "rasterize.slang".into(),
-        dst: "rasterize_vertex.spv".into(),
-    });
-
-    shaders.push(Shader {
-        ty: ShaderType::Fragment,
-        src: "rasterize.slang".into(),
-        dst: "rasterize_fragment.spv".into(),
-    });
-
-    shaders.push(Shader {
-        ty: ShaderType::Compute,
-        src: "compaction_mask.slang".into(),
-        dst: "compaction_mask.spv".into(),
-    });
-
-    shaders.push(Shader {
-        ty: ShaderType::Compute,
-        src: "compact_visibility.slang".into(),
-        dst: "compact_visibility.spv".into(),
-    });
-
-    shaders.push(Shader {
-        ty: ShaderType::Compute,
-        src: "decompact.slang".into(),
-        dst: "decompact.spv".into(),
-    });
-
-    shaders.push(Shader {
-        ty: ShaderType::Compute,
         src: "bake_shadowmask.slang".into(),
         dst: "bake_shadowmask.spv".into(),
     });
@@ -108,37 +61,10 @@ fn main() {
 
         let mut args = Vec::new();
 
-        if shader.ty == ShaderType::Compute {
-            args.push("-stage");
-            args.push("compute");
-
-            args.push("-entry");
-            args.push("main");
-        }
-
-        if shader.ty == ShaderType::Fragment {
-            args.push("-stage");
-            args.push("fragment");
-
-            args.push("-entry");
-            args.push("fragment");
-        }
-
-        if shader.ty == ShaderType::Vertex {
-            args.push("-stage");
-            args.push("vertex");
-
-            args.push("-entry");
-            args.push("vertex");
-        }
-
-        if shader.ty == ShaderType::Geometry {
-            args.push("-stage");
-            args.push("geometry");
-
-            args.push("-entry");
-            args.push("geometry");
-        }
+        args.push("-stage");
+        args.push("compute");
+        args.push("-entry");
+        args.push("main");
 
         let status = Command::new("slangc")
             .arg(shader_path.to_str().unwrap())

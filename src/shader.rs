@@ -3,11 +3,6 @@ use ash::vk::{self, Handle};
 use crate::{as_bytes, compute_shader::ComputeShader, vulkan_context::VulkanContext};
 
 pub enum ShaderName {
-    CompactionMask,
-    CompactVisibility,
-    Decompact,
-    RasterizeVertex,
-    RasterizeFragment,
     InitializePreview,
     BakeLightProbes,
     BakeDirectLight,
@@ -21,11 +16,6 @@ pub enum ShaderName {
 pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
     #[rustfmt::skip]
     let bytes: &'static [u8] = match name {
-        ShaderName::CompactionMask => include_bytes!(concat!(env!("OUT_DIR"), "/compaction_mask.spv")),
-        ShaderName::CompactVisibility => include_bytes!(concat!(env!("OUT_DIR"), "/compact_visibility.spv")),
-        ShaderName::Decompact => include_bytes!(concat!(env!("OUT_DIR"), "/decompact.spv")),
-        ShaderName::RasterizeVertex => include_bytes!(concat!(env!("OUT_DIR"), "/rasterize_vertex.spv")),
-        ShaderName::RasterizeFragment => include_bytes!(concat!(env!("OUT_DIR"), "/rasterize_fragment.spv")),
         ShaderName::InitializePreview => include_bytes!(concat!(env!("OUT_DIR"), "/initialize_preview.spv")),
         ShaderName::BakeLightProbes => include_bytes!(concat!(env!("OUT_DIR"), "/bake_sh.spv")),
         ShaderName::BakeIndirect => include_bytes!(concat!(env!("OUT_DIR"), "/bake_indirect.spv")),
