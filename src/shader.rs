@@ -79,7 +79,7 @@ impl<'a> Default for ShaderBindings<'a> {
 pub struct SpecializationConstants {
     pub hardware_rt: u32,              // 0
     pub light_falloff_type: u32,       // 1
-    pub pad0: u32,                     // 2
+    pub jitter_barycentrics: u32,      // 2
     pub emissive_triangles_count: u32, // 3
 
     pub multiple_importance_sampling: u32, // 4

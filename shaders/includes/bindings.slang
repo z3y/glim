@@ -57,6 +57,9 @@ const uint HARDWARE_RT;
 [vk::constant_id(1)]
 const uint LIGHT_FALLOFF_TYPE;
 
+[vk::constant_id(2)]
+const uint JITTER_BARYCENTRICS;
+
 [vk::constant_id(3)]
 const uint EMISSIVE_TRIANGLES_COUNT;
 

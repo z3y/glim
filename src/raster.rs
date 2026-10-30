@@ -406,7 +406,7 @@ pub struct Texels {
 pub fn rasterize_texels(
     mesh: &Mesh,
     groups: &[LightmapGroup],
-    coverage_threshold: f32,
+    coverage_min_threshold: f32,
     max_coverage: u32,
 ) -> Texels {
     // avoids too many reallocations
@@ -582,7 +582,9 @@ pub fn rasterize_texels(
             prev_key = key;
         }
 
-        if (cov >= coverage_threshold && current_coverage < max_coverage) || current_coverage == 0 {
+        if (cov >= coverage_min_threshold && current_coverage < max_coverage)
+            || current_coverage == 0
+        {
             visibility.push(texel);
             coverage.push(cov);
             current_coverage += 1;

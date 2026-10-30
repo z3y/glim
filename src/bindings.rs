@@ -51,6 +51,10 @@ pub struct GlimConfig {
 
     pub ao_intensity: f32,
     pub ao_range: f32,
+
+    pub coverage_max_samples: u32,
+    pub coverage_min_threshold: f32,
+    pub antialiasing: bool,
 }
 
 #[repr(u32)]

@@ -83,6 +83,16 @@ Affects lightmaps, light probes and light volumes.")]
         public uint indirectSamples = 256;
         public uint bounces = 5;
 
+        [Space]
+        [Tooltip("Minimum texel coverage of a triangle. Texels covered by only one triangle are always kept.")]
+        [Range(0.0f, 1.0f)] public float coverageMinThreshold = 0.05f;
+
+        [Tooltip("Maximum number of samples created at a lightmap texel during baking. Texels are sorted by their coverage, ones above this number get discarded. Results get weighted by their coverage.")]
+        [Range(1, 32)] public uint coverageMaxSamples = 4;
+
+        [Tooltip("Jitters barycentrics inside a triangle per sample.")]
+        public bool antiAliasing = true;
+
 
         [Space]
         [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;
@@ -112,6 +122,8 @@ Automatically applied to light volumes based on texel size."
         public bool reflectionProbesSuperSampling = false;
         [Tooltip("Creates a mesh for each light visible in reflection probes, based on the shadow radius, area size or directional angle")]
         public bool reflectionProbesSpecular = false; // todo URP Shader
+
+
 
         [Header("Preview Settings")]
         public uint previewWidth = 1024;

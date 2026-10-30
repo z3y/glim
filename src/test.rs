@@ -21,7 +21,7 @@ mod tests {
     const DIRECT_EMISSION_SAMPLES: u32 = 1024 * 4;
     const INDIRECT_SAMPLES: u32 = 256;
     const LIGHT_PROBE_SAMPLES: u32 = 4096;
-    const BOUNCE_COUNT: u32 = 0;
+    const BOUNCE_COUNT: u32 = 5;
 
     const DENOISE: bool = false;
     const DILATE: bool = true;
@@ -80,6 +80,9 @@ mod tests {
             emissive_multiplier: 1.0,
             ao_intensity: 0.0,
             ao_range: 1.0,
+            coverage_max_samples: 1,
+            coverage_min_threshold: 0.1,
+            antialiasing: true,
         };
         config
     }

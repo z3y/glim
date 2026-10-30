@@ -90,7 +90,10 @@ namespace Glim
                         0.0f,
                         lightmapper.emissiveMultiplier,
                         lightmapper.ambientOcclusion,
-                        lightmapper.ambientOcclusionRange
+                        lightmapper.ambientOcclusionRange,
+                        lightmapper.coverageMaxSamples,
+                        lightmapper.coverageMinThreshold,
+                        lightmapper.antiAliasing
                     );
 
                     Bake.Start(lightmapper, config);
@@ -203,7 +206,10 @@ namespace Glim
                         w,
                         lightmapper.emissiveMultiplier,
                         lightmapper.ambientOcclusion,
-                        lightmapper.ambientOcclusionRange
+                        lightmapper.ambientOcclusionRange,
+                        lightmapper.coverageMaxSamples,
+                        lightmapper.coverageMinThreshold,
+                        lightmapper.antiAliasing
                     );
                     Bake.Start(lightmapper, config);
                 };

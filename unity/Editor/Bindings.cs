@@ -52,6 +52,10 @@ namespace Glim
             public readonly float ao_intensity;
             public readonly float ao_range;
 
+            public readonly uint coverage_max_samples;
+            public readonly float coverage_min_threshold;
+            [MarshalAs(UnmanagedType.I1)] public readonly bool antialiasing;
+
             public GlimConfig(CoordinateSystem coordinate_system,
                                uint direct_light_samples,
                                uint direct_emission_samples,
@@ -72,7 +76,10 @@ namespace Glim
                                float lightprobe_deringing,
                                float emissive_multiplier,
                                float ao_intensity,
-                               float ao_range
+                               float ao_range,
+                               uint coverage_max_samples,
+                               float coverage_min_threshold,
+                               bool antialiasing
                                )
             {
                 this.coordinate_system = coordinate_system;
@@ -105,6 +112,10 @@ namespace Glim
 
                 this.ao_intensity = ao_intensity;
                 this.ao_range = ao_range;
+
+                this.coverage_max_samples = coverage_max_samples;
+                this.coverage_min_threshold = coverage_min_threshold;
+                this.antialiasing = antialiasing;
 
                 var currentPipeline = GraphicsSettings.currentRenderPipeline;
                 uint autoFalloff = 0;

@@ -948,11 +948,11 @@ void CreateSample(uint index, uint sampleIndex, float2 xi, out float3 positionWS
 
     float2 jBary = bary + dBary * t;
 
-    const bool jitterBary = true;
-    if (jitterBary && sampleIndex > 0)
+    if (JITTER_BARYCENTRICS > 0)
     {
         bool inside = jBary.x > 0.0 && jBary.y > 0.0 && (jBary.x + jBary.y) < 1.0;
-        if (inside)
+        [flatten]
+        if (inside && sampleIndex > 0)
         {
             bary = jBary;
         }

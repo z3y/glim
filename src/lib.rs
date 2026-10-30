@@ -536,12 +536,12 @@ fn initialize_render(app: &mut Glim) {
         emissive_multiplier: app.config.emissive_multiplier,
         ao_intensity: config.ao_intensity,
         ao_range: config.ao_range,
-        pad0: 0,
         geometries_0_offset: geometries_offsets[0],
         geometries_1_offset: geometries_offsets[1],
         geometries_2_offset: geometries_offsets[2],
         geometries_3_offset: geometries_offsets[3],
         main_uv_address: app.gpu_mesh.main_uv_buffer.gpu_address,
+        jitter_barycentrics: app.config.antialiasing as u32,
     };
 
     if app.config.is_preview {
@@ -3358,9 +3358,12 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         mesh.merge_mesh(&app.meshes[i]);
     }
 
-    const COVERAGE_THRESHOLD: f32 = 0.05;
-    const MAX_COVERAGE: u32 = 4;
-    let texels = rasterize_texels(&mesh, &app.groups, COVERAGE_THRESHOLD, MAX_COVERAGE);
+    let texels = rasterize_texels(
+        &mesh,
+        &app.groups,
+        app.config.coverage_min_threshold.clamp(0.0, 1.0),
+        app.config.coverage_max_samples.clamp(1, 32),
+    );
     let texels_count = texels.visibility.len();
 
     let (comaction_buffer_data, offsets, table_base) =
