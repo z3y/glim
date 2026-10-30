@@ -3557,7 +3557,7 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         }
 
         if settings.dilate {
-            dilate_texture(&mut pixels, resolution, 2);
+            dilate_texture(&mut pixels, resolution, 4);
         }
 
         if settings.fix_seams {
@@ -3629,8 +3629,8 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             let mut normals = render_normals(&texels.visibility, &texels.coverage, &mesh, &group);
 
             if settings.dilate {
-                dilate_texture(&mut pixels, resolution, 2);
-                dilate_texture(&mut normals, resolution, 2);
+                dilate_texture(&mut pixels, resolution, 4);
+                dilate_texture(&mut normals, resolution, 4);
             }
 
             // let full_path = app
