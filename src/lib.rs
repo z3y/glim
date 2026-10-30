@@ -2107,10 +2107,13 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             &group,
         );
 
+        const DILATE_DENOISE: usize = 2;
+        const DILATE_FINAL: usize = 8;
+
         if settings.denoise {
             // fix denoiser artifacts on edges
             if settings.dilate {
-                dilate_texture(&mut buffer, resolution, 2);
+                dilate_texture(&mut buffer, resolution, DILATE_DENOISE);
             }
             match &oidn {
                 Some(oidn) => {
@@ -2124,7 +2127,7 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
         }
 
         if settings.dilate {
-            dilate_texture(&mut buffer, resolution, 4);
+            dilate_texture(&mut buffer, resolution, DILATE_FINAL);
         }
 
         if settings.fix_seams {
@@ -2181,7 +2184,7 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             if settings.denoise {
                 // fix denoiser artifacts on edges
                 if settings.dilate {
-                    dilate_texture(&mut buffer, resolution, 2);
+                    dilate_texture(&mut buffer, resolution, DILATE_DENOISE);
                 }
                 match &oidn {
                     Some(oidn) => {
@@ -2203,14 +2206,14 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             );
 
             if settings.dilate {
-                dilate_texture(&mut buffer, resolution, 4);
-                dilate_texture(&mut buffer_normal, resolution, 4);
+                dilate_texture(&mut buffer, resolution, DILATE_FINAL);
+                dilate_texture(&mut buffer_normal, resolution, DILATE_FINAL);
             }
 
-            let full_path = app
-                .output_dir
-                .join(format!("Lightmap-{}_Normal.tga", group_index));
-            save_tga(full_path, resolution, resolution, &buffer_normal, false).unwrap();
+            // let full_path = app
+            //     .output_dir
+            //     .join(format!("Lightmap-{}_Normal.tga", group_index));
+            // save_tga(full_path, resolution, resolution, &buffer_normal, false).unwrap();
 
             encode_directional(&mut buffer, &buffer_normal);
 
