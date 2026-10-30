@@ -2276,6 +2276,13 @@ fn render_lightmaps(app: &mut Glim) {
         let settings = &group.settings;
         let resolution = group.settings.width as usize;
 
+        Log::msg(&format!(
+            "Processing Lightmap {}/{}",
+            group_index + 1,
+            app.groups.len()
+        ));
+        Log::progress(group_index as f32 / app.groups.len() as f32);
+
         decompact_diffuse(
             &mut buffer,
             &texels.visibility,
