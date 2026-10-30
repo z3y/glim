@@ -73,7 +73,7 @@ mod tests {
             direct_emission_samples: DIRECT_EMISSION_SAMPLES,
             indirect_samples: INDIRECT_SAMPLES,
             bounce_count: BOUNCE_COUNT,
-            lightmap_mode: LightmapMode::DominantDirection,
+            lightmap_mode: LightmapMode::CombinedSH,
             skybox_intensity: 1.0,
             indirect_intensity: 1.0,
             lightprobe_deringing: 4.0,

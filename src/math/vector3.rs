@@ -12,6 +12,7 @@ pub struct Vector3 {
 
 #[allow(dead_code)]
 impl Vector3 {
+    #[inline]
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
@@ -40,18 +41,22 @@ impl Vector3 {
         z: 0.0,
     };
 
+    #[inline]
     pub fn dot(self, rhs: Self) -> f32 {
         self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
     }
 
+    #[inline]
     pub fn length_squared(self) -> f32 {
         self.dot(self)
     }
 
+    #[inline]
     pub fn length(self) -> f32 {
         self.length_squared().sqrt()
     }
 
+    #[inline]
     pub fn distance(a: Self, b: Self) -> f32 {
         let dx = a.x - b.x;
         let dy = a.y - b.y;
@@ -59,6 +64,7 @@ impl Vector3 {
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
 
+    #[inline]
     pub fn lerp(a: Self, b: Self, t: f32) -> Self {
         let clamped_t = t.clamp(0.0, 1.0);
         Self {
@@ -68,6 +74,7 @@ impl Vector3 {
         }
     }
 
+    #[inline]
     pub fn lerp_unclamped(a: Self, b: Self, t: f32) -> Self {
         Self {
             x: a.x + (b.x - a.x) * t,
@@ -76,6 +83,7 @@ impl Vector3 {
         }
     }
 
+    #[inline]
     pub fn abs(self) -> Self {
         Self {
             x: f32::abs(self.x),
@@ -84,16 +92,27 @@ impl Vector3 {
         }
     }
 
+    #[inline]
     pub fn normalize(self) -> Self {
         let len = self.length();
         if len > 0.0 { self / len } else { Self::ZERO }
     }
 
+    #[inline]
     pub fn cross(self, rhs: Self) -> Self {
         Self {
             x: self.y * rhs.z - self.z * rhs.y,
             y: self.z * rhs.x - self.x * rhs.z,
             z: self.x * rhs.y - self.y * rhs.x,
+        }
+    }
+
+    #[inline]
+    pub fn clamp(self, min: f32, max: f32) -> Self {
+        Self {
+            x: self.y.clamp(min, max),
+            y: self.z.clamp(min, max),
+            z: self.x.clamp(min, max),
         }
     }
 
@@ -111,6 +130,7 @@ impl Vector3 {
         z: 0.0722,
     };
 
+    #[inline]
     pub fn luminance(&self) -> f32 {
         self.dot(Vector3::GRAYSCALE)
     }
@@ -118,6 +138,7 @@ impl Vector3 {
 
 impl Add for Vector3 {
     type Output = Vector3;
+    #[inline]
     fn add(self, rhs: Vector3) -> Vector3 {
         Vector3::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
     }
@@ -125,6 +146,7 @@ impl Add for Vector3 {
 
 impl Sub for Vector3 {
     type Output = Vector3;
+    #[inline]
     fn sub(self, rhs: Vector3) -> Vector3 {
         Vector3::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
     }
@@ -132,6 +154,7 @@ impl Sub for Vector3 {
 
 impl Mul for Vector3 {
     type Output = Vector3;
+    #[inline]
     fn mul(self, rhs: Vector3) -> Vector3 {
         Vector3::new(self.x * rhs.x, self.y * rhs.y, self.z * rhs.z)
     }
@@ -139,6 +162,7 @@ impl Mul for Vector3 {
 
 impl Div for Vector3 {
     type Output = Vector3;
+    #[inline]
     fn div(self, rhs: Vector3) -> Vector3 {
         Vector3::new(self.x / rhs.x, self.y / rhs.y, self.z / rhs.z)
     }
@@ -146,6 +170,7 @@ impl Div for Vector3 {
 
 impl Mul<f32> for Vector3 {
     type Output = Vector3;
+    #[inline]
     fn mul(self, rhs: f32) -> Vector3 {
         Vector3::new(self.x * rhs, self.y * rhs, self.z * rhs)
     }
@@ -153,6 +178,7 @@ impl Mul<f32> for Vector3 {
 
 impl Div<f32> for Vector3 {
     type Output = Vector3;
+    #[inline]
     fn div(self, rhs: f32) -> Vector3 {
         let inv = 1.0 / rhs;
         self * inv

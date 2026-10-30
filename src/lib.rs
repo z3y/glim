@@ -19,8 +19,8 @@ use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
-    build_compaction, decompact_diffuse, decompact_directional, dilate_texture, encode_directional,
-    rasterize_texels, render_normals,
+    build_compaction, decompact_combined_sh, decompact_diffuse, decompact_directional,
+    dilate_texture, encode_directional, rasterize_texels, render_normals,
 };
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
@@ -2105,6 +2105,7 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
             &readback_buffer_slice,
             &mesh,
             &group,
+            app.config.lightmap_mode == LightmapMode::CombinedSH,
         );
 
         const DILATE_DENOISE: usize = 2;
@@ -2234,6 +2235,55 @@ unsafe fn render_lightmaps2(app: &mut Glim) {
                 .output_dir
                 .join(format!("Lightmap-{}_Directional.tga", group_index));
             save_tga(full_path, resolution, resolution, &buffer, true).unwrap();
+        }
+
+        if app.config.lightmap_mode == LightmapMode::CombinedSH {
+            decompact_combined_sh(
+                &mut buffer,
+                &texels.visibility,
+                &texels.coverage,
+                &readback_buffer_slice,
+                &mesh,
+                &group,
+            );
+
+            if settings.denoise {
+                // fix denoiser artifacts on edges
+                if settings.dilate {
+                    dilate_texture(&mut buffer, resolution, DILATE_DENOISE);
+                }
+                match &oidn {
+                    Some(oidn) => {
+                        oidn.denoise(&mut buffer, resolution, resolution, false);
+                    }
+                    None => {
+                        let message = format!("<color=red>Denoise Failed</color>");
+                        Log::msg(&message);
+                    }
+                }
+            }
+
+            if settings.dilate {
+                dilate_texture(&mut buffer, resolution, DILATE_FINAL);
+            }
+
+            if settings.fix_seams {
+                let channels = 3;
+                fix_seams(
+                    &mut buffer,
+                    resolution as u32,
+                    resolution as u32,
+                    &app.seams,
+                    app.config.seams_debug,
+                    group_index as u32,
+                    channels,
+                );
+            }
+
+            let full_path = app
+                .output_dir
+                .join(format!("Lightmap-{}_Directional.tga", group_index));
+            save_tga(full_path, resolution, resolution, &buffer, false).unwrap();
         }
     }
 

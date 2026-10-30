@@ -68,6 +68,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     // uint2 bounceOffset = GetBounceBufferOffsets(Push.compactedCount);
 
+    // todo
     // if (mixed)
     // {
     //     index += bounceOffset.x;
@@ -81,22 +82,22 @@ void main(uint3 threadID: SV_DispatchThreadID)
     {
         if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
         {
-            // float3 L0 = sh.sh[0].xyz * sampleScale;
+            float3 L0 = sh.sh[0].xyz * sampleScale;
 
-            // // write L0
-            // uint index = index + Push.texelCount;
-            // CompactedLightmap[index * 3 + 0] += L0.x;
-            // CompactedLightmap[index * 3 + 1] += L0.y;
-            // CompactedLightmap[index * 3 + 2] += L0.z;
+            // write L0
+            uint index = index + Push.texelCount;
+            CompactedLightmap[index * 3 + 0] += L0.x;
+            CompactedLightmap[index * 3 + 1] += L0.y;
+            CompactedLightmap[index * 3 + 2] += L0.z;
 
-            // float3 combinedSH = EncodeCombinedSHL1(sh);
-            // combinedSH *= sampleScale;
+            float3 combinedSH = EncodeCombinedSHL1(sh);
+            combinedSH *= sampleScale;
 
-            // // write L1
-            // index += Push.texelCount;
-            // CompactedLightmap[index * 3 + 0] += combinedSH.x;
-            // CompactedLightmap[index * 3 + 1] += combinedSH.y;
-            // CompactedLightmap[index * 3 + 2] += combinedSH.z;
+            // write L1
+            index += Push.texelCount;
+            CompactedLightmap[index * 3 + 0] += combinedSH.x;
+            CompactedLightmap[index * 3 + 1] += combinedSH.y;
+            CompactedLightmap[index * 3 + 2] += combinedSH.z;
         }
         else if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
         {

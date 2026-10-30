@@ -10,10 +10,6 @@ struct PushConstants
     uint sampleIndex;
     uint maxSamples;
     uint pad0;
-
-    // float *texelValidity;
-    // uint pad1;
-    // uint pad2;
 };
 
 [shader("compute")]
@@ -74,8 +70,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 
-    // float validity = sampleScale;
-
     Hit hit;
     if (TraceRay(ray, hit))
     {
@@ -86,7 +80,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
             if (!surface.backfaceGI)
             {
                 color.a = 0.0;
-                // validity = 0.0;
             }
         }
 
@@ -130,55 +123,36 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
     }
 
-    // Push.texelValidity[index] += validity;
-
     ValidateSampleColor(color);
 
     CompactedLightmap[index * 3 + 0] += color.x * sampleScale;
     CompactedLightmap[index * 3 + 1] += color.y * sampleScale;
     CompactedLightmap[index * 3 + 2] += color.z * sampleScale;
 
-    // todo
-    // if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
-    // {
-    //     float3 L0 = sh.sh[0].xyz * sampleScale;
+    if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
+    {
+        float3 L0 = sh.sh[0].xyz * sampleScale;
 
-    //     // write L0
-    //     uint index = index + Push.compactedCount;
-    //     CompactedLightmap[index * 3 + 0] += L0.x;
-    //     CompactedLightmap[index * 3 + 1] += L0.y;
-    //     CompactedLightmap[index * 3 + 2] += L0.z;
+        // write L0
+        uint index = index + Push.compactedCount;
+        CompactedLightmap[index * 3 + 0] += L0.x;
+        CompactedLightmap[index * 3 + 1] += L0.y;
+        CompactedLightmap[index * 3 + 2] += L0.z;
 
-    //     float3 combinedSH = EncodeCombinedSHL1(sh);
-    //     combinedSH *= sampleScale;
+        float3 combinedSH = EncodeCombinedSHL1(sh);
+        combinedSH *= sampleScale;
 
-    //     // write L1
-    //     index += Push.compactedCount;
-    //     CompactedLightmap[index * 3 + 0] += combinedSH.x;
-    //     CompactedLightmap[index * 3 + 1] += combinedSH.y;
-    //     CompactedLightmap[index * 3 + 2] += combinedSH.z;
-    // }
-    // else if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
-    // {
-    //     uint index = index + Push.compactedCount;
-    //     CompactedLightmap[index * 3 + 0] += dominantDirection.x;
-    //     CompactedLightmap[index * 3 + 1] += dominantDirection.y;
-    //     CompactedLightmap[index * 3 + 2] += dominantDirection.z;
-    // }
-
-    // bool lastSample = sampleIndex == (sampleCount - 1);
-    // [branch]
-    // if (lastSample)
-    // {
-    //     const float validityThreshold = 0.8;
-    //     if (Push.texelValidity[index] < validityThreshold)
-    //     {
-    //         // set primitive id to max value
-    //         float4 visibility = CompactedVisibility[index];
-    //         visibility.z = asfloat(uint::maxValue);
-    //         // CompactedVisibility[index] = visibility;
-
-    //         // CompactedLightmap[index * 3 + 0] = asfloat(uint::maxValue);
-    //     }
-    // }
+        // write L1
+        index += Push.compactedCount;
+        CompactedLightmap[index * 3 + 0] += combinedSH.x;
+        CompactedLightmap[index * 3 + 1] += combinedSH.y;
+        CompactedLightmap[index * 3 + 2] += combinedSH.z;
+    }
+    else if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
+    {
+        uint index = index + Push.compactedCount;
+        CompactedLightmap[index * 3 + 0] += dominantDirection.x;
+        CompactedLightmap[index * 3 + 1] += dominantDirection.y;
+        CompactedLightmap[index * 3 + 2] += dominantDirection.z;
+    }
 }

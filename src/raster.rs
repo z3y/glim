@@ -179,6 +179,7 @@ pub fn decompact_diffuse(
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
+    l0: bool,
 ) {
     let resolution = group.settings.width as usize;
     let group_id = group.id;
@@ -187,6 +188,8 @@ pub fn decompact_diffuse(
 
     let buffer = &mut buffer[0..count];
     buffer.fill(0.0);
+
+    let diffuse_offset = if l0 { texels.len() } else { 0 };
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -203,9 +206,9 @@ pub fn decompact_diffuse(
         }
 
         let cov = coverage[compacted_index];
-        let col_x = lightmap_texels[compacted_index * 3 + 0];
-        let col_y = lightmap_texels[compacted_index * 3 + 1];
-        let col_z = lightmap_texels[compacted_index * 3 + 2];
+        let col_x = lightmap_texels[(compacted_index + diffuse_offset) * 3 + 0];
+        let col_y = lightmap_texels[(compacted_index + diffuse_offset) * 3 + 1];
+        let col_z = lightmap_texels[(compacted_index + diffuse_offset) * 3 + 2];
 
         if !col_x.is_finite() || !col_y.is_finite() || !col_z.is_finite() {
             continue;
@@ -334,6 +337,95 @@ pub fn decompact_directional(
             px[0] = 0.5;
             px[1] = 0.5;
             px[2] = 0.5;
+        }
+    }
+}
+
+#[inline]
+fn encode_combined_sh(l0: Vector3, l1: Vector3) -> Vector3 {
+    let safe_f0 = l0.luminance().max(1e-4);
+    let l1 = l1 / (safe_f0 * 2.0).clamp(-1.0, 1.0);
+
+    Vector3 {
+        x: (l1.x * 0.5 + 0.5).clamp(0.0, 1.0),
+        y: (l1.y * 0.5 + 0.5).clamp(0.0, 1.0),
+        z: (l1.z * 0.5 + 0.5).clamp(0.0, 1.0),
+    }
+}
+
+pub fn decompact_combined_sh(
+    buffer: &mut [f32],
+    texels: &[VisibilityTexel],
+    coverage: &[f32],
+    lightmap_texels: &[f32],
+    mesh: &Mesh,
+    group: &LightmapGroup,
+) {
+    let resolution = group.settings.width as usize;
+    let group_id = group.id;
+
+    let count = resolution * resolution * 4;
+
+    let buffer = &mut buffer[0..count];
+    buffer.fill(0.0);
+
+    let l0_offset = texels.len();
+    let l1_offset = texels.len() * 2;
+
+    for compacted_index in 0..texels.len() {
+        let texel = &texels[compacted_index];
+
+        let primitive_id = texel.primitive_id;
+        if primitive_id == u32::MAX {
+            continue;
+        }
+        let i0 = mesh.indices[(primitive_id as usize) * 3 + 0] as usize;
+        let v0 = mesh.vertices[i0];
+
+        if v0.group() != group_id {
+            continue;
+        }
+
+        let cov = coverage[compacted_index];
+
+        let l0 = Vector3::new(
+            lightmap_texels[(compacted_index + l0_offset) * 3 + 0],
+            lightmap_texels[(compacted_index + l0_offset) * 3 + 1],
+            lightmap_texels[(compacted_index + l0_offset) * 3 + 2],
+        );
+
+        let l1 = Vector3::new(
+            lightmap_texels[(compacted_index + l1_offset) * 3 + 0],
+            lightmap_texels[(compacted_index + l1_offset) * 3 + 1],
+            lightmap_texels[(compacted_index + l1_offset) * 3 + 2],
+        );
+
+        if !l0.x.is_finite() || !l0.y.is_finite() || !l0.z.is_finite() {
+            continue;
+        }
+
+        if !l1.x.is_finite() || !l1.y.is_finite() || !l1.z.is_finite() {
+            continue;
+        }
+
+        let sh = encode_combined_sh(l0, l1);
+
+        let index = texel.index(resolution);
+
+        buffer[index * 4 + 0] += sh.x * cov;
+        buffer[index * 4 + 1] += sh.y * cov;
+        buffer[index * 4 + 2] += sh.z * cov;
+        buffer[index * 4 + 3] += cov;
+    }
+
+    for px in buffer.chunks_exact_mut(4) {
+        let w = px[3].min(1.0);
+
+        if w > 0.0 {
+            px[0] /= w;
+            px[1] /= w;
+            px[2] /= w;
+            px[3] = w;
         }
     }
 }
