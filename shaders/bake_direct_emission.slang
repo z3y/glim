@@ -12,6 +12,16 @@ struct PushConstants
     uint pad0;
 };
 
+void InitSamples(uint index)
+{
+    float4 visibility = CompactedVisibility[index];
+    uint x = asuint(visibility.w) & 0xFFFF;
+    uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
+    uint pixelSeed = RNGPixelInit(uint2(x, y), SamplingPattern::BlueNoiseFirst);
+    visibility.w = asfloat(pixelSeed);
+    CompactedVisibility[index] = visibility;
+}
+
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void main(uint3 threadID: SV_DispatchThreadID)
@@ -23,19 +33,20 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
+    [branch]
+    if (Push.sampleIndex == 0)
+    {
+        InitSamples(index);
+    }
+
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
     float sampleScale = 1.0 / float(sampleCount);
 
-    SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
-    uint pixelSeed = RNGPixelInit1D(index);
-    uint sobolIndexMask = ~0u;
-    uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
-
-    float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
     float3 positionWS;
     float3 normalWS;
-    CreateSample(index, sampleIndex, xiAA, positionWS, normalWS);
+    uint3 indexing;
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
 
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0);

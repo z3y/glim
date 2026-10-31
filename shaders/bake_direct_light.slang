@@ -35,15 +35,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
     bool mixed = Push.mixed == 1;
     float sampleScale = 1.0 / float(sampleCount);
 
-    SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
-    uint pixelSeed = RNGPixelInit1D(index);
-    uint sobolIndexMask = ~0u;
-    uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
-
-    float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
     float3 positionWS;
     float3 normalWS;
-    CreateSample(index, sampleIndex, xiAA, positionWS, normalWS);
+    uint3 indexing;
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
 
     float2 xiLight = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
 

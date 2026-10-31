@@ -32,18 +32,13 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint bounceIndex = Push.bounceIndex;
     float sampleScale = 1.0 / float(sampleCount);
 
-    uint sobolIndexMask = ~0u;
-    SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
-    uint pixelSeed = RNGPixelInit1D(index);
-    uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
+    float3 positionWS;
+    float3 normalWS;
+    uint3 indexing;
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
 
     uint dimension = 4 + bounceIndex * 2;
     float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
-
-    float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
-    float3 positionWS;
-    float3 normalWS;
-    CreateSample(index, sampleIndex, xiAA, positionWS, normalWS);
 
     Ray ray;
     ray.P = positionWS;

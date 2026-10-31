@@ -1,5 +1,6 @@
 #include "bindings.slang"
 #include "ray.slang"
+#include "sobol_burley.slang"
 #include "util.slang"
 
 #if 1
@@ -862,20 +863,16 @@ Vertex[3] TriangleVertices(uint primitiveID)
     return { Vertices[i0], Vertices[i1], Vertices[i2] };
 }
 
-void CreateSample(uint index, uint sampleIndex, float2 xi, out float3 positionWS, out float3 normalWS)
+void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 positionWS, out float3 normalWS, out uint3 indexing)
 {
     float4 visibility = CompactedVisibility[index];
+
+    uint pixelSeed = asuint(visibility.w);
+    indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, ~0u, sampleCount, SamplingPattern::BlueNoiseFirst);
+    float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
+
     float2 bary = visibility.xy;
     uint primitiveID = asuint(visibility.z);
-
-    // if (primitiveID == uint::maxValue)
-    // {
-    //     positionWS = 0.0;
-    //     normalWS = 0.0;
-    //     return false;
-    // }
-    // uint x = asuint(visibility.w) & 0xFFFF;
-    // uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
 
     Vertex[3] v = TriangleVertices(primitiveID);
 
@@ -892,16 +889,15 @@ void CreateSample(uint index, uint sampleIndex, float2 xi, out float3 positionWS
     float2 duv2 = uv2 - uv0;
 
     float det = duv1.x * duv2.y - duv1.y * duv2.x;
-    float invDet = 1.0 / (abs(det) + 1e-9);
     float invDetSigned = abs(det) > 1e-12 ? 1.0 / det : 0.0;
 
-    float3 dPdU = (edge1 * duv2.y - edge2 * duv1.y) * invDet;
-    float3 dPdV = (edge2 * duv1.x - edge1 * duv2.x) * invDet;
+    // float3 dPdU = (edge1 * duv2.y - edge2 * duv1.y) * invDetSigned;
+    // float3 dPdV = (edge2 * duv1.x - edge1 * duv2.x) * invDetSigned;
 
-    float3 worldTexelU = dPdU;
-    float3 worldTexelV = dPdV;
+    // float3 worldTexelU = dPdU;
+    // float3 worldTexelV = dPdV;
 
-    float2 jitterTexel = xi - 0.5;
+    float2 jitterTexel = xiAA - 0.5;
 
     float2 dBary;
     dBary.x = (duv2.y * jitterTexel.x - duv2.x * jitterTexel.y) * invDetSigned;
@@ -940,48 +936,48 @@ void CreateSample(uint index, uint sampleIndex, float2 xi, out float3 positionWS
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
 
-    const bool leakDetection = true;
-    bool skipLeakRay = asuint(visibility.w) == uint::maxValue;
-    [branch]
-    if (leakDetection && !skipLeakRay)
-    {
-        float rayLength = (length(worldTexelU) + length(worldTexelV)) * sqrt(0.5);
-        float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
-        float3 v = normalize(worldTexelV - dot(worldTexelV, surface.Ng) * surface.Ng);
-        float3 rayDirs[4] = { u, -u, v, -v };
+    // const bool leakDetection = false;
+    // bool skipLeakRay = asuint(visibility.w) == uint::maxValue;
+    // [branch]
+    // if (leakDetection && !skipLeakRay)
+    // {
+    //     float rayLength = (length(worldTexelU) + length(worldTexelV)) * sqrt(0.5);
+    //     float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
+    //     float3 v = normalize(worldTexelV - dot(worldTexelV, surface.Ng) * surface.Ng);
+    //     float3 rayDirs[4] = { u, -u, v, -v };
 
-        Ray ray;
-        ray.P = positionWS;
-        ray.tMin = 0;
-        ray.tMax = rayLength;
-        Hit leakHit;
+    //     Ray ray;
+    //     ray.P = positionWS;
+    //     ray.tMin = 0;
+    //     ray.tMax = rayLength;
+    //     Hit leakHit;
 
-        bool canLeak = false;
-        [loop]
-        for (int i = 0; i < 4; i++)
-        {
-            ray.D = rayDirs[i];
+    //     bool canLeak = false;
+    //     [loop]
+    //     for (int i = 0; i < 4; i++)
+    //     {
+    //         ray.D = rayDirs[i];
 
-            if (TraceRay(ray, leakHit))
-            {
-                canLeak = true;
-                if (!leakHit.frontFace)
-                {
-                    Surface hitSurf = Surface::Get(leakHit.primitiveID, leakHit.bary, true);
-                    if (!hitSurf.backfaceGI)
-                    {
-                        positionWS = RayOffset(hitSurf.P, hitSurf.Ng);
-                        break;
-                    }
-                }
-            }
-        }
+    //         if (TraceRay(ray, leakHit))
+    //         {
+    //             canLeak = true;
+    //             if (!leakHit.frontFace)
+    //             {
+    //                 Surface hitSurf = Surface::Get(leakHit.primitiveID, leakHit.bary, true);
+    //                 if (!hitSurf.backfaceGI)
+    //                 {
+    //                     positionWS = RayOffset(hitSurf.P, hitSurf.Ng);
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        [branch]
-        if (sampleIndex == 0 && !canLeak)
-        {
-            visibility.w = asfloat(uint::maxValue);
-            CompactedVisibility[index] = visibility;
-        }
-    }
+    //     [branch]
+    //     if (sampleIndex == 0 && !canLeak)
+    //     {
+    //         visibility.w = asfloat(uint::maxValue);
+    //         CompactedVisibility[index] = visibility;
+    //     }
+    // }
 }
