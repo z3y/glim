@@ -69,12 +69,6 @@ float3 AdjustSamplePosition(Surface surface, uint primitiveID, float2 bary)
         }
     }
 
-    bool smoothP = UseSmoothPosition(surface);
-    if (smoothP)
-    {
-        positionWS = surface.smoothP;
-    }
-
     positionWS = RayOffset(positionWS, surface.Ng);
 
     return positionWS;

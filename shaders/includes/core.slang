@@ -521,29 +521,6 @@ float3 EncodeCombinedSHL1(SHProbeL2 probe)
     return combined;
 }
 
-bool UseSmoothPosition(Surface surface)
-{
-    float3 rayP = RayOffset(surface.P, surface.Ng);
-    float3 diff = surface.smoothP - surface.P;
-    float d = length(diff);
-
-    if (d > 0.0001)
-    {
-        Ray ray;
-        ray.P = rayP;
-        ray.D = diff / d;
-        ray.tMin = 0;
-        ray.tMax = d;
-
-        if (!TraceAnyHit(ray))
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 // uv already multiplied with resolution
 uint GetCompactedIndex(float2 uv, uint lightmapGroup, uint primitiveID, bool flipY = true)
 {

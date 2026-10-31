@@ -50,8 +50,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     uint primitiveID = asuint(visibility.z);
     float2 bary = visibility.xy;
-    bool useSmoothP = (encoded & (1 << 1)) != 0;
-
     Surface surface = Surface::Get(primitiveID, bary);
 
     uint sampleIndex = Push.sampleIndex;
@@ -71,11 +69,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 albedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
     color.rgb += emission;
     throughput = albedo;
-
-    if (useSmoothP)
-    {
-        surface.P = surface.smoothP;
-    }
 
     float3 positionWS = RayOffset(surface.P, surface.Ng);
     float3 normalWS = surface.N;

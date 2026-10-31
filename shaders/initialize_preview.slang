@@ -13,16 +13,12 @@ struct PushConstants
     float pad0;
 }
 
-float4 EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool useSmoothP, bool hitSkybox)
+float4 EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool hitSkybox)
 {
     uint encoded = 0;
     if (isVisible)
     {
         encoded |= 0x1 << 0;
-    }
-    if (useSmoothP)
-    {
-        encoded |= 0x1 << 1;
     }
     if (hitSkybox)
     {
@@ -43,7 +39,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     if (coords.x >= resolution.x || coords.y >= resolution.y)
     {
-        VisibilityBuffer[coords] = EncodeVisibilityBuffer(float2(0, 0), 0, false, false, false);
+        VisibilityBuffer[coords] = EncodeVisibilityBuffer(float2(0, 0), 0, false, false);
         return;
     }
 
@@ -72,13 +68,12 @@ void main(uint3 threadID: SV_DispatchThreadID)
     {
         Surface surface = Surface::Get(hit.primitiveID, hit.bary);
         bool backfaceGI = surface.backfaceGI;
-        bool smooth = UseSmoothPosition(surface);
         bool visible = backfaceGI || hit.frontFace;
-        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, visible, smooth, false);
+        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, visible, false);
     }
     else
     {
-        float4 encoded = EncodeVisibilityBuffer(float2(0, 0), 0, false, false, true);
+        float4 encoded = EncodeVisibilityBuffer(float2(0, 0), 0, false, true);
         encoded.xyz = ray.D;
         result = encoded;
     }

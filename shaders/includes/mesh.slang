@@ -109,7 +109,6 @@ struct Vertex
 struct Surface
 {
     float3 P;
-    float3 smoothP;
     float3 Ng;
     float3 N;
     float2 uv; // UVs already scaled by lightmap group resolution
@@ -150,11 +149,6 @@ struct Surface
 
         float2 uv = uv0 * w + uv1 * u + uv2 * v;
 
-        float3 sp0 = P - n0 * dot(P - p0, n0);
-        float3 sp1 = P - n1 * dot(P - p1, n1);
-        float3 sp2 = P - n2 * dot(P - p2, n2);
-        float3 smoothP = sp0 * w + sp1 * u + sp2 * v;
-
         if (!frontFace)
         {
             N = -N;
@@ -165,7 +159,6 @@ struct Surface
         surface.P = P;
         surface.Ng = Ng;
         surface.N = N;
-        surface.smoothP = smoothP;
         surface.uv = uv;
         surface.lightmapGroup = v0.GetLightmapGroup();
         surface.backfaceGI = v0.BackfaceGI();
