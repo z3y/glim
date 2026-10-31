@@ -236,10 +236,28 @@ fn update_visibility_from_camera(app: &mut Glim, cmd: vk::CommandBuffer) {
     let constants_bytes = as_bytes(&push);
 
     let visibility = &mut app.render_target.visibility;
+    let diffuse = &mut app.render_target.diffuse;
 
     unsafe {
         if visibility.layout() != vk::ImageLayout::GENERAL {
             let barrier = visibility.barrier(
+                vk::ImageLayout::GENERAL,
+                vk::AccessFlags::default(),
+                vk::AccessFlags::SHADER_WRITE,
+            );
+            vk.device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            );
+        }
+
+        if diffuse.layout() != vk::ImageLayout::GENERAL {
+            let barrier = diffuse.barrier(
                 vk::ImageLayout::GENERAL,
                 vk::AccessFlags::default(),
                 vk::AccessFlags::SHADER_WRITE,
@@ -777,47 +795,27 @@ fn render_sample_camera(app: &mut Glim) -> bool {
         if app.preview_push_constants.sample_index == 0 {
             update_visibility_from_camera(app, cmd);
             app.preview_initialized = true;
-            let clear = vk::ClearColorValue {
-                float32: [0.0, 0.0, 0.0, 0.0],
-            };
 
             let diffuse = &mut app.render_target.diffuse;
 
-            {
-                let vk: &VulkanContext = &app.vk;
-                let range = vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                };
-                let vk = &vk.device;
-                if diffuse.layout() != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
-                    let barrier = diffuse.barrier(
-                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                        vk::AccessFlags::empty(),
-                        vk::AccessFlags::TRANSFER_WRITE,
-                    );
-                    vk.cmd_pipeline_barrier(
-                        cmd,
-                        vk::PipelineStageFlags::TOP_OF_PIPE,
-                        vk::PipelineStageFlags::TRANSFER,
-                        vk::DependencyFlags::empty(),
-                        &[],
-                        &[],
-                        &[barrier],
-                    );
-                }
-
-                vk.cmd_clear_color_image(
-                    cmd,
-                    diffuse.image(),
+            let vk: &VulkanContext = &app.vk;
+            let vk = &vk.device;
+            if diffuse.layout() != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
+                let barrier = diffuse.barrier(
                     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    &clear,
-                    &[range],
+                    vk::AccessFlags::empty(),
+                    vk::AccessFlags::TRANSFER_WRITE,
                 );
-            };
+                vk.cmd_pipeline_barrier(
+                    cmd,
+                    vk::PipelineStageFlags::TOP_OF_PIPE,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[barrier],
+                );
+            }
         }
 
         let vk = &app.vk.device;

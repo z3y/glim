@@ -27,28 +27,13 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
-    float4 color = 0.0;
-    float3 throughput = float3(1.0);
-
     float4 visibility = VisibilityBuffer[coords];
-
-    uint encoded = asuint(visibility.a);
-    bool visible = encoded != 0;
-    if (!visible)
-    {
-        LightmapDiffuse[coords] = 0.0;
-        return;
-    }
-
-    bool hitSkybox = (encoded & (1 << 2)) != 0;
-    if (hitSkybox)
-    {
-        float3 viewDirectionWS = visibility.xyz;
-        LightmapDiffuse[coords] = float4(SampleSkybox(viewDirectionWS), 1.0);
-        return;
-    }
-
     uint primitiveID = asuint(visibility.z);
+    if (primitiveID == uint::maxValue)
+    {
+        return;
+    }
+
     float2 bary = visibility.xy;
     Surface surface = Surface::Get(primitiveID, bary);
 
@@ -60,6 +45,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint pixelSeed = RNGPixelInit(coords, pattern);
     uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
     uint dimension = 0;
+
+    float4 color = 0.0;
+    float3 throughput = float3(1.0);
 
     float3 emission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
     if (!surface.emissive)

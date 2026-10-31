@@ -13,21 +13,6 @@ struct PushConstants
     float pad0;
 }
 
-float4 EncodeVisibilityBuffer(float2 bary, uint primitiveID, bool isVisible, bool hitSkybox)
-{
-    uint encoded = 0;
-    if (isVisible)
-    {
-        encoded |= 0x1 << 0;
-    }
-    if (hitSkybox)
-    {
-        encoded |= 0x1 << 2;
-    }
-
-    return float4(bary, asfloat(primitiveID), asfloat(encoded));
-}
-
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void main(uint3 threadID: SV_DispatchThreadID)
@@ -39,7 +24,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     if (coords.x >= resolution.x || coords.y >= resolution.y)
     {
-        VisibilityBuffer[coords] = EncodeVisibilityBuffer(float2(0, 0), 0, false, false);
         return;
     }
 
@@ -62,21 +46,22 @@ void main(uint3 threadID: SV_DispatchThreadID)
     ray.tMin = 0.001;
     ray.tMax = RAY_MAX;
 
-    float4 result;
+    float4 visibility = float4(0.0, 0.0, asfloat(uint::maxValue), 0.0);
+    float4 color = float4(0.0, 0.0, 0.0, 1.0);
     Hit hit;
     if (TraceRay(ray, hit))
     {
-        Surface surface = Surface::Get(hit.primitiveID, hit.bary);
-        bool backfaceGI = surface.backfaceGI;
-        bool visible = backfaceGI || hit.frontFace;
-        result = EncodeVisibilityBuffer(hit.bary, hit.primitiveID, visible, false);
+        if (hit.frontFace)
+        {
+            visibility.xy = hit.bary;
+            visibility.z = asfloat(hit.primitiveID);
+        }
     }
     else
     {
-        float4 encoded = EncodeVisibilityBuffer(float2(0, 0), 0, false, true);
-        encoded.xyz = ray.D;
-        result = encoded;
+        color.rgb = SampleSkybox(ray.D);
     }
 
-    VisibilityBuffer[coords] = result;
+    LightmapDiffuse[coords] = color;
+    VisibilityBuffer[coords] = visibility;
 }
