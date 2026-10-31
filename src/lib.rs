@@ -1586,7 +1586,7 @@ fn zero_buffer(vk: &VulkanContext, buffer: &Buffer) {
     vk.end_single_use_cmd(cmd);
 }
 
-fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
+fn bake_direct_emission(app: &Glim, visibility_texels_count: usize, texel_validity: &Buffer) {
     let message = format!("Baking Direct Emission");
     Log::msg(&message);
 
@@ -1596,9 +1596,9 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
         pub sample_index: u32,
         pub max_samples: u32,
         pub pad0: u32,
-        // pub texel_validity_address: u64,
-        // pub pad1: u32,
-        // pub pad2: u32,
+        pub texel_validity_address: u64,
+        pub pad1: u32,
+        pub pad2: u32,
     }
 
     let shader_bindings = ShaderBindings {
@@ -1628,9 +1628,9 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
         sample_index: 0,
         max_samples: app.config.direct_emission_samples,
         pad0: 0,
-        // texel_validity_address: texel_validity.gpu_address,
-        // pad1: 0,
-        // pad2: 0,
+        texel_validity_address: texel_validity.gpu_address,
+        pad1: 0,
+        pad2: 0,
     };
 
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
@@ -2057,7 +2057,7 @@ fn render_lightmaps(app: &mut Glim) {
         mesh.merge_mesh(&app.meshes[i]);
     }
 
-    let texels = rasterize_texels(
+    let mut texels = rasterize_texels(
         &mesh,
         &app.groups,
         app.config.coverage_min_threshold.clamp(0.0, 1.0),
@@ -2137,7 +2137,62 @@ fn render_lightmaps(app: &mut Glim) {
     app.constants.compacted_lightmap_address = lightmap_texels.gpu_address;
     zero_buffer(&app.vk, &lightmap_texels);
 
-    bake_direct_emission(app, texels_count);
+    let mut texel_validity = Buffer::empty(
+        &app.vk,
+        "Texel Validity".to_owned(),
+        (texels_count * mem::size_of::<f32>()) as u64,
+        vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    );
+    zero_buffer(&app.vk, &texel_validity);
+
+    bake_direct_emission(app, texels_count, &texel_validity);
+
+    let mut texel_validity_readback = Buffer::empty(
+        &app.vk,
+        "Texel Validity Readback".to_owned(),
+        texel_validity.bytes,
+        vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    );
+    unsafe {
+        let cmd = app.vk.begin_single_use_cmd();
+        let region = vk::BufferCopy {
+            src_offset: 0,
+            dst_offset: 0,
+            size: texel_validity.bytes,
+        };
+        app.vk.device.cmd_copy_buffer(
+            cmd,
+            texel_validity.buffer,
+            texel_validity_readback.buffer,
+            &[region],
+        );
+        app.vk.end_single_use_cmd(cmd);
+    }
+    texel_validity.destroy(&app.vk);
+    drop(texel_validity);
+
+    let validity: &[f32] = unsafe {
+        std::slice::from_raw_parts(texel_validity_readback.ptr as *const f32, texels_count)
+    };
+
+    for i in 0..validity.len() {
+        let threshold = 0.8;
+        let v = validity[i];
+        if v > threshold {
+            texels.coverage[i] /= v;
+        } else {
+            texels.coverage[i] = 0.0;
+        }
+    }
+
+    texel_validity_readback.destroy(&app.vk);
+    drop(texel_validity_readback);
 
     // todo area lights with more samples
     let mut mixed_start = 0;
@@ -2229,7 +2284,7 @@ fn render_lightmaps(app: &mut Glim) {
     let readback_buffer_slice: &mut [f32] = unsafe {
         std::slice::from_raw_parts_mut(
             readback_buffer.ptr as *mut f32,
-            readback_buffer.bytes as usize,
+            lightmap_texels_channels * texels_count,
         )
     };
 
