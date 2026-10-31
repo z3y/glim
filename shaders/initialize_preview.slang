@@ -1,5 +1,6 @@
 #include "includes/bindings.slang"
 #include "includes/core.slang"
+#include "includes/sobol_burley.slang"
 
 [[vk::push_constant]]
 PushConstants Push;
@@ -55,6 +56,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
         {
             visibility.xy = hit.bary;
             visibility.z = asfloat(hit.primitiveID);
+            uint pixelSeed = RNGPixelInit(coords, SamplingPattern::BlueNoiseFirst);
+            visibility.w = asfloat(pixelSeed);
         }
     }
     else

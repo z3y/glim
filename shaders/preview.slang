@@ -40,10 +40,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
 
-    uint sobolIndexMask = ~0u;
-    SamplingPattern pattern = SamplingPattern::BlueNoiseFirst;
-    uint pixelSeed = RNGPixelInit(coords, pattern);
-    uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
+    uint pixelSeed = asuint(visibility.w);
+    uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, ~0u, sampleCount, SamplingPattern::BlueNoiseFirst);
     uint dimension = 0;
 
     float4 color = 0.0;
