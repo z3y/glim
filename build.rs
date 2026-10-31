@@ -41,8 +41,8 @@ fn main() {
     });
 
     shaders.push(Shader {
-        src: "adjust_samples.slang".into(),
-        dst: "adjust_samples.spv".into(),
+        src: "dilate.slang".into(),
+        dst: "dilate.spv".into(),
     });
 
     shaders.push(Shader {

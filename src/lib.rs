@@ -2046,6 +2046,107 @@ fn bake_light_probes(app: &mut Glim) {
     probes_buffer.destroy(&app.vk);
 }
 
+fn apply_validity(app: &mut Glim, texels_count: usize, texel_validity: &Buffer) {
+    #[repr(C)]
+    pub struct PushConstants {
+        pub texel_count: u32,
+        pub threshold: f32,
+        pub validity: u64,
+
+        pub normalize: u32,
+        pub pad0: u32,
+        pub pad1: u32,
+        pub pad2: u32,
+    }
+
+    let shader_bindings = ShaderBindings {
+        tlas: app.tlas.acceleration_structure,
+        albedos: &app.albedo_array.views(),
+        emissions: &[],
+        skybox: app.skybox.view(),
+        skybox_sampler: app.skybox.sampler(),
+        visibility: vk::ImageView::null(),
+        preview_diffuse: vk::ImageView::null(),
+        alphas: &app.alphas_array.views(),
+        cookies: &app.cookie_array.views(),
+        linear_sampler: app.linear_sampler,
+    };
+
+    let mut shader = load_compute_shader(
+        &app.vk,
+        ShaderName::Dilate,
+        &app.constants,
+        &shader_bindings,
+        size_of::<PushConstants>(),
+    );
+    update_compute_shader(&app.vk, &shader, &shader_bindings);
+
+    let mut push = PushConstants {
+        texel_count: texels_count as u32,
+        threshold: 0.8,
+        validity: texel_validity.gpu_address,
+        normalize: 1,
+        pad0: 0,
+        pad1: 0,
+        pad2: 0,
+    };
+
+    let groups_x = (texels_count as u32 + 63) / 64;
+    let vk = &app.vk.device;
+
+    let cmd = app.vk.begin_single_use_cmd();
+    unsafe {
+        vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+        vk.cmd_bind_descriptor_sets(
+            cmd,
+            vk::PipelineBindPoint::COMPUTE,
+            shader.pipeline_layout,
+            0,
+            &[shader.descriptor_set],
+            &[],
+        );
+        let push_bytes = as_bytes(&push);
+        vk.cmd_push_constants(
+            cmd,
+            shader.pipeline_layout,
+            vk::ShaderStageFlags::COMPUTE,
+            0,
+            &push_bytes,
+        );
+        vk.cmd_dispatch(cmd, groups_x, 1, 1);
+
+        let barrier = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE);
+
+        vk.cmd_pipeline_barrier(
+            cmd,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::DependencyFlags::empty(),
+            &[barrier],
+            &[],
+            &[],
+        );
+
+        push.normalize = 0;
+        let push_bytes = as_bytes(&push);
+
+        vk.cmd_push_constants(
+            cmd,
+            shader.pipeline_layout,
+            vk::ShaderStageFlags::COMPUTE,
+            0,
+            &push_bytes,
+        );
+        vk.cmd_dispatch(cmd, groups_x, 1, 1);
+    };
+    app.vk.end_single_use_cmd(cmd);
+
+    shader.destroy(&app.vk);
+    drop(shader);
+}
+
 fn render_lightmaps(app: &mut Glim) {
     let mut max_resolution = 1;
     for g in &app.groups {
@@ -2174,8 +2275,6 @@ fn render_lightmaps(app: &mut Glim) {
         );
         app.vk.end_single_use_cmd(cmd);
     }
-    texel_validity.destroy(&app.vk);
-    drop(texel_validity);
 
     let validity: &[f32] = unsafe {
         std::slice::from_raw_parts(texel_validity_readback.ptr as *const f32, texels_count)
@@ -2185,12 +2284,11 @@ fn render_lightmaps(app: &mut Glim) {
         let threshold = 0.8;
         let v = validity[i];
         if v > threshold {
-            texels.coverage[i] /= v;
+            // texels.coverage[i] /= v;
         } else {
             texels.coverage[i] = 0.0;
         }
     }
-
     texel_validity_readback.destroy(&app.vk);
     drop(texel_validity_readback);
 
@@ -2249,6 +2347,11 @@ fn render_lightmaps(app: &mut Glim) {
     //     app.config.direct_light_samples,
     //     true,
     // );
+
+    // dilate on the gpu so bounces can sample from dilated direct light
+    apply_validity(app, texels_count, &texel_validity);
+    texel_validity.destroy(&app.vk);
+    drop(texel_validity);
 
     bake_indirect(app, &lightmap_texels, texels_count);
 

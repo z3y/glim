@@ -27,6 +27,12 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
+    [branch]
+    if (CompactedVisibility[index].w == asfloat(uint::maxValue))
+    {
+        return;
+    }
+
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
     uint bounceIndex = Push.bounceIndex;
