@@ -876,12 +876,12 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
 
     Vertex[3] v = TriangleVertices(primitiveID);
 
-    float3 p0 = v[0].GetPosition();
-    float3 p1 = v[1].GetPosition();
-    float3 p2 = v[2].GetPosition();
-    float2 uv0 = v[0].GetUV();
-    float2 uv1 = v[1].GetUV();
-    float2 uv2 = v[2].GetUV();
+    float3 p0 = v[0].position;
+    float3 p1 = v[1].position;
+    float3 p2 = v[2].position;
+    float2 uv0 = v[0].uv;
+    float2 uv1 = v[1].uv;
+    float2 uv2 = v[2].uv;
 
     float3 edge1 = p1 - p0;
     float3 edge2 = p2 - p0;
@@ -891,38 +891,17 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     float det = duv1.x * duv2.y - duv1.y * duv2.x;
     float invDetSigned = abs(det) > 1e-12 ? 1.0 / det : 0.0;
 
-    // float3 dPdU = (edge1 * duv2.y - edge2 * duv1.y) * invDetSigned;
-    // float3 dPdV = (edge2 * duv1.x - edge1 * duv2.x) * invDetSigned;
-
-    // float3 worldTexelU = dPdU;
-    // float3 worldTexelV = dPdV;
-
-    float2 jitterTexel = xiAA - 0.5;
-
-    float2 dBary;
-    dBary.x = (duv2.y * jitterTexel.x - duv2.x * jitterTexel.y) * invDetSigned;
-    dBary.y = (-duv1.y * jitterTexel.x + duv1.x * jitterTexel.y) * invDetSigned;
-
-    float3 w0 = float3(1.0 - bary.x - bary.y, bary.x, bary.y);
-    float3 dw = float3(-dBary.x - dBary.y, dBary.x, dBary.y);
-
-    // Clip the jitter segment [bary, bary + dBary] to the triangle instead of
-    // projecting the end point. Barycentrics: w = (1 - x - y, x, y)
-    float t = 1.0;
-    [unroll]
-    for (int k = 0; k < 3; k++)
-    {
-        if (dw[k] < 0.0)
-        {
-            // largest t where w0[k] + t * dw[k] >= 0
-            t = min(t, max(w0[k], 0.0) / -dw[k]);
-        }
-    }
-
-    float2 jBary = bary + dBary * t;
-
     if (JITTER_BARYCENTRICS > 0)
     {
+        float2 jitterTexel = xiAA - 0.5;
+
+        // todo its possible to jitter multiple times until it lands on the triangle instead of giving up
+        float2 dBary;
+        dBary.x = (duv2.y * jitterTexel.x - duv2.x * jitterTexel.y) * invDetSigned;
+        dBary.y = (-duv1.y * jitterTexel.x + duv1.x * jitterTexel.y) * invDetSigned;
+
+        float2 jBary = bary + dBary;
+
         bool inside = jBary.x > 0.0 && jBary.y > 0.0 && (jBary.x + jBary.y) < 1.0;
         [flatten]
         if (inside && sampleIndex > 0)
@@ -935,49 +914,4 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
 
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
-
-    // const bool leakDetection = false;
-    // bool skipLeakRay = asuint(visibility.w) == uint::maxValue;
-    // [branch]
-    // if (leakDetection && !skipLeakRay)
-    // {
-    //     float rayLength = (length(worldTexelU) + length(worldTexelV)) * sqrt(0.5);
-    //     float3 u = normalize(worldTexelU - dot(worldTexelU, surface.Ng) * surface.Ng);
-    //     float3 v = normalize(worldTexelV - dot(worldTexelV, surface.Ng) * surface.Ng);
-    //     float3 rayDirs[4] = { u, -u, v, -v };
-
-    //     Ray ray;
-    //     ray.P = positionWS;
-    //     ray.tMin = 0;
-    //     ray.tMax = rayLength;
-    //     Hit leakHit;
-
-    //     bool canLeak = false;
-    //     [loop]
-    //     for (int i = 0; i < 4; i++)
-    //     {
-    //         ray.D = rayDirs[i];
-
-    //         if (TraceRay(ray, leakHit))
-    //         {
-    //             canLeak = true;
-    //             if (!leakHit.frontFace)
-    //             {
-    //                 Surface hitSurf = Surface::Get(leakHit.primitiveID, leakHit.bary, true);
-    //                 if (!hitSurf.backfaceGI)
-    //                 {
-    //                     positionWS = RayOffset(hitSurf.P, hitSurf.Ng);
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     [branch]
-    //     if (sampleIndex == 0 && !canLeak)
-    //     {
-    //         visibility.w = asfloat(uint::maxValue);
-    //         CompactedVisibility[index] = visibility;
-    //     }
-    // }
 }
