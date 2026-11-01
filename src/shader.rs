@@ -8,7 +8,6 @@ pub enum ShaderName {
     BakeDirectLight,
     BakeIndirect,
     BakeDirectEmission,
-    Dilate,
     Preview,
     ShadowMask,
 }
@@ -19,7 +18,6 @@ pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
         ShaderName::InitializePreview => include_bytes!(concat!(env!("OUT_DIR"), "/initialize_preview.spv")),
         ShaderName::BakeLightProbes => include_bytes!(concat!(env!("OUT_DIR"), "/bake_sh.spv")),
         ShaderName::BakeIndirect => include_bytes!(concat!(env!("OUT_DIR"), "/bake_indirect.spv")),
-        ShaderName::Dilate => include_bytes!(concat!(env!("OUT_DIR"), "/dilate.spv")),
         ShaderName::Preview => include_bytes!(concat!(env!("OUT_DIR"), "/preview.spv")),
         ShaderName::BakeDirectLight => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_light.spv")),
         ShaderName::BakeDirectEmission => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_emission.spv")),

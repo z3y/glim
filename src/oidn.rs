@@ -1,5 +1,6 @@
 use libloading::Library;
 use std::{
+    f32,
     ffi::{CStr, c_char, c_void},
     ptr,
 };
@@ -61,6 +62,8 @@ type FnCommitFilter = unsafe extern "C" fn(OIDNFilter);
 type FnExecuteFilter = unsafe extern "C" fn(OIDNFilter);
 type FnReleaseFilter = unsafe extern "C" fn(OIDNFilter);
 type FnSetFilterBool = unsafe extern "C" fn(OIDNFilter, *const c_char, bool);
+type FnSetFilterFloat = unsafe extern "C" fn(OIDNFilter, *const c_char, f32);
+type FnSetFilterInt = unsafe extern "C" fn(OIDNFilter, *const c_char, i32);
 type FnGetDeviceError = unsafe extern "C" fn(OIDNDevice, *mut *const c_char) -> OIDNError;
 
 #[repr(C)]
@@ -94,6 +97,8 @@ pub struct Oidn {
     execute_filter: FnExecuteFilter,
     release_filter: FnReleaseFilter,
     set_filter_bool: FnSetFilterBool,
+    set_filter_int: FnSetFilterInt,
+    set_filter_float: FnSetFilterFloat,
     get_device_error: FnGetDeviceError,
     new_buffer: FnNewBuffer,
     release_buffer: FnReleaseBuffer,
@@ -154,6 +159,8 @@ impl Oidn {
                 execute_filter: *lib.get(b"oidnExecuteFilter\0")?,
                 release_filter: *lib.get(b"oidnReleaseFilter\0")?,
                 set_filter_bool: *lib.get(b"oidnSetFilterBool\0")?,
+                set_filter_float: *lib.get(b"oidnSetFilterFloat\0")?,
+                set_filter_int: *lib.get(b"oidnSetFilterInt\0")?,
                 get_device_error: *lib.get(b"oidnGetDeviceError\0")?,
                 new_buffer: *lib.get(b"oidnNewBuffer\0")?,
                 release_buffer: *lib.get(b"oidnReleaseBuffer\0")?,
@@ -242,6 +249,8 @@ impl Oidn {
             );
 
             (self.set_filter_bool)(filter, c"directional".as_ptr(), directional);
+            // (self.set_filter_float)(filter, c"inputScale".as_ptr(), 1.0 / f32::consts::PI);
+            // (self.set_filter_int)(filter, c"quality".as_ptr(), 6);
 
             (self.commit_filter)(filter);
             (self.execute_filter)(filter);

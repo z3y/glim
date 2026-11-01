@@ -10,10 +10,6 @@ struct PushConstants
     uint sampleIndex;
     uint maxSamples;
     uint pad0;
-
-    float *validity;
-    uint pad1;
-    uint pad2;
 };
 
 void InitSamples(uint index)
@@ -85,8 +81,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 
-    float validity = sampleScale;
-
     Hit hit;
     if (TraceRay(ray, hit))
     {
@@ -97,7 +91,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
             if (!surface.backfaceGI)
             {
                 color.a = 0.0;
-                validity = 0.0;
             }
         }
 
@@ -140,8 +133,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
         dominantDirection.xyz += ray.D * Luminance(current);
         AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
     }
-
-    Push.validity[index] += validity;
 
     ValidateSampleColor(color);
 

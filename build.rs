@@ -41,11 +41,6 @@ fn main() {
     });
 
     shaders.push(Shader {
-        src: "dilate.slang".into(),
-        dst: "dilate.spv".into(),
-    });
-
-    shaders.push(Shader {
         src: "bake_sh.slang".into(),
         dst: "bake_sh.spv".into(),
     });
