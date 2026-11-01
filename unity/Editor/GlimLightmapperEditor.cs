@@ -185,6 +185,30 @@ namespace Glim
             horizontal.Add(clearButton);
             root.Add(horizontal);
 
+            var debugHorizontal = new VisualElement()
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    flexGrow = 1,
+                    marginBottom = 5,
+                }
+            };
+
+            var texelGridButton = CreateIconButton("Grid Icon", "Texel Grid", "Shows the lightmap texels in the Scene View", 25);
+            void RefreshTexelGridButton()
+            {
+                texelGridButton.style.backgroundColor = LightmapTexelGrid.IsEnabled ? new StyleColor(new Color(0.2f, 0.4f, 0.5f, 1.0f)) : new StyleColor(StyleKeyword.Null);
+            }
+            texelGridButton.clicked += () =>
+            {
+                LightmapTexelGrid.Toggle();
+                RefreshTexelGridButton();
+            };
+            RefreshTexelGridButton();
+            debugHorizontal.Add(texelGridButton);
+            root.Add(debugHorizontal);
+
             ProgressBar progressBar = new()
             {
                 title = "Baking",
