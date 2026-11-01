@@ -863,6 +863,20 @@ Vertex[3] TriangleVertices(uint primitiveID)
     return { Vertices[i0], Vertices[i1], Vertices[i2] };
 }
 
+// World space size of one lightmap texel on a triangle, vertex UVs are already scaled by the lightmap resolution
+float TexelWorldSize(uint primitiveID)
+{
+    Vertex[3] v = TriangleVertices(primitiveID);
+
+    float worldArea = length(cross(v[1].position - v[0].position, v[2].position - v[0].position));
+
+    float2 duv1 = v[1].uv - v[0].uv;
+    float2 duv2 = v[2].uv - v[0].uv;
+    float texelArea = abs(duv1.x * duv2.y - duv1.y * duv2.x);
+
+    return texelArea > 1e-12 ? sqrt(worldArea / texelArea) : 0.0;
+}
+
 void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 positionWS, out float3 normalWS, out uint3 indexing)
 {
     float4 visibility = CompactedVisibility[index];

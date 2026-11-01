@@ -4,6 +4,8 @@
 [[vk::push_constant]]
 PushConstants Push;
 
+static const float LEAK_DISTANCE_TEXELS = 4.0;
+
 struct PushConstants
 {
     uint compactedCount;
@@ -87,6 +89,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float validity = sampleScale;
 
+    // a sample inside geometry hits backfaces close to it, far backfaces are only single sided surfaces seen from behind
+    float leakDistance = TexelWorldSize(asuint(CompactedVisibility[index].z)) * LEAK_DISTANCE_TEXELS;
+
     Hit hit;
     if (TraceRay(ray, hit))
     {
@@ -97,7 +102,11 @@ void main(uint3 threadID: SV_DispatchThreadID)
             if (!surface.backfaceGI)
             {
                 color.a = 0.0;
-                validity = 0.0;
+
+                if (hit.t < leakDistance)
+                {
+                    validity = 0.0;
+                }
             }
         }
 

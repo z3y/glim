@@ -20,7 +20,8 @@ use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
     build_compaction, decompact_combined_sh, decompact_diffuse, decompact_directional,
-    dilate_texture, encode_directional, rasterize_texels, render_normals,
+    dilate_texture, encode_directional, fill_invalid_texels, rasterize_texels, render_normals,
+    texel_owners,
 };
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
@@ -2390,7 +2391,6 @@ fn render_lightmaps(app: &mut Glim) {
             lightmap_texels_channels * texels_count,
         )
     };
-
     let oidn = Oidn::load();
     let mut oidn = if oidn.is_err() {
         let err = oidn.err();
@@ -2426,6 +2426,10 @@ fn render_lightmaps(app: &mut Glim) {
     } else {
         Vec::new()
     };
+    let mut owners = vec![u32::MAX; max_resolution * max_resolution];
+
+    const DILATE_DENOISE: usize = 2;
+    const DILATE_FINAL: usize = 8;
 
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index];
@@ -2439,6 +2443,8 @@ fn render_lightmaps(app: &mut Glim) {
         ));
         Log::progress(group_index as f32 / app.groups.len() as f32);
 
+        texel_owners(&mut owners, &texels.visibility, &mesh, &group);
+
         decompact_diffuse(
             &mut buffer,
             &texels.visibility,
@@ -2449,8 +2455,16 @@ fn render_lightmaps(app: &mut Glim) {
             app.config.lightmap_mode == LightmapMode::CombinedSH,
         );
 
-        const DILATE_DENOISE: usize = 2;
-        const DILATE_FINAL: usize = 8;
+        if settings.dilate {
+            fill_invalid_texels(
+                &mut buffer,
+                &owners,
+                &texels.visibility,
+                &mesh,
+                resolution,
+                DILATE_FINAL,
+            );
+        }
 
         if settings.denoise {
             // fix denoiser artifacts on edges
@@ -2523,6 +2537,17 @@ fn render_lightmaps(app: &mut Glim) {
                 &group,
             );
 
+            if settings.dilate {
+                fill_invalid_texels(
+                    &mut buffer,
+                    &owners,
+                    &texels.visibility,
+                    &mesh,
+                    resolution,
+                    DILATE_FINAL,
+                );
+            }
+
             if settings.denoise {
                 // fix denoiser artifacts on edges
                 if settings.dilate {
@@ -2548,6 +2573,14 @@ fn render_lightmaps(app: &mut Glim) {
             );
 
             if settings.dilate {
+                fill_invalid_texels(
+                    &mut buffer_normal,
+                    &owners,
+                    &texels.visibility,
+                    &mesh,
+                    resolution,
+                    DILATE_FINAL,
+                );
                 dilate_texture(&mut buffer, resolution, DILATE_FINAL);
                 dilate_texture(&mut buffer_normal, resolution, DILATE_FINAL);
             }
@@ -2587,6 +2620,17 @@ fn render_lightmaps(app: &mut Glim) {
                 &mesh,
                 &group,
             );
+
+            if settings.dilate {
+                fill_invalid_texels(
+                    &mut buffer,
+                    &owners,
+                    &texels.visibility,
+                    &mesh,
+                    resolution,
+                    DILATE_FINAL,
+                );
+            }
 
             if settings.denoise {
                 // fix denoiser artifacts on edges
@@ -2630,6 +2674,7 @@ fn render_lightmaps(app: &mut Glim) {
 
     drop(buffer);
     drop(buffer_normal);
+    drop(owners);
     readback_buffer.destroy(&app.vk);
     drop(readback_buffer);
 

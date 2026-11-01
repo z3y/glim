@@ -494,6 +494,163 @@ pub fn dilate_texture(pixels: &mut [f32], resolution: usize, radius: usize) {
     }
 }
 
+/// For every lightmap pixel, the index of its best covered texel, or u32::MAX if no triangle covers it.
+/// Texels invalidated during the bake (coverage set to 0) are kept so they can be filled from their own surface.
+pub fn texel_owners(
+    owners: &mut [u32],
+    texels: &[VisibilityTexel],
+    mesh: &Mesh,
+    group: &LightmapGroup,
+) {
+    let resolution = group.settings.width as usize;
+    let group_id = group.id;
+
+    let owners = &mut owners[0..resolution * resolution];
+    owners.fill(u32::MAX);
+
+    for compacted_index in 0..texels.len() {
+        let texel = &texels[compacted_index];
+
+        let primitive_id = texel.primitive_id;
+        if primitive_id == u32::MAX {
+            continue;
+        }
+        let i0 = mesh.indices[(primitive_id as usize) * 3 + 0] as usize;
+        let v0 = mesh.vertices[i0];
+
+        if v0.group() != group_id {
+            continue;
+        }
+
+        // texels are sorted by coverage, the first one in each pixel is the best covered
+        let index = texel.index(resolution);
+        if owners[index] == u32::MAX {
+            owners[index] = compacted_index as u32;
+        }
+    }
+}
+
+/// Returns the world space position, geometric normal and texel size of a texel.
+fn texel_surface(
+    texel: &VisibilityTexel,
+    mesh: &Mesh,
+    resolution: usize,
+) -> (Vector3, Vector3, f32) {
+    let primitive_id = texel.primitive_id as usize;
+    let v0 = mesh.vertices[mesh.indices[primitive_id * 3 + 0] as usize];
+    let v1 = mesh.vertices[mesh.indices[primitive_id * 3 + 1] as usize];
+    let v2 = mesh.vertices[mesh.indices[primitive_id * 3 + 2] as usize];
+
+    let u = texel.bary.x;
+    let v = texel.bary.y;
+    let w = 1.0 - u - v;
+
+    let position = v0.position * w + v1.position * u + v2.position * v;
+
+    // geometric normal, smoothed normals would let faces on both sides of an edge match
+    let face = (v1.position - v0.position).cross(v2.position - v0.position);
+    let normal = face.normalize();
+
+    let world_area = face.length();
+    let res = resolution as f32;
+    let uv_e0 = (v1.uv.x - v0.uv.x, v1.uv.y - v0.uv.y);
+    let uv_e1 = (v2.uv.x - v0.uv.x, v2.uv.y - v0.uv.y);
+    let texel_area = (uv_e0.0 * uv_e1.1 - uv_e1.0 * uv_e0.1).abs() * res * res;
+    let texel_size = if texel_area > 0.0 { (world_area / texel_area).sqrt() } else { 0.0 };
+
+    (position, normal, texel_size)
+}
+
+/// Fills texels invalidated by samples inside geometry (eg. where an object touches a wall).
+/// Picks the closest neighbor in the atlas like dilate_texture, but rejects neighbors that are far in world space
+/// or face another direction, so the color can't come from an unrelated chart packed next to it in the atlas.
+pub fn fill_invalid_texels(
+    pixels: &mut [f32],
+    owners: &[u32],
+    texels: &[VisibilityTexel],
+    mesh: &Mesh,
+    resolution: usize,
+    radius: usize,
+) {
+    const MIN_NORMAL_DOT: f32 = 0.9;
+    const FILLED_COVERAGE: f32 = 1e-3;
+
+    // gather first so filled texels never get used as a source
+    let mut fills: Vec<(usize, [f32; 3])> = Vec::new();
+
+    for y in 0..resolution {
+        for x in 0..resolution {
+            let pixel = y * resolution + x;
+            let i = pixel * 4;
+
+            if pixels[i + 3] > 0.0 || owners[pixel] == u32::MAX {
+                continue;
+            }
+
+            let (position, normal, texel_size) =
+                texel_surface(&texels[owners[pixel] as usize], mesh, resolution);
+
+            // a little extra for diagonal neighbors and texel size variations
+            let max_distance = texel_size * (radius as f32 + 1.0) * 1.5;
+
+            let mut best_index = None;
+            let mut best_ring = usize::MAX;
+            let mut best_dist = usize::MAX;
+
+            let min_x = x.saturating_sub(radius);
+            let max_x = (x + radius).min(resolution - 1);
+            let min_y = y.saturating_sub(radius);
+            let max_y = (y + radius).min(resolution - 1);
+
+            for sy in min_y..=max_y {
+                for sx in min_x..=max_x {
+                    let dx = sx.abs_diff(x);
+                    let dy = sy.abs_diff(y);
+                    let ring = dx.max(dy);
+                    let dist = dx * dx + dy * dy;
+
+                    if ring > best_ring || (ring == best_ring && dist >= best_dist) {
+                        continue;
+                    }
+
+                    let sample_pixel = sy * resolution + sx;
+                    let si = sample_pixel * 4;
+
+                    if pixels[si + 3] <= 0.0 || owners[sample_pixel] == u32::MAX {
+                        continue;
+                    }
+
+                    let (sample_position, sample_normal, _) =
+                        texel_surface(&texels[owners[sample_pixel] as usize], mesh, resolution);
+
+                    if normal.dot(sample_normal) < MIN_NORMAL_DOT {
+                        continue;
+                    }
+
+                    if Vector3::distance(position, sample_position) > max_distance {
+                        continue;
+                    }
+
+                    best_index = Some(si);
+                    best_ring = ring;
+                    best_dist = dist;
+                }
+            }
+
+            if let Some(si) = best_index {
+                fills.push((i, [pixels[si + 0], pixels[si + 1], pixels[si + 2]]));
+            }
+        }
+    }
+
+    for (i, rgb) in fills {
+        pixels[i + 0] = rgb[0];
+        pixels[i + 1] = rgb[1];
+        pixels[i + 2] = rgb[2];
+        pixels[i + 3] = FILLED_COVERAGE;
+    }
+}
+
 pub struct Texels {
     // vecs with equal len
     pub visibility: Vec<VisibilityTexel>,
