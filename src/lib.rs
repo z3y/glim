@@ -1769,27 +1769,30 @@ fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: us
         return;
     }
 
+    // 2 buffers to keep previous and next bounce diffuse
+    let indirect_texels_count = visibility_texels_count * 2;
+
     let mut indirect_buffer = Buffer::empty(
         &app.vk,
         "Indirect Buffer".to_owned(),
-        (visibility_texels_count * size_of::<f32>() * 3) as u64,
+        (indirect_texels_count * size_of::<f32>() * 3) as u64,
         vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::TRANSFER_DST,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
     zero_buffer(&app.vk, &indirect_buffer);
 
-    // let cmd = app.vk.begin_single_use_cmd();
-    // let region = vk::BufferCopy {
-    //     src_offset: 0,
-    //     dst_offset: (size_of::<f32>() * 3 * visibility_texels_count) as u64,
-    //     size: (size_of::<f32>() * 3 * visibility_texels_count) as u64,
-    // };
-    // unsafe {
-    //     app.vk
-    //         .device
-    //         .cmd_copy_buffer(cmd, direct_buffer.buffer, indirect_buffer.buffer, &[region])
-    // };
-    // app.vk.end_single_use_cmd(cmd);
+    let cmd = app.vk.begin_single_use_cmd();
+    let region = vk::BufferCopy {
+        src_offset: 0,
+        dst_offset: (size_of::<f32>() * 3 * visibility_texels_count) as u64,
+        size: (size_of::<f32>() * 3 * visibility_texels_count) as u64,
+    };
+    unsafe {
+        app.vk
+            .device
+            .cmd_copy_buffer(cmd, direct_buffer.buffer, indirect_buffer.buffer, &[region])
+    };
+    app.vk.end_single_use_cmd(cmd);
 
     // todo
     // if mixed_count > 0 {
@@ -1807,7 +1810,7 @@ fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: us
         pub compacted_count: u32,
         pub sample_index: u32,
         pub max_samples: u32,
-        pub bounce_count: u32,
+        pub bounce_index: u32,
 
         pub indirect_address: u64,
         pub pad0: u32,
@@ -1842,52 +1845,57 @@ fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: us
         compacted_count: visibility_texels_count as u32,
         sample_index: 0,
         max_samples: app.config.indirect_samples,
-        bounce_count: app.config.bounce_count,
+        bounce_index: 0,
         indirect_address: indirect_buffer.gpu_address,
         pad0: 0,
         pad1: 0,
     };
 
-    // let total_steps = (app.config.bounce_count * app.config.indirect_samples) as f32;
+    let total_steps = (app.config.bounce_count * app.config.indirect_samples) as f32;
 
-    // 'bounces: for bounce_index in 0..app.config.bounce_count {
-    // push.bounce_index = bounce_index;
+    'bounces: for bounce_index in 0..app.config.bounce_count {
+        push.bounce_index = bounce_index;
 
-    Log::msg("Baking Bounces");
+        let message = format!("Baking Bounce {}", bounce_index + 1);
+        Log::msg(&message);
 
-    for sample_index in 0..app.config.indirect_samples {
-        if is_cancelled() {
-            break;
+        // let last_sample = app.config.indirect_samples - 1;
+        for sample_index in 0..app.config.indirect_samples {
+            if is_cancelled() {
+                break 'bounces;
+            }
+            push.sample_index = sample_index;
+            let push_bytes = as_bytes(&push);
+
+            Log::progress(
+                (bounce_index * app.config.indirect_samples + sample_index) as f32 / total_steps,
+            );
+
+            let vk = &app.vk.device;
+            let shader = &indirect_shader;
+
+            let cmd = app.vk.begin_single_use_cmd();
+            unsafe {
+                vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+                vk.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    shader.pipeline_layout,
+                    0,
+                    &[shader.descriptor_set],
+                    &[],
+                );
+                vk.cmd_push_constants(
+                    cmd,
+                    shader.pipeline_layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &push_bytes,
+                );
+                vk.cmd_dispatch(cmd, groups_x, 1, 1);
+            };
+            app.vk.end_single_use_cmd(cmd);
         }
-        push.sample_index = sample_index;
-        let push_bytes = as_bytes(&push);
-
-        Log::progress(sample_index as f32 / app.config.indirect_samples as f32);
-
-        let vk = &app.vk.device;
-        let shader = &indirect_shader;
-
-        let cmd = app.vk.begin_single_use_cmd();
-        unsafe {
-            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-            vk.cmd_bind_descriptor_sets(
-                cmd,
-                vk::PipelineBindPoint::COMPUTE,
-                shader.pipeline_layout,
-                0,
-                &[shader.descriptor_set],
-                &[],
-            );
-            vk.cmd_push_constants(
-                cmd,
-                shader.pipeline_layout,
-                vk::ShaderStageFlags::COMPUTE,
-                0,
-                &push_bytes,
-            );
-            vk.cmd_dispatch(cmd, groups_x, 1, 1);
-        };
-        app.vk.end_single_use_cmd(cmd);
     }
 
     indirect_shader.destroy(&app.vk);

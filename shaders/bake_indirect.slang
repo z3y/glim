@@ -9,7 +9,7 @@ struct PushConstants
     uint compactedCount;
     uint sampleIndex;
     uint maxSamples;
-    uint bounceCount;
+    uint bounceIndex;
 
     float *bounceBuffer;
     uint pad0;
@@ -35,7 +35,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
-    uint bounceCount = Push.bounceCount;
+    uint bounceIndex = Push.bounceIndex;
     float sampleScale = 1.0 / float(sampleCount);
 
     float3 positionWS;
@@ -43,89 +43,93 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint3 indexing;
     CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
 
+    uint dimension = 4 + bounceIndex * 2;
+    float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
+
+    Ray ray;
+    ray.P = positionWS;
+    ray.D = RandomDirectionInHemisphereCosine(normalWS, xiBounce);
+    ray.tMin = 0;
+    ray.tMax = RAY_MAX;
+
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
+
+    uint currentOffset;
+    uint previousOffset;
+    if (Push.bounceIndex % 2 == 0)
+    {
+        currentOffset = 0;
+        previousOffset = Push.compactedCount;
+    }
+    else
+    {
+        currentOffset = Push.compactedCount;
+        previousOffset = 0;
+    }
 
     float ao = 1.0;
     float aoRadius = AO_RANGE;
 
     float *bounceBuffer = Push.bounceBuffer;
 
-    Ray ray;
-    ray.tMin = 0;
-    ray.tMax = RAY_MAX;
-
-    [loop]
-    for (uint bounceIndex = 0; bounceIndex < bounceCount; bounceIndex++)
+    Hit bounceHit;
+    if (TraceRay(ray, bounceHit))
     {
-        uint dimension = 4 + bounceIndex * 2;
-        float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
-        ray.P = positionWS;
-        ray.D = RandomDirectionInHemisphereCosine(normalWS, xiBounce);
+        Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
 
-        Hit bounceHit;
-        [branch]
-        if (TraceRay(ray, bounceHit))
+        if (bounceHit.t < aoRadius)
         {
-            Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
+            ao = 0.0;
+        }
 
-            if (bounceHit.t < aoRadius)
+        if (!bounceHit.frontFace)
+        {
+            // this is incorrect, the cached bounce doesnt store lighting on the other side
+            // if (!surface.backfaceGI)
+            // {
+            color.a = 0;
+            // }
+        }
+
+        float3 bounceAlbedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
+        uint compactIndex = GetCompactedIndex(surface.coords, surface.lightmapGroup, bounceHit.primitiveID, true);
+        if (compactIndex != uint::maxValue)
+        {
+            float3 previousDiffuse = float3(bounceBuffer[(previousOffset + compactIndex) * 3 + 0],
+                                            bounceBuffer[(previousOffset + compactIndex) * 3 + 1],
+                                            bounceBuffer[(previousOffset + compactIndex) * 3 + 2]);
+
+            if (all(isfinite(previousDiffuse)))
             {
-                ao = 0.0; // todo check
+                float3 current = previousDiffuse * bounceAlbedo * color.a;
+                current *= lerp(1.0, ao, AO_INTENSITY);
+                color.rgb += current;
+                dominantDirection.xyz += ray.D * Luminance(current);
+
+                AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
             }
-
-            if (!bounceHit.frontFace)
-            {
-                // this is incorrect, the cached bounce doesnt store lighting on the other side
-                // if (!surface.backfaceGI)
-                // {
-                // color.a = 0;
-                // }
-                break;
-            }
-
-            float3 bounceAlbedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
-            uint compactIndex = GetCompactedIndex(surface.coords, surface.lightmapGroup, bounceHit.primitiveID, true);
-            if (compactIndex != uint::maxValue)
-            {
-                float3 previousDiffuse = float3(CompactedLightmap[compactIndex * 3 + 0],
-                                                CompactedLightmap[compactIndex * 3 + 1],
-                                                CompactedLightmap[compactIndex * 3 + 2]);
-
-                if (all(isfinite(previousDiffuse)))
-                {
-                    float3 current = previousDiffuse * bounceAlbedo * color.a * throughput;
-                    current *= lerp(1.0, ao, AO_INTENSITY);
-                    color.rgb += current;
-                    dominantDirection.xyz += ray.D * Luminance(current);
-
-                    AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
-                }
-            }
-            else
-            {
-                // color.rgb += float3(1, 0, 1);
-            }
-
-            throughput *= bounceAlbedo;
-            positionWS = RayOffset(surface.P, surface.Ng);
-            normalWS = surface.N;
         }
         else
         {
-            break;
+            // color.rgb += float3(1, 0, 1);
         }
     }
 
-    color *= sampleScale;
-
     ValidateSampleColor(color);
 
-    bounceBuffer[index * 3 + 0] += color.r;
-    bounceBuffer[index * 3 + 1] += color.g;
-    bounceBuffer[index * 3 + 2] += color.b;
+    float4 previous = float4(
+        bounceBuffer[(currentOffset + index) * 3 + 0],
+        bounceBuffer[(currentOffset + index) * 3 + 1],
+        bounceBuffer[(currentOffset + index) * 3 + 2],
+        1.0);
+
+    AccumulateColor(previous, sampleIndex, color);
+    bounceBuffer[(currentOffset + index) * 3 + 0] = previous.r;
+    bounceBuffer[(currentOffset + index) * 3 + 1] = previous.g;
+    bounceBuffer[(currentOffset + index) * 3 + 2] = previous.b;
 
     if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
     {
@@ -156,14 +160,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
     [branch]
     if (last)
     {
-        float3 bounce = float3(bounceBuffer[index * 3 + 0],
-                               bounceBuffer[index * 3 + 1],
-                               bounceBuffer[index * 3 + 2]);
+        previous.rgb *= INDIRECT_INTENSITY;
 
-        bounce.rgb *= INDIRECT_INTENSITY;
-
-        CompactedLightmap[index * 3 + 0] += bounce.r;
-        CompactedLightmap[index * 3 + 1] += bounce.g;
-        CompactedLightmap[index * 3 + 2] += bounce.b;
+        CompactedLightmap[index * 3 + 0] += previous.r;
+        CompactedLightmap[index * 3 + 1] += previous.g;
+        CompactedLightmap[index * 3 + 2] += previous.b;
     }
 }
