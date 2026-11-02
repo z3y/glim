@@ -696,6 +696,25 @@ namespace Glim
                         throw new Exception("failed to launch");
                     }
 
+                    foreach (var group in ctx.groups)
+                    {
+                        unsafe
+                        {
+                            fixed (Color32* albedoPtr = group.albedo)
+                            fixed (byte* emissionsPtr = group.emission)
+                            {
+                                Bindings.app_add_lightmap_group(
+                                    app,
+                                    group.settings,
+                                    (byte*)albedoPtr,
+                                    (uint)(group.albedo.Length * 4),
+                                    emissionsPtr,
+                                    (uint)group.emission.Length
+                                );
+                            }
+                        }
+                        group.ClearPixels();
+                    }
 
                     for (int i = 0; i < ctx.sceneMesh.Count; i++)
                     {
@@ -741,26 +760,6 @@ namespace Glim
                     foreach (var light in ctx.bakeLights)
                     {
                         Bindings.app_add_light(app, light);
-                    }
-
-                    foreach (var group in ctx.groups)
-                    {
-                        unsafe
-                        {
-                            fixed (Color32* albedoPtr = group.albedo)
-                            fixed (byte* emissionsPtr = group.emission)
-                            {
-                                Bindings.app_add_lightmap_group(
-                                    app,
-                                    group.settings,
-                                    (byte*)albedoPtr,
-                                    (uint)(group.albedo.Length * 4),
-                                    emissionsPtr,
-                                    (uint)group.emission.Length
-                                );
-                            }
-                        }
-                        group.ClearPixels();
                     }
 
                     for (int i = 0; i < ctx.cookies.Count; i++)
