@@ -188,7 +188,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
         if (!backface)
         {
-            float3 emission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+            float3 emission = SampleEmission(surface.coords, surface.lightmapGroup).rgb;
 
             if (surface.emissive && any(emission > 0.0))
             {
@@ -213,9 +213,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
                 }
             }
 
-            float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
+            float3 bounceAlbedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
 
-            uint compactIndex = GetCompactedIndex(surface.uv, surface.lightmapGroup, hit.primitiveID);
+            uint compactIndex = GetCompactedIndex(surface.coords, surface.lightmapGroup, hit.primitiveID);
             if (compactIndex != uint::maxValue)
             {
                 float3 lightmapDiffuse = float3(CompactedLightmap[compactIndex * 3 + 0],

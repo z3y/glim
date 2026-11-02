@@ -96,7 +96,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
         if (surface.emissive)
         {
-            float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+            float3 bounceEmission = SampleEmission(surface.coords, surface.lightmapGroup).rgb;
             float3 emission = bounceEmission * color.a;
 
             if (any(emission > 0.0))

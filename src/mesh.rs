@@ -2,10 +2,9 @@ use ash::vk::{self, Handle};
 
 use crate::{
     CoordinateSystem, LightmapGroup,
-    bindings::{GlimConfig, LightmapMode, Log},
+    bindings::{GlimConfig, Log},
     buffer::Buffer,
     cwbvh::Cwbvh,
-    lights::Light,
     math::*,
     seams::{Seam, find_seams},
     vulkan_context::VulkanContext,
@@ -188,6 +187,9 @@ impl Mesh {
                 uv.y = 1.0 - uv.y;
             }
 
+            uv.x = uv.x.clamp(0.0, 1.0);
+            uv.y = uv.y.clamp(0.0, 1.0);
+
             let mut vertex = Vertex {
                 position: positions[i],
                 lightmap_group,
@@ -305,13 +307,13 @@ pub struct GpuMesh {
     pub acceleration_structure: AccelerationStructureType,
 
     pub index_len: u32,
+    pub merged_mesh: Mesh,
 }
 
 impl GpuMesh {
     pub fn new(
         vk: &VulkanContext,
         meshes: &[Mesh; GEOMETRIES_VARIANTS],
-        lightmap_groups: &[LightmapGroup],
         use_ray_query: bool,
         seams: &mut Vec<Seam>,
         config: &GlimConfig,
@@ -331,18 +333,6 @@ impl GpuMesh {
 
         if !config.is_preview {
             *seams = find_seams(&merged_mesh, true);
-        }
-
-        let mut group_resolutions = vec![Vector2::ZERO; lightmap_groups.len()];
-
-        for index in 0..lightmap_groups.len() {
-            let group = &lightmap_groups[index];
-            group_resolutions[index] =
-                Vector2::new(group.settings.width as f32, group.settings.height as f32);
-        }
-
-        for v in &mut merged_mesh.vertices {
-            v.uv *= group_resolutions[v.group() as usize];
         }
 
         let mut variant_triangle_offsets = [0u32; GEOMETRIES_VARIANTS];
@@ -441,6 +431,7 @@ impl GpuMesh {
             acceleration_structure: bvh,
             index_len: merged_mesh.indices.len() as u32,
             main_uv_buffer,
+            merged_mesh,
         }
     }
 
@@ -683,6 +674,13 @@ impl GpuMesh {
             index_buffer: Buffer::null(),
             index_len: 0,
             main_uv_buffer: Buffer::null(),
+            merged_mesh: Mesh {
+                vertices: Vec::new(),
+                indices: Vec::new(),
+                main_uvs: Vec::new(),
+                transparent: false,
+                no_shadows: false,
+            },
         }
     }
 

@@ -1,4 +1,4 @@
-use crate::{LightmapGroup, Mesh, Vector2, math::Vector3, mesh::decode_normal_octahedron};
+use crate::{LightmapGroup, Mesh, Vector2, math::Vector3};
 
 #[repr(C)]
 #[derive(Debug, Clone)]

@@ -121,11 +121,11 @@ enum LightmapMode : uint
     CombinedSH = 3,
 };
 
-float4 SampleAlbedo(float2 uv, uint lightmapGroup)
+float4 SampleAlbedo(uint2 coords, uint lightmapGroup)
 {
     uint index = LIGHTMAP_GROUP_COUNT <= 1 ? 0 : NonUniformResourceIndex(lightmapGroup);
     Texture2D tex = Albedo[index];
-    return saturate(tex[(uint2)uv]);
+    return saturate(tex[coords]);
 }
 
 float SampleAlpha(float2 uv, uint alphaIndex, bool wrapUV)
@@ -144,11 +144,11 @@ float SampleAlpha(float2 uv, uint alphaIndex, bool wrapUV)
     return saturate(tex[texel].r);
 }
 
-float4 SampleEmission(float2 uv, uint lightmapGroup)
+float4 SampleEmission(uint2 coords, uint lightmapGroup)
 {
     uint index = LIGHTMAP_GROUP_COUNT <= 1 ? 0 : NonUniformResourceIndex(lightmapGroup);
     Texture2D tex = Emission[index];
-    return max(0.0, tex[(uint2)uv] * EMISSIVE_MULTIPLIER);
+    return max(0.0, tex[coords] * EMISSIVE_MULTIPLIER);
 }
 
 float4 SampleCookie(float2 uv, uint index)

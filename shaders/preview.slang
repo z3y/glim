@@ -47,12 +47,12 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float4 color = 0.0;
     float3 throughput = float3(1.0);
 
-    float3 emission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+    float3 emission = SampleEmission(surface.coords, surface.lightmapGroup).rgb;
     if (!surface.emissive)
     {
         emission = 0.0;
     }
-    float3 albedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
+    float3 albedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
     color.rgb += emission;
     throughput = albedo;
 
@@ -94,10 +94,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
                 }
             }
 
-            float3 bounceAlbedo = SampleAlbedo(surface.uv, surface.lightmapGroup).rgb;
+            float3 bounceAlbedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
             if (surface.emissive)
             {
-                float3 bounceEmission = SampleEmission(surface.uv, surface.lightmapGroup).rgb;
+                float3 bounceEmission = SampleEmission(surface.coords, surface.lightmapGroup).rgb;
                 color.rgb += bounceEmission * throughput;
             }
 

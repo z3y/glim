@@ -26,7 +26,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float4 *pixels = Push.pixels;
 
-    uint compactedIndex = GetCompactedIndex((float2)coords, Push.lightmapGroup, false);
+    uint compactedIndex = GetCompactedIndex(coords, Push.lightmapGroup, false);
     uint linearIndex = coords.y * Push.resolution.x + coords.x;
 
     if (compactedIndex == uint::maxValue)

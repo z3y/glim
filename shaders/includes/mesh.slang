@@ -84,12 +84,12 @@ struct Vertex
         return (this.flags >> (index * 8u)) & 0xFFu;
     }
 
-    uint GetLightmapGroup()
+    uint LightmapGroup()
     {
         return GetByte(0u);
     }
 
-    uint GetResolution()
+    uint Resolution()
     {
         return 1u << GetByte(1u);
     }
@@ -120,11 +120,14 @@ struct Surface
     float3 P;
     float3 Ng;
     float3 N;
-    float2 uv; // UVs already scaled by lightmap group resolution
+    // float2 uv;
 
     uint lightmapGroup;
     bool backfaceGI;
     bool emissive;
+    uint resolution;
+
+    uint2 coords;
 
     static Surface Get(uint primitiveID, float2 bary, bool frontFace = true)
     {
@@ -168,10 +171,12 @@ struct Surface
         surface.P = P;
         surface.Ng = Ng;
         surface.N = N;
-        surface.uv = uv;
-        surface.lightmapGroup = v0.GetLightmapGroup();
+        // surface.uv = uv;
+        surface.lightmapGroup = v0.LightmapGroup();
         surface.backfaceGI = v0.BackfaceGI();
         surface.emissive = v0.Emissive();
+        surface.resolution = v0.Resolution();
+        surface.coords = min(uint2(uv * surface.resolution), surface.resolution - 1);
         return surface;
     };
 };

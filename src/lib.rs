@@ -358,7 +358,6 @@ fn initialize_render(app: &mut Glim) {
     app.gpu_mesh = GpuMesh::new(
         &app.vk,
         &app.meshes,
-        &app.groups,
         use_ray_query,
         &mut app.seams,
         &app.config,
@@ -2035,10 +2034,7 @@ fn render_lightmaps(app: &mut Glim) {
         max_resolution = max_resolution.max(g.settings.width as usize);
     }
 
-    let mut mesh = app.meshes[0].clone();
-    for i in 1..app.meshes.len() {
-        mesh.merge_mesh(&app.meshes[i]);
-    }
+    let mesh = &app.gpu_mesh.merged_mesh;
 
     let mut texels = rasterize_texels(
         &mesh,

@@ -522,16 +522,9 @@ float3 EncodeCombinedSHL1(SHProbeL2 probe)
     return combined;
 }
 
-// uv already multiplied with resolution
-uint GetCompactedIndex(float2 uv, uint lightmapGroup, uint primitiveID, bool flipY = true)
+uint GetCompactedIndex(uint2 coords, uint lightmapGroup, uint primitiveID, bool flipY = true)
 {
-    uint2 coords = uint2(floor(uv));
     LightmapInfo info = LightmapsInfo[lightmapGroup];
-
-    if (coords.x >= info.resolution.x || coords.y >= info.resolution.y)
-    {
-        return uint::maxValue;
-    }
 
     if (flipY)
     {
@@ -592,7 +585,7 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
 
     Surface emissiveSurface = Surface::Get(primitiveID, bary);
 
-    float3 lightColor = SampleEmission(emissiveSurface.uv, emissiveSurface.lightmapGroup).rgb / float.getPi();
+    float3 lightColor = SampleEmission(emissiveSurface.coords, emissiveSurface.lightmapGroup).rgb / float.getPi();
 
     float triangleArea = CalculateTriangleArea(primitiveID);
 
@@ -882,6 +875,7 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     float2 uv0 = v[0].uv;
     float2 uv1 = v[1].uv;
     float2 uv2 = v[2].uv;
+    uint resolution = v[0].Resolution();
 
     float3 edge1 = p1 - p0;
     float3 edge2 = p2 - p0;
@@ -893,12 +887,13 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
 
     if (JITTER_BARYCENTRICS > 0)
     {
-        float2 jitterTexel = xiAA - 0.5;
+        // float2 jitterTexel = xiAA - 0.5;
+        float2 jitterUV = (xiAA - 0.5) / (float)resolution;
 
         // todo its possible to jitter multiple times until it lands on the triangle instead of giving up
         float2 dBary;
-        dBary.x = (duv2.y * jitterTexel.x - duv2.x * jitterTexel.y) * invDetSigned;
-        dBary.y = (-duv1.y * jitterTexel.x + duv1.x * jitterTexel.y) * invDetSigned;
+        dBary.x = (duv2.y * jitterUV.x - duv2.x * jitterUV.y) * invDetSigned;
+        dBary.y = (-duv1.y * jitterUV.x + duv1.x * jitterUV.y) * invDetSigned;
 
         float2 jBary = bary + dBary;
 
