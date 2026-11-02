@@ -3,7 +3,7 @@
 #include "sobol_burley.slang"
 #include "util.slang"
 
-float TriangleAlpha(uint primitiveID, float2 bary)
+float3 TriangleTransparency(uint primitiveID, float2 bary)
 {
     float u = bary.x;
     float v = bary.y;
@@ -18,6 +18,7 @@ float TriangleAlpha(uint primitiveID, float2 bary)
     float intensity = uv1.z;
     float cutoff = uv2.z;
     bool wrapUV = uv0.w > 0.0;
+    float transmission = 1.0;
 
     float alpha = intensity;
     if (uv0.z >= 0.0)
@@ -30,11 +31,18 @@ float TriangleAlpha(uint primitiveID, float2 bary)
 
     if (cutoff >= 0.0)
     {
-        return alpha >= cutoff ? 1.0 : 0.0;
+        return alpha >= cutoff ? 0.0 : 1.0;
     }
     else
     {
-        return alpha;
+        float3 tint = 0.0;
+        [branch]
+        if (transmission > 0.0)
+        {
+            Surface surface = Surface::Get(primitiveID, bary);
+            tint = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb * transmission;
+        }
+        return (1.0 - alpha) + alpha * tint;
     }
 }
 
@@ -198,9 +206,8 @@ bool BVHTraceRay(inout Ray ray, out Hit hit, bool shadowRay, bool shadowRenderer
                             [branch]
                             if (hitTransparent)
                             {
-                                float alpha = TriangleAlpha(asuint(v0.w), float2(u, v));
-                                float3 transmission = 1.0 - alpha.xxx;
-                                ray.color = ray.color * transmission;
+                                float3 transparency = TriangleTransparency(asuint(v0.w), float2(u, v));
+                                ray.color = ray.color * transparency;
 
                                 if (shadowRay)
                                 {
@@ -289,7 +296,8 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 
     float2 bary = query.CandidateTriangleBarycentrics();
 
-    bool visible = TriangleAlpha(primitiveID, bary) > 0.5;
+    // bool visible = TriangleAlpha(primitiveID, bary) > 0.5;
+    bool visible = true; // todo alpha
 
     if (visible)
     {
