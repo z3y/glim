@@ -12,9 +12,6 @@ namespace Glim
         RenderTexture _rt;
 
         int _resolution;
-        Material _metaAlphaMat;
-
-        readonly Dictionary<Material, Material> _alphaMatVariants = new();
 
         public MetaTexture(int resolution, AtlasType type)
         {
@@ -35,7 +32,6 @@ namespace Glim
                 dimension = TextureDimension.Tex2D
             };
 
-            _metaAlphaMat = AssetDatabase.LoadAssetAtPath<Material>("Packages/io.github.z3y.glim/Editor/AlphaMeta.mat");
             _rt = new RenderTexture(desc);
             _rt.filterMode = FilterMode.Point;
         }
@@ -44,7 +40,6 @@ namespace Glim
         {
             Albedo,
             Emission,
-            Alpha,
         }
 
         public AsyncGPUReadbackRequest CreateAtlas(IList<Renderer> renderers, AtlasType type)
@@ -62,16 +57,10 @@ namespace Glim
             }
 
             RenderMeta(renderers, type, cmd);
-            if (type == AtlasType.Albedo)
-            {
-                RenderMeta(renderers, AtlasType.Alpha, cmd);
-            }
 
             Graphics.ExecuteCommandBuffer(cmd);
 
-            var format = type == AtlasType.Albedo
-                ? GraphicsFormat.R8G8B8A8_UNorm
-                : GraphicsFormat.B10G11R11_UFloatPack32;
+            var format = type == AtlasType.Albedo ? GraphicsFormat.R8G8B8A8_UNorm : GraphicsFormat.B10G11R11_UFloatPack32;
 
             return AsyncGPUReadback.Request(_rt, 0, format);
         }
@@ -150,28 +139,6 @@ namespace Glim
                 return mat.GetTextureOffset(_BaseMap);
             }
             return Vector2.zero;
-        }
-
-
-        Material GetAlphaMaterial(Material source)
-        {
-            if (_alphaMatVariants.TryGetValue(source, out var variant))
-            {
-                return variant;
-            }
-
-            variant = new Material(_metaAlphaMat) { hideFlags = HideFlags.HideAndDontSave };
-
-            variant.SetTexture(_MainTex, GetMaterialAlbedo(source));
-            variant.SetColor(_Color, GetMaterialColor(source));
-
-            variant.SetFloat(_Cutoff, GetMaterialCutoff(source));
-
-            variant.SetTextureScale(_MainTex, GetMaterialAlbedoScale(source));
-            variant.SetTextureOffset(_MainTex, GetMaterialAlbedoOffset(source));
-
-            _alphaMatVariants.Add(source, variant);
-            return variant;
         }
 
         public static float GetMaterialCutoff(Material source)
@@ -332,29 +299,18 @@ namespace Glim
                             continue;
                         }
 
-                        if (type == AtlasType.Alpha)
+
+                        if (type == AtlasType.Emission)
                         {
-                            if (!IsMaterialTransparent(mat))
+                            if (!IsMaterialEmissive(mat))
                             {
                                 continue;
                             }
-
-                            cmd.DrawRenderer(renderer, GetAlphaMaterial(mat), submeshIndex, 0);
                         }
-                        else
+                        int meta = mat.FindPass("META");
+                        if (meta >= 0)
                         {
-                            if (type == AtlasType.Emission)
-                            {
-                                if (!IsMaterialEmissive(mat))
-                                {
-                                    continue;
-                                }
-                            }
-                            int meta = mat.FindPass("META");
-                            if (meta >= 0)
-                            {
-                                cmd.DrawMesh(mesh, localToWorld, mat, submeshIndex, meta, mpb);
-                            }
+                            cmd.DrawMesh(mesh, localToWorld, mat, submeshIndex, meta, mpb);
                         }
                     }
                 }
@@ -438,15 +394,6 @@ namespace Glim
             {
                 Editor.DestroyImmediate(_rt);
             }
-
-            foreach (var variant in _alphaMatVariants.Values)
-            {
-                if (variant)
-                {
-                    Editor.DestroyImmediate(variant);
-                }
-            }
-            _alphaMatVariants.Clear();
         }
     }
 }

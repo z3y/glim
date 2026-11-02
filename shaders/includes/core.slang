@@ -3,7 +3,6 @@
 #include "sobol_burley.slang"
 #include "util.slang"
 
-#if 1
 bool TriangleAlphaTest(uint primitiveID, float2 bary)
 {
     float u = bary.x;
@@ -28,14 +27,6 @@ bool TriangleAlphaTest(uint primitiveID, float2 bary)
 
     return true;
 }
-#else
-bool TriangleAlphaTest(uint primitiveID, float2 bary)
-{
-    Surface surf = Surface::Get(primitiveID, bary);
-    float alpha = SampleAlbedo(surf.uv, surf.lightmapGroup).a;
-    return alpha >= 0.5;
-}
-#endif
 
 #pragma warning(disable: 41035)
 
