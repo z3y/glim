@@ -187,9 +187,6 @@ impl Mesh {
                 uv.y = 1.0 - uv.y;
             }
 
-            uv.x = uv.x.clamp(0.0, 1.0);
-            uv.y = uv.y.clamp(0.0, 1.0);
-
             let mut vertex = Vertex {
                 position: positions[i],
                 lightmap_group,

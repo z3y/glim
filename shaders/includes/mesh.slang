@@ -115,6 +115,15 @@ struct Vertex
     }
 };
 
+Vertex[3] TriangleVertices(uint primitiveID)
+{
+    uint i0 = Indices[primitiveID * 3 + 0];
+    uint i1 = Indices[primitiveID * 3 + 1];
+    uint i2 = Indices[primitiveID * 3 + 2];
+
+    return { Vertices[i0], Vertices[i1], Vertices[i2] };
+}
+
 struct Surface
 {
     float3 P;
@@ -176,7 +185,7 @@ struct Surface
         surface.backfaceGI = v0.BackfaceGI();
         surface.emissive = v0.Emissive();
         surface.resolution = v0.Resolution();
-        surface.coords = min(uint2(uv * surface.resolution), surface.resolution - 1);
+        surface.coords = clamp(int2(floor(uv * surface.resolution)), 0, int2(surface.resolution) - 1);
         return surface;
     };
 };

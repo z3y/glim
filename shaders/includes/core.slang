@@ -847,15 +847,6 @@ bool ShadowMaskVisibility(Light light, float3 positionWS, out float3 L)
     return !TraceShadowRay(shadowRay);
 }
 
-Vertex[3] TriangleVertices(uint primitiveID)
-{
-    uint i0 = Indices[primitiveID * 3 + 0];
-    uint i1 = Indices[primitiveID * 3 + 1];
-    uint i2 = Indices[primitiveID * 3 + 2];
-
-    return { Vertices[i0], Vertices[i1], Vertices[i2] };
-}
-
 void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 positionWS, out float3 normalWS, out uint3 indexing)
 {
     float4 visibility = CompactedVisibility[index];
@@ -887,7 +878,6 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
 
     if (JITTER_BARYCENTRICS > 0)
     {
-        // float2 jitterTexel = xiAA - 0.5;
         float2 jitterUV = (xiAA - 0.5) / (float)resolution;
 
         // todo its possible to jitter multiple times until it lands on the triangle instead of giving up
