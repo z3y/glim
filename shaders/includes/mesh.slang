@@ -70,9 +70,9 @@ struct Vertex
     float2 normalOctahedron;
     float2 uv;
 
-    const uint BACKFACE_GI_BIT = 1 << 0;
-    const uint EMISSIVE_BIT = 1 << 1;
-    const uint FIX_SEAMS_BIT = 1 << 2;
+    static const uint BACKFACE_GI_BIT = 1 << 0;
+    static const uint EMISSIVE_BIT = 1 << 1;
+    static const uint FIX_SEAMS_BIT = 1 << 2;
 
     float3 DecodeNormal()
     {
