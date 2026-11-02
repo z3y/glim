@@ -2,9 +2,10 @@ use ash::vk::{self, Handle};
 
 use crate::{
     CoordinateSystem, LightmapGroup,
-    bindings::{GlimConfig, Log},
+    bindings::{GlimConfig, LightmapMode, Log},
     buffer::Buffer,
     cwbvh::Cwbvh,
+    lights::Light,
     math::*,
     seams::{Seam, find_seams},
     vulkan_context::VulkanContext,
@@ -42,18 +43,55 @@ pub struct FfiMesh {
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
     pub position: Vector3,
-    pub flags: u32,
-    pub normal: Vector2,
+    // pub flags: u32,
+    lightmap_group: u8,
+    resolution: u8,
+    flags: u8,
+    pad: u8,
+
+    pub normal_octahedron: Vector2,
     pub uv: Vector2,
 }
 
 impl Vertex {
-    pub fn group(&self) -> u32 {
-        self.flags & 0xFFFF
+    pub const BACKFACE_GI_BIT: u8 = 1 << 0;
+    pub const EMISSIVE_BIT: u8 = 1 << 1;
+    pub const FIX_SEAMS_BIT: u8 = 1 << 2;
+
+    #[inline]
+    pub fn decode_normal(&self) -> Vector3 {
+        decode_normal_octahedron(self.normal_octahedron)
     }
 
+    #[inline]
+    pub fn group(&self) -> u32 {
+        self.lightmap_group as u32
+    }
+
+    #[inline]
     pub fn fix_seams(&self) -> bool {
-        self.flags & (1 << 18) != 0
+        (self.flags & Vertex::FIX_SEAMS_BIT) != 0
+    }
+
+    #[inline]
+    pub fn emissive(&self) -> bool {
+        (self.flags & Vertex::EMISSIVE_BIT) != 0
+    }
+
+    #[inline]
+    pub fn backface_gi(&self) -> bool {
+        (self.flags & Vertex::BACKFACE_GI_BIT) != 0
+    }
+
+    #[inline]
+    pub fn set_resolution(&mut self, resolution: u32) {
+        assert!(resolution.is_power_of_two());
+        self.resolution = resolution.trailing_zeros() as u8
+    }
+
+    #[inline]
+    pub fn resolution(&self) -> u32 {
+        1u32 << self.resolution
     }
 }
 
@@ -106,6 +144,7 @@ impl Mesh {
         &mut self,
         mesh: FfiMesh,
         system: CoordinateSystem,
+        groups: &[LightmapGroup],
         fix_seams: bool,
         emissive: bool,
     ) {
@@ -118,12 +157,13 @@ impl Mesh {
         let lightmap_uvs = unsafe { slice::from_raw_parts(mesh.lightmap_uvs, vertex_count) };
         let main_uvs = unsafe { slice::from_raw_parts(mesh.main_uvs, vertex_count) };
 
-        // let sample_scale = 20.0;
         let unity = system == CoordinateSystem::Unity;
+
+        let resolution = groups[mesh.lightmap_group as usize].settings.width;
 
         let offset = self.vertices.len() as u32;
 
-        let lightmap_group = mesh.lightmap_group;
+        let lightmap_group = mesh.lightmap_group as u8;
         let backface_gi = mesh.backface_gi;
 
         self.vertices.reserve(vertex_count);
@@ -132,16 +172,15 @@ impl Mesh {
             let mut normal = normals[i];
             normal.transform_space(system);
 
-            let mut flags: u32 = 0;
-            flags |= lightmap_group & 0xFFFF;
+            let mut flags: u8 = 0;
             if backface_gi {
-                flags |= 1 << 16;
+                flags |= Vertex::BACKFACE_GI_BIT;
             }
             if emissive {
-                flags |= 1 << 17;
+                flags |= Vertex::EMISSIVE_BIT;
             }
             if fix_seams {
-                flags |= 1 << 18;
+                flags |= Vertex::FIX_SEAMS_BIT;
             }
 
             let mut uv = lightmap_uvs[i];
@@ -151,11 +190,14 @@ impl Mesh {
 
             let mut vertex = Vertex {
                 position: positions[i],
-                normal: encode_normal_octahedron(normal),
-                uv: uv,
+                lightmap_group,
+                resolution: 0,
                 flags,
+                pad: 0,
+                normal_octahedron: encode_normal_octahedron(normal),
+                uv: uv,
             };
-
+            vertex.set_resolution(resolution);
             vertex.position.transform_space(system);
 
             self.vertices.push(vertex);
@@ -300,8 +342,7 @@ impl GpuMesh {
         }
 
         for v in &mut merged_mesh.vertices {
-            let group = v.flags & 0xFFFF;
-            v.uv *= group_resolutions[group as usize];
+            v.uv *= group_resolutions[v.group() as usize];
         }
 
         let mut variant_triangle_offsets = [0u32; GEOMETRIES_VARIANTS];

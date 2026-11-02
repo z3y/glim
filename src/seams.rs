@@ -95,12 +95,12 @@ pub fn find_seams(mesh: &Mesh, flip_uv_y: bool) -> Vec<Seam> {
     let is_seam = |e0: &Edge, e1: &Edge| -> u8 {
         let ve0a = mesh.vertices[e0.a as usize];
         let pa0 = ve0a.position;
-        let na0 = ve0a.normal;
+        let na0 = ve0a.normal_octahedron;
         let uva0 = ve0a.uv;
 
         let ve1a = mesh.vertices[e1.a as usize];
         let pb0 = ve1a.position;
-        let nb0 = ve1a.normal;
+        let nb0 = ve1a.normal_octahedron;
         let uvb0 = ve1a.uv;
 
         if ve0a.group() != ve1a.group() || !ve1a.fix_seams() {
@@ -114,12 +114,12 @@ pub fn find_seams(mesh: &Mesh, flip_uv_y: bool) -> Vec<Seam> {
         if positions_equal && normals_equal && !uvs_equal {
             let ve0b = mesh.vertices[e0.b as usize];
             let pa1 = ve0b.position;
-            let na1 = ve0b.normal;
+            let na1 = ve0b.normal_octahedron;
             let uva1 = ve0b.uv;
 
             let ve1b = mesh.vertices[e1.b as usize];
             let pb1 = ve1b.position;
-            let nb1 = ve1b.normal;
+            let nb1 = ve1b.normal_octahedron;
             let uvb1 = ve1b.uv;
 
             let positions_equal = vec3_eq_approx(pa1, pb1);
@@ -133,18 +133,18 @@ pub fn find_seams(mesh: &Mesh, flip_uv_y: bool) -> Vec<Seam> {
 
         let ve1b = mesh.vertices[e1.b as usize];
         let positions_equal = vec3_eq_approx(pa0, ve1b.position);
-        let normals_equal = vec2_eq_approx(na0, ve1b.normal);
+        let normals_equal = vec2_eq_approx(na0, ve1b.normal_octahedron);
         let uvs_equal = vec2_eq_approx(uva0, ve1b.uv);
 
         if positions_equal && normals_equal && !uvs_equal {
             let ve0b = mesh.vertices[e0.b as usize];
             let pa1 = ve0b.position;
-            let na1 = ve0b.normal;
+            let na1 = ve0b.normal_octahedron;
             let uva1 = ve0b.uv;
 
             let ve1a = mesh.vertices[e1.a as usize];
             let positions_equal = vec3_eq_approx(pa1, ve1a.position);
-            let normals_equal = vec2_eq_approx(na1, ve1a.normal);
+            let normals_equal = vec2_eq_approx(na1, ve1a.normal_octahedron);
             let uvs_equal = vec2_eq_approx(uva1, ve1a.uv);
 
             if positions_equal && normals_equal && !uvs_equal {

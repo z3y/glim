@@ -67,42 +67,51 @@ struct Vertex
 {
     float3 position;
     uint flags;
-    float2 normal;
+    float2 normalOctahedron;
     float2 uv;
 
-    float3 GetPosition()
+    const uint BACKFACE_GI_BIT = 1 << 0;
+    const uint EMISSIVE_BIT = 1 << 1;
+    const uint FIX_SEAMS_BIT = 1 << 2;
+
+    float3 DecodeNormal()
     {
-        return this.position;
+        return DecodeNormalOctahedron(this.normalOctahedron);
     }
 
-    float3 GetNormal()
+    uint GetByte(uint index)
     {
-        return DecodeNormalOctahedron(this.normal);
-    }
-
-    float2 GetUV()
-    {
-        return this.uv;
+        return (this.flags >> (index * 8u)) & 0xFFu;
     }
 
     uint GetLightmapGroup()
     {
-        return this.flags & 0xFFFFu;
+        return GetByte(0u);
+    }
+
+    uint GetResolution()
+    {
+        return 1u << GetByte(1u);
     }
 
     uint GetFlags()
     {
-        return (this.flags >> 16u) & 0xFFFFu;
+        return GetByte(2u);
     }
 
     bool BackfaceGI()
     {
-        return (GetFlags() & (0x1u << 0u)) != 0u;
+        return (GetFlags() & BACKFACE_GI_BIT) != 0u;
     }
 
     bool Emissive()
     {
-        return (GetFlags() & (0x1u << 1u)) != 0u;
+        return (GetFlags() & EMISSIVE_BIT) != 0u;
+    }
+
+    bool FixSeams()
+    {
+        return (GetFlags() & FIX_SEAMS_BIT) != 0u;
     }
 };
 
@@ -131,17 +140,17 @@ struct Surface
         Vertex v1 = Vertices[i1];
         Vertex v2 = Vertices[i2];
 
-        float3 p0 = v0.GetPosition();
-        float3 p1 = v1.GetPosition();
-        float3 p2 = v2.GetPosition();
+        float3 p0 = v0.position;
+        float3 p1 = v1.position;
+        float3 p2 = v2.position;
 
-        float3 n0 = v0.GetNormal();
-        float3 n1 = v1.GetNormal();
-        float3 n2 = v2.GetNormal();
+        float3 n0 = v0.DecodeNormal();
+        float3 n1 = v1.DecodeNormal();
+        float3 n2 = v2.DecodeNormal();
 
-        float2 uv0 = v0.GetUV();
-        float2 uv1 = v1.GetUV();
-        float2 uv2 = v2.GetUV();
+        float2 uv0 = v0.uv;
+        float2 uv1 = v1.uv;
+        float2 uv2 = v2.uv;
 
         float3 P = p0 * w + p1 * u + p2 * v;
         float3 Ng = normalize(cross(p1 - p0, p2 - p0));

@@ -1132,9 +1132,7 @@ fn extract_emissive_triangles(app: &mut Glim) {
                 let v1 = &vertices[i1];
                 let v2 = &vertices[i2];
 
-                let emissive = (v0.flags & (1 << 17)) != 0;
-
-                if !emissive {
+                if !v0.emissive() {
                     continue;
                 }
 
@@ -1142,8 +1140,7 @@ fn extract_emissive_triangles(app: &mut Glim) {
                 let uv1 = v1.uv;
                 let uv2 = v2.uv;
 
-                let group_index = (v0.flags & 0xFFFF) as usize;
-                let group = &app.groups[group_index];
+                let group = &app.groups[v0.group() as usize];
                 let pixels = &group.emission_pixels;
 
                 let w = group.settings.width;

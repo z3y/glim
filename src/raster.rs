@@ -145,9 +145,9 @@ pub fn render_normals(
         let v = bary.y;
         let w = 1.0 - u - v;
 
-        let n0 = decode_normal_octahedron(v0.normal);
-        let n1 = decode_normal_octahedron(v1.normal);
-        let n2 = decode_normal_octahedron(v2.normal);
+        let n0 = v0.decode_normal();
+        let n1 = v1.decode_normal();
+        let n2 = v2.decode_normal();
 
         let normal = n0 * w + n1 * u + n2 * v;
 

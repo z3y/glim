@@ -389,9 +389,9 @@ float CalculateTriangleArea(uint primitiveID)
     uint i1 = Indices[primitiveID * 3 + 1];
     uint i2 = Indices[primitiveID * 3 + 2];
 
-    float3 p0 = Vertices[i0].GetPosition();
-    float3 p1 = Vertices[i1].GetPosition();
-    float3 p2 = Vertices[i2].GetPosition();
+    float3 p0 = Vertices[i0].position;
+    float3 p1 = Vertices[i1].position;
+    float3 p2 = Vertices[i2].position;
 
     float3 edge1 = p1 - p0;
     float3 edge2 = p2 - p0;
