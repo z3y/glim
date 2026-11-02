@@ -251,7 +251,7 @@ pub extern "C" fn app_add_mesh(app: *mut Glim, mesh: FfiMesh) {
     let app = unsafe { &mut *app };
     let result = catch_unwind(AssertUnwindSafe(|| {
         let mut index = 0;
-        if mesh.transparent {
+        if mesh.alpha_mode > 0 {
             index += 1;
         }
         if mesh.no_shadows {

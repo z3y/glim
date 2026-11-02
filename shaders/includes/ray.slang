@@ -6,6 +6,8 @@ struct Ray
     float tMin;
     float3 D;
     float tMax;
+
+    float3 color;
 }
 
 struct Hit

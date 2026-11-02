@@ -129,6 +129,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     else
     {
         float3 current = SampleSkybox(ray.D);
+        // current *= ray.color;
         color.rgb += current;
         dominantDirection.xyz += ray.D * Luminance(current);
         AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);

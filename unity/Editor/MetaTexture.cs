@@ -97,7 +97,7 @@ namespace Glim
             return Texture2D.whiteTexture;
         }
 
-        public static Texture2D GetMaterialAlpha(Material mat)
+        public static Texture2D GetMaterialAlphaTexture(Material mat)
         {
             Texture tex = GetMaterialAlbedo(mat);
 
@@ -329,34 +329,28 @@ namespace Glim
         public static readonly HashSet<string> TransparentTags = new()
         {
             "Transparent",
-            "TransparentCutout",
-            "TreeTransparentCutout",
             "GrassBillboard",
             "Grass",
             "TreeLeaf"
         };
 
-        public static bool IsMaterialTransparent(Material mat)
+        public static readonly HashSet<string> CutoutTags = new()
         {
-            if (!mat) return false;
-            if (!mat.shader) return false;
+            "TransparentCutout",
+            "TreeTransparentCutout",
+        };
 
-            {
-                string type = mat.GetTag("SurfaceType", false, "");
-                if (TransparentTags.Contains(type)) return true;
-            }
+        public static byte GetMaterialAlphaMode(Material mat)
+        {
+            if (!mat) return 0;
+            if (!mat.shader) return 0;
 
-            {
-                string type = mat.GetTag("RenderType", false, "");
-                if (TransparentTags.Contains(type)) return true;
-            }
+            if (TransparentTags.Contains(mat.GetTag("SurfaceType", false, ""))) return 1;
+            if (TransparentTags.Contains(mat.GetTag("RenderType", false, ""))) return 1;
+            if (CutoutTags.Contains(mat.GetTag("SurfaceType", false, ""))) return 2;
+            if (CutoutTags.Contains(mat.GetTag("RenderType", false, ""))) return 2;
 
-            // if (mat.renderQueue >= (int)RenderQueue.AlphaTest)
-            // {
-            //     return true;
-            // }
-
-            return false;
+            return 0;
         }
 
         public static int GetMaterialAlbedoProperty(Material mat)
@@ -381,10 +375,10 @@ namespace Glim
             }
         }
 
-        public static float GetMaterialColorAlpha(Material mat)
+        public static float GetMaterialAlphaIntensity(Material mat)
         {
-            if (mat.HasProperty(_BaseColor)) return mat.GetColor(_BaseColor).a;
-            if (mat.HasProperty(_Color)) return mat.GetColor(_Color).a;
+            if (mat.HasProperty(_BaseColor)) return mat.GetColor(_BaseColor).linear.a;
+            if (mat.HasProperty(_Color)) return mat.GetColor(_Color).linear.a;
             return 1.0f;
         }
 

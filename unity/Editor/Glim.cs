@@ -724,12 +724,14 @@ namespace Glim
                     indices = mesh.triangles,
                     groupIndex = groupIndex,
                     backfaceGI = false,
-                    transparent = hasHoles,
+                    alphaMode = hasHoles ? (byte)2 : (byte)0,
                     emissive = false,
                     fixSeams = false,
                     alphaTexture = data.holesTexture,
                     alphaWrap = false,
                     cutoff = 0.5f,
+                    alphaIntensity = 1.0f,
+                    alphaTextureIndex = -1,
                 };
                 sceneMesh.Add(meshData);
                 GameObject.DestroyImmediate(mesh);
@@ -1029,7 +1031,7 @@ namespace Glim
             public int[] indices;
             public uint groupIndex;
             public bool backfaceGI;
-            public bool transparent;
+            public byte alphaMode;
             public bool emissive;
             public bool fixSeams;
             public bool noShadows;
@@ -1038,6 +1040,7 @@ namespace Glim
             public int alphaTextureIndex = -1;
             public bool alphaWrap;
             public float cutoff;
+            public float alphaIntensity;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -1159,7 +1162,6 @@ namespace Glim
                     }
 
                     bool backfaceGI = material.doubleSidedGI;
-                    bool transparent = MetaTexture.IsMaterialTransparent(material);
                     bool emissive = MetaTexture.IsMaterialEmissive(material);
 
                     mesh.GetIndices(indices, submeshIndex);
@@ -1205,34 +1207,30 @@ namespace Glim
                     Texture2D alphaTexture = null;
                     bool alphaWrap = false;
                     float cutoff = 0.5f;
-                    if (MetaTexture.IsMaterialTransparent(material))
+                    float alphaIntensity = 1.0f;
+
+                    byte alphaMode = MetaTexture.GetMaterialAlphaMode(material);
+                    if (alphaMode > 0)
                     {
-                        alphaTexture = MetaTexture.GetMaterialAlpha(material);
+                        alphaTexture = MetaTexture.GetMaterialAlphaTexture(material);
+
+                        if (alphaTexture != null)
+                        {
+                            Vector2 tiling;
+                            Vector2 tilingOffset;
+                            MetaTexture.GetMaterialAlbedoScaleOffset(material, out tiling, out tilingOffset);
+                            for (int j = 0; j < localMainUvs.Count; j++)
+                            {
+                                localMainUvs[j] = localMainUvs[j] * tiling + tilingOffset;
+                            }
+
+                            alphaWrap = alphaTexture.wrapMode != TextureWrapMode.Clamp; // other modes can be supported too if needed
+                        }
+
+                        cutoff = MetaTexture.GetMaterialCutoff(material);
+                        alphaIntensity = MetaTexture.GetMaterialAlphaIntensity(material);
                     }
 
-                    if (alphaTexture != null)
-                    {
-                        Vector2 tiling;
-                        Vector2 tilingOffset;
-                        MetaTexture.GetMaterialAlbedoScaleOffset(material, out tiling, out tilingOffset);
-                        for (int j = 0; j < localMainUvs.Count; j++)
-                        {
-                            localMainUvs[j] = localMainUvs[j] * tiling + tilingOffset;
-                        }
-
-                        alphaWrap = alphaTexture.wrapMode != TextureWrapMode.Clamp; // other modes can be supported too if needed
-                        float baseCutoff = MetaTexture.GetMaterialCutoff(material);
-
-                        float colorAlpha = MetaTexture.GetMaterialColorAlpha(material);
-                        if (colorAlpha > 1e-5f)
-                        {
-                            cutoff = baseCutoff / colorAlpha;
-                        }
-                        else
-                        {
-                            cutoff = baseCutoff <= 0.0f ? 0.0f : 2.0f;
-                        }
-                    }
 
                     if (localVertices.Count != localNormals.Count ||
                         localVertices.Count != localLightmapUvs.Count ||
@@ -1252,9 +1250,10 @@ namespace Glim
                         indices = localIndices.ToArray(),
                         groupIndex = groupIndex,
                         backfaceGI = backfaceGI,
-                        transparent = transparent,
+                        alphaMode = alphaMode,
                         emissive = emissive,
                         fixSeams = fixSeams,
+                        alphaIntensity = alphaIntensity,
                         noShadows = mr.shadowCastingMode == ShadowCastingMode.Off,
                         alphaTexture = alphaTexture,
                         alphaWrap = alphaWrap,

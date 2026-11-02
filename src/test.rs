@@ -28,7 +28,7 @@ mod tests {
     const FIX_SEAMS: bool = false;
 
     const MIS: bool = true;
-    const HARDWARE_RT: bool = true;
+    const HARDWARE_RT: bool = false;
 
     #[test]
     fn test_preview() {
@@ -128,7 +128,7 @@ mod tests {
             app,
             &mesh_path,
             false,
-            false,
+            0,
             false,
             Vector3::new(0.0, 0.0, 0.0),
             0,
@@ -219,7 +219,7 @@ mod tests {
         app: *mut Glim,
         path: &str,
         flip_uv: bool,
-        transparent: bool,
+        alpha_mode: u8,
         no_shadows: bool,
         position_offset: Vector3,
         group: u32,
@@ -345,11 +345,12 @@ mod tests {
                     backface_gi,
                     emissive: true,
                     fix_seams: true,
-                    transparent,
+                    alpha_mode,
                     no_shadows,
                     alpha_index: -1,
                     alpha_wrap: true,
                     cutoff: 0.5,
+                    alpha_intensity: 1.0,
                 };
                 app_add_mesh(app, mesh);
             }

@@ -30,19 +30,19 @@ pub struct FfiMesh {
     pub emissive: bool,
     pub fix_seams: bool,
 
-    pub transparent: bool,
+    pub alpha_mode: u8, // 0 opaque, 1 transparent, 2 cutout
     pub no_shadows: bool,
 
     pub alpha_index: i32,
     pub alpha_wrap: bool,
     pub cutoff: f32,
+    pub alpha_intensity: f32,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
     pub position: Vector3,
-    // pub flags: u32,
     lightmap_group: u8,
     resolution: u8,
     flags: u8,
@@ -204,20 +204,20 @@ impl Mesh {
 
         self.main_uvs.reserve(index_count);
 
-        let alpha_id: u32 = if mesh.alpha_index < 0 {
-            0xFFFF
-        } else {
-            (mesh.alpha_index as u32) & 0xFFFF
-        };
-        let wrap_bit: u32 = if mesh.alpha_wrap { 1 << 16 } else { 0 };
-        let packed = f32::from_bits(alpha_id | wrap_bit);
-        let cutoff = mesh.cutoff;
+        let wrap = if mesh.alpha_wrap { 1.0 } else { 0.0 };
+        let mut cutoff = mesh.cutoff.clamp(0.0, 1.0);
+        let alpha_index = mesh.alpha_index as f32;
+        let alpha_intensity = mesh.alpha_intensity;
+
+        if mesh.alpha_mode == 1 {
+            cutoff = -1.0;
+        }
 
         match system {
             CoordinateSystem::Default => {
                 for &idx in indices {
                     let uv = main_uvs[idx as usize];
-                    self.main_uvs.push([uv.x, uv.y, packed, cutoff]);
+                    self.main_uvs.push([uv.x, uv.y, 0.0, 0.5]);
                 }
                 self.indices.extend(indices.iter().map(|i| i + offset));
             }
@@ -225,10 +225,16 @@ impl Mesh {
                 self.indices.reserve(indices.len());
 
                 for triangle in indices.chunks(3) {
-                    for &k in &[0usize, 2, 1] {
+                    for (i, &k) in [0usize, 2, 1].iter().enumerate() {
                         let idx = triangle[k];
                         let uv = main_uvs[idx as usize];
-                        self.main_uvs.push([uv.x, uv.y, packed, cutoff]);
+                        if i == 0 {
+                            self.main_uvs.push([uv.x, uv.y, alpha_index, wrap]);
+                        } else if i == 1 {
+                            self.main_uvs.push([uv.x, uv.y, alpha_intensity, wrap]);
+                        } else {
+                            self.main_uvs.push([uv.x, uv.y, cutoff, wrap]);
+                        }
                         self.indices.push(idx + offset);
                     }
                 }

@@ -3,7 +3,7 @@
 #include "sobol_burley.slang"
 #include "util.slang"
 
-bool TriangleAlphaTest(uint primitiveID, float2 bary)
+float TriangleAlpha(uint primitiveID, float2 bary)
 {
     float u = bary.x;
     float v = bary.y;
@@ -15,17 +15,27 @@ bool TriangleAlphaTest(uint primitiveID, float2 bary)
 
     float2 uv = uv0.xy * w + uv1.xy * u + uv2.xy * v;
 
-    uint packed = asuint(uv0.z);
-    uint textureIndex = packed & 0xFFFF;
-    bool wrapUV = (packed & (1u << 16)) != 0;
-    float cutoff = uv0.w;
+    float intensity = uv1.z;
+    float cutoff = uv2.z;
+    bool wrapUV = uv0.w > 0.0;
 
-    if (textureIndex != 0xFFFF)
+    float alpha = intensity;
+    if (uv0.z >= 0.0)
     {
-        return SampleAlpha(uv, textureIndex, wrapUV) >= cutoff;
+        uint textureIndex = uint(uv0.z);
+        alpha *= SampleAlpha(uv, textureIndex, wrapUV);
     }
 
-    return true;
+    alpha = saturate(alpha);
+
+    if (cutoff >= 0.0)
+    {
+        return alpha >= cutoff ? 1.0 : 0.0;
+    }
+    else
+    {
+        return alpha;
+    }
 }
 
 #pragma warning(disable: 41035)
@@ -43,8 +53,7 @@ float SafeDirComponent(float d)
     return d;
 }
 
-[ForceInline]
-bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
+bool BVHTraceRay(inout Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
 {
     hit = {};
 
@@ -162,7 +171,8 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
 
             if (!shadowRenderers)
             {
-                if (shadowRay && e1.w != 0)
+                bool noShadows = e1.w != 0;
+                if (shadowRay && noShadows)
                 {
                     continue;
                 }
@@ -184,18 +194,28 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
                         float d = f * dot(e1.xyz, q);
                         if (d > 0.0 && d < tmax)
                         {
-
+                            bool hitTransparent = e2.w != 0;
                             [branch]
-                            if (e2.w != 0)
+                            if (hitTransparent)
                             {
-                                if (!TriangleAlphaTest(asuint(v0.w), float2(u, v)))
+                                float alpha = TriangleAlpha(asuint(v0.w), float2(u, v));
+                                float3 transmission = 1.0 - alpha.xxx;
+                                ray.color = ray.color * transmission;
+
+                                if (shadowRay)
                                 {
+                                    if (all(ray.color <= 0.01))
+                                    {
+                                        return true;
+                                    }
+
                                     continue;
                                 }
                             }
 
                             if (shadowRay)
                             {
+                                ray.color = 0.0;
                                 return true;
                             }
 
@@ -269,7 +289,7 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
 
     float2 bary = query.CandidateTriangleBarycentrics();
 
-    bool visible = TriangleAlphaTest(primitiveID, bary);
+    bool visible = TriangleAlpha(primitiveID, bary) > 0.5;
 
     if (visible)
     {
@@ -277,8 +297,9 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
     }
 }
 
-bool TraceRay(Ray ray, out Hit hit)
+bool TraceRay(inout Ray ray, out Hit hit)
 {
+    ray.color = float3(1.0, 1.0, 1.0);
     hit = {};
 
     if (HARDWARE_RT == 1)
@@ -319,8 +340,10 @@ bool TraceRay(Ray ray, out Hit hit)
 }
 
 // exclude renderers with no shadow casting
-bool TraceShadowRay(Ray ray)
+bool TraceShadowRay(inout Ray ray)
 {
+    ray.color = float3(1.0, 1.0, 1.0);
+
     if (HARDWARE_RT == 1)
     {
         RayDesc rayDesc;
@@ -349,6 +372,8 @@ bool TraceShadowRay(Ray ray)
 // includes renderers with no shadow casting
 bool TraceAnyHit(Ray ray)
 {
+    ray.color = float3(1.0, 1.0, 1.0);
+
     if (HARDWARE_RT == 1)
     {
         RayDesc rayDesc;
@@ -783,10 +808,8 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     [branch]
     if (visible > 0.0 && light.CastShadows())
     {
-        if (TraceShadowRay(shadowRay))
-        {
-            color = 0.0;
-        }
+        TraceShadowRay(shadowRay);
+        color *= shadowRay.color;
     }
 
     return color;

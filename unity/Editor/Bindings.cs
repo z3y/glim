@@ -215,12 +215,13 @@ namespace Glim
             [MarshalAs(UnmanagedType.I1)] public bool emissive;
             [MarshalAs(UnmanagedType.I1)] public bool fix_seams;
 
-            [MarshalAs(UnmanagedType.I1)] public bool transparent;
+            public byte alpha_mode;
             [MarshalAs(UnmanagedType.I1)] public bool no_shadows;
 
             public int alpha_index;
             [MarshalAs(UnmanagedType.I1)] public bool alpha_wrap;
             public float cutoff;
+            public float alphaIntensity;
         }
 
         public enum LightType : byte
