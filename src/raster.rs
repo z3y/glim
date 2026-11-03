@@ -234,6 +234,64 @@ pub fn decompact_diffuse(
     }
 }
 
+pub fn decompact_validity(
+    buffer: &mut [f32],
+    texels: &[VisibilityTexel],
+    coverage: &[f32],
+    validity: &[f32],
+    mesh: &Mesh,
+    group: &LightmapGroup,
+    texel_validity_threshold: f32,
+) {
+    let resolution = group.settings.width as usize;
+    let group_id = group.id;
+
+    let count = resolution * resolution * 4;
+
+    let buffer = &mut buffer[0..count];
+    buffer.fill(0.0);
+
+    for compacted_index in 0..texels.len() {
+        let texel = &texels[compacted_index];
+
+        let primitive_id = texel.primitive_id;
+        if primitive_id == u32::MAX {
+            continue;
+        }
+        let i0 = mesh.indices[(primitive_id as usize) * 3 + 0] as usize;
+        let v0 = mesh.vertices[i0];
+
+        if v0.group() != group_id {
+            continue;
+        }
+
+        let v = validity[compacted_index];
+
+        let index = texel.index(resolution);
+
+        let value = if v > texel_validity_threshold {
+            1.0
+        } else {
+            0.0
+        };
+
+        buffer[index * 4 + 0] += value;
+        buffer[index * 4 + 3] += 1.0;
+    }
+
+    for px in buffer.chunks_exact_mut(4) {
+        let w = px[3].min(1.0);
+
+        if w > 0.0 {
+            px[0] /= w;
+            px[0] = 1.0 - px[0];
+            px[3] = 1.0;
+        } else {
+            px[3] = 0.0;
+        }
+    }
+}
+
 pub fn encode_directional(pixels: &mut [f32], normals: &[f32]) {
     for (i, px) in pixels.chunks_exact_mut(4).enumerate() {
         // let w = px[3];

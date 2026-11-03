@@ -12,7 +12,7 @@ struct PushConstants
     uint pad0;
 
     float *validity;
-    uint pad1;
+    float validityThreshold;
     uint pad2;
 };
 
@@ -174,5 +174,17 @@ void main(uint3 threadID: SV_DispatchThreadID)
         CompactedLightmap[index * 3 + 0] += dominantDirection.x;
         CompactedLightmap[index * 3 + 1] += dominantDirection.y;
         CompactedLightmap[index * 3 + 2] += dominantDirection.z;
+    }
+
+    bool lastSample = sampleIndex == (sampleCount - 1);
+    [branch]
+    if (lastSample)
+    {
+        if (Push.validity[index] < Push.validityThreshold)
+        {
+            float4 visibility = CompactedVisibility[index];
+            visibility.w = asfloat(uint::maxValue);
+            CompactedVisibility[index] = visibility;
+        }
     }
 }

@@ -19,8 +19,8 @@ use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
-    build_compaction, decompact_combined_sh, decompact_diffuse, decompact_directional,
-    dilate_texture, encode_directional, rasterize_texels, render_normals,
+    Texels, build_compaction, decompact_combined_sh, decompact_diffuse, decompact_directional,
+    decompact_validity, dilate_texture, encode_directional, rasterize_texels, render_normals,
 };
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
@@ -1582,7 +1582,12 @@ fn zero_buffer(vk: &VulkanContext, buffer: &Buffer) {
     vk.end_single_use_cmd(cmd);
 }
 
-fn bake_direct_emission(app: &Glim, visibility_texels_count: usize, texel_validity: &Buffer) {
+fn bake_direct_emission(
+    app: &Glim,
+    visibility_texels_count: usize,
+    texel_validity: &Buffer,
+    texel_validity_threshold: f32,
+) {
     let message = format!("Baking Direct Emission");
     Log::msg(&message);
 
@@ -1593,7 +1598,7 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize, texel_validi
         pub max_samples: u32,
         pub pad0: u32,
         pub texel_validity_address: u64,
-        pub pad1: u32,
+        pub texel_validity_threshold: f32,
         pub pad2: u32,
     }
 
@@ -1625,7 +1630,7 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize, texel_validi
         max_samples: app.config.direct_emission_samples,
         pad0: 0,
         texel_validity_address: texel_validity.gpu_address,
-        pad1: 0,
+        texel_validity_threshold,
         pad2: 0,
     };
 
@@ -2141,7 +2146,9 @@ fn render_lightmaps(app: &mut Glim) {
     );
     zero_buffer(&app.vk, &texel_validity);
 
-    bake_direct_emission(app, texels_count, &texel_validity);
+    let texel_validity_threshold = 0.95;
+
+    bake_direct_emission(app, texels_count, &texel_validity, texel_validity_threshold);
 
     let mut texel_validity_readback = Buffer::empty(
         &app.vk,
@@ -2168,15 +2175,30 @@ fn render_lightmaps(app: &mut Glim) {
         app.vk.end_single_use_cmd(cmd);
     }
 
+    texel_validity.destroy(&app.vk);
+    drop(texel_validity);
+
     let validity: &[f32] = unsafe {
         std::slice::from_raw_parts(texel_validity_readback.ptr as *const f32, texels_count)
     };
 
+    let export_debug_textures = true;
+
+    if export_debug_textures {
+        let mut buffer = vec![0.0; max_resolution * max_resolution * 4];
+        export_validity(
+            app,
+            &texels,
+            validity,
+            &mut buffer,
+            texel_validity_threshold,
+        );
+    }
+
     for i in 0..validity.len() {
-        let threshold = 0.95;
         let v = validity[i];
-        if v > threshold {
-            // texels.coverage[i] /= v;
+        if v >= texel_validity_threshold {
+            texels.coverage[i] *= v;
         } else {
             texels.coverage[i] = 0.0;
         }
@@ -2439,10 +2461,12 @@ fn render_lightmaps(app: &mut Glim) {
                 dilate_texture(&mut buffer_normal, resolution, DILATE_FINAL);
             }
 
-            // let full_path = app
-            //     .output_dir
-            //     .join(format!("Lightmap-{}_Normal.tga", group_index));
-            // save_tga(full_path, resolution, resolution, &buffer_normal, false).unwrap();
+            if export_debug_textures {
+                let full_path = app
+                    .output_dir
+                    .join(format!("Lightmap-{}_Normal.tga", group_index));
+                save_tga(full_path, resolution, resolution, &buffer_normal, false).unwrap();
+            }
 
             encode_directional(&mut buffer, &buffer_normal);
 
@@ -2530,4 +2554,32 @@ fn render_lightmaps(app: &mut Glim) {
     drop(lightmaps_info);
     lightmap_texels.destroy(&app.vk);
     drop(lightmap_texels);
+}
+
+fn export_validity(
+    app: &Glim,
+    texels: &Texels,
+    validity: &[f32],
+    temp_buffer: &mut [f32],
+    texel_validity_threshold: f32,
+) {
+    for group_index in 0..app.groups.len() {
+        let group = &app.groups[group_index];
+        let resolution = group.settings.width as usize;
+
+        decompact_validity(
+            temp_buffer,
+            &texels.visibility,
+            &texels.coverage,
+            &validity,
+            &app.gpu_mesh.merged_mesh,
+            &group,
+            texel_validity_threshold,
+        );
+
+        let full_path = app
+            .output_dir
+            .join(format!("Lightmap-{}_Validity.tga", group_index));
+        save_tga(full_path, resolution, resolution, &temp_buffer, true).unwrap();
+    }
 }
