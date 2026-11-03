@@ -19,7 +19,7 @@ use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
-    Texels, build_compaction, decompact_chart_ids, decompact_combined_sh, decompact_diffuse,
+    build_compaction, decompact_chart_ids, decompact_combined_sh, decompact_diffuse,
     decompact_directional, decompact_validity, dilate_texture, encode_directional,
     rasterize_texels, render_normals,
 };
@@ -2187,7 +2187,7 @@ fn render_lightmaps(app: &mut Glim) {
         std::slice::from_raw_parts(texel_validity_readback.ptr as *const f32, texels_count)
     };
 
-    let export_debug_textures = true;
+    let export_debug_textures = false;
 
     // todo area lights with more samples
     let mut mixed_start = 0;
@@ -2320,7 +2320,7 @@ fn render_lightmaps(app: &mut Glim) {
     };
 
     let mut chart_ids_buffer = vec![0u32; max_resolution * max_resolution];
-    let mut validity_buffer = vec![false; max_resolution * max_resolution];
+    let mut validity_buffer = vec![0.0f32; max_resolution * max_resolution];
 
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index];
@@ -2389,9 +2389,9 @@ fn render_lightmaps(app: &mut Glim) {
 
             for i in 0..chart_ids_buffer.len() {
                 let mut x = validity_buffer[i];
-                pixels[i * 4 + 0] = if x { 1.0 } else { 0.0 };
-                pixels[i * 4 + 1] = if x { 1.0 } else { 0.0 };
-                pixels[i * 4 + 2] = if x { 1.0 } else { 0.0 };
+                pixels[i * 4 + 0] = x;
+                pixels[i * 4 + 1] = x;
+                pixels[i * 4 + 2] = x;
                 pixels[i * 4 + 3] = 1.0;
             }
 
@@ -2405,6 +2405,7 @@ fn render_lightmaps(app: &mut Glim) {
         const DILATE_DENOISE: usize = 2;
         const DILATE_FINAL: usize = 8;
 
+        let validity_applied = settings.denoise;
         if settings.denoise {
             // fix denoiser artifacts on edges
             if settings.dilate {
@@ -2414,6 +2415,8 @@ fn render_lightmaps(app: &mut Glim) {
                     DILATE_DENOISE,
                     &chart_ids_buffer,
                     &validity_buffer,
+                    texel_validity_threshold,
+                    true,
                 );
             }
             match &oidn {
@@ -2434,6 +2437,8 @@ fn render_lightmaps(app: &mut Glim) {
                 DILATE_FINAL,
                 &chart_ids_buffer,
                 &validity_buffer,
+                texel_validity_threshold,
+                !validity_applied,
             );
         }
 
@@ -2497,6 +2502,8 @@ fn render_lightmaps(app: &mut Glim) {
                         DILATE_DENOISE,
                         &chart_ids_buffer,
                         &validity_buffer,
+                        texel_validity_threshold,
+                        true,
                     );
                 }
                 match &oidn {
@@ -2525,6 +2532,8 @@ fn render_lightmaps(app: &mut Glim) {
                     DILATE_FINAL,
                     &chart_ids_buffer,
                     &validity_buffer,
+                    texel_validity_threshold,
+                    !validity_applied,
                 );
                 dilate_texture(
                     &mut buffer_normal,
@@ -2532,6 +2541,8 @@ fn render_lightmaps(app: &mut Glim) {
                     DILATE_FINAL,
                     &chart_ids_buffer,
                     &validity_buffer,
+                    texel_validity_threshold,
+                    true,
                 );
             }
 
@@ -2582,6 +2593,8 @@ fn render_lightmaps(app: &mut Glim) {
                         DILATE_DENOISE,
                         &chart_ids_buffer,
                         &validity_buffer,
+                        texel_validity_threshold,
+                        true,
                     );
                 }
                 match &oidn {
@@ -2602,6 +2615,8 @@ fn render_lightmaps(app: &mut Glim) {
                     DILATE_FINAL,
                     &chart_ids_buffer,
                     &validity_buffer,
+                    texel_validity_threshold,
+                    !validity_applied,
                 );
             }
 

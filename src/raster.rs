@@ -235,7 +235,7 @@ pub fn decompact_diffuse(
 }
 
 pub fn decompact_validity(
-    buffer: &mut [bool],
+    buffer: &mut [f32],
     texels: &[VisibilityTexel],
     validity: &[f32],
     mesh: &Mesh,
@@ -248,7 +248,7 @@ pub fn decompact_validity(
     let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(false);
+    buffer.fill(0.0);
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -268,9 +268,9 @@ pub fn decompact_validity(
 
         let index = texel.index(resolution);
 
-        if v < texel_validity_threshold {
-            buffer[index] = true;
-        };
+        if buffer[index] == 0.0 {
+            buffer[index] = v;
+        }
     }
 }
 
@@ -512,19 +512,98 @@ pub fn dilate_texture(
     resolution: usize,
     radius: usize,
     chart_ids: &[u32],
-    validity: &[bool],
+    validity: &[f32],
+    texel_validity_threshold: f32,
+    apply_validity: bool,
 ) {
+    if apply_validity {
+        for y in 0..resolution {
+            for x in 0..resolution {
+                let i = (y * resolution + x) * 4;
+
+                let current_id = chart_ids[y * resolution + x];
+                let invalid = validity[y * resolution + x] < texel_validity_threshold;
+
+                if !invalid {
+                    continue;
+                }
+
+                let mut best_index = None;
+                let mut best_ring = usize::MAX;
+                let mut best_v = 0.0f32;
+                let mut best_dist = usize::MAX;
+
+                let radius = 4;
+
+                let min_x = x.saturating_sub(radius);
+                let max_x = (x + radius).min(resolution - 1);
+                let min_y = y.saturating_sub(radius);
+                let max_y = (y + radius).min(resolution - 1);
+
+                for sy in min_y..=max_y {
+                    for sx in min_x..=max_x {
+                        let dx = sx.abs_diff(x);
+                        let dy = sy.abs_diff(y);
+                        let ring = dx.max(dy);
+
+                        if ring > best_ring {
+                            continue;
+                        }
+
+                        let si = (sy * resolution + sx) * 4;
+                        let dist = dx * dx + dy * dy;
+
+                        let id = chart_ids[sy * resolution + sx];
+                        if id == u32::MAX {
+                            continue;
+                        }
+
+                        if id != current_id {
+                            continue;
+                        }
+
+                        let v = validity[sy * resolution + sx];
+
+                        if v < texel_validity_threshold {
+                            continue;
+                        }
+
+                        let better =
+                            ring < best_ring || v > best_v || (v == best_v && dist < best_dist);
+
+                        if better {
+                            best_index = Some(si);
+                            best_ring = ring;
+                            best_v = v;
+                            best_dist = dist;
+                        }
+
+                        continue;
+                    }
+                }
+
+                if let Some(si) = best_index {
+                    color[i + 0] = color[si + 0];
+                    color[i + 1] = color[si + 1];
+                    color[i + 2] = color[si + 2];
+                    color[i + 3] = color[si + 3];
+                } else {
+                    // color[i + 0] = 0.0;
+                    // color[i + 1] = 0.0;
+                    // color[i + 2] = 0.0;
+                }
+            }
+        }
+    }
+
     for y in 0..resolution {
         for x in 0..resolution {
             let i = (y * resolution + x) * 4;
 
-            let current_id = chart_ids[y * resolution + x];
-            let invalid = validity[y * resolution + x];
-
             let cov = color[i + 3];
             let empty = cov <= 0.0;
 
-            if !(empty || invalid) {
+            if !empty {
                 continue;
             }
 
@@ -550,33 +629,6 @@ pub fn dilate_texture(
 
                     let si = (sy * resolution + sx) * 4;
                     let dist = dx * dx + dy * dy;
-
-                    if invalid {
-                        let id = chart_ids[sy * resolution + sx];
-                        if id == u32::MAX {
-                            continue;
-                        }
-
-                        if id != current_id {
-                            continue;
-                        }
-
-                        let v = validity[sy * resolution + sx];
-
-                        if v {
-                            continue;
-                        }
-
-                        let better = ring < best_ring || (dist < best_dist);
-
-                        if better {
-                            best_index = Some(si);
-                            best_ring = ring;
-                            best_dist = dist;
-                        }
-
-                        continue;
-                    }
 
                     let sample_cov = color[si + 3];
                     if sample_cov <= 0.0 {
