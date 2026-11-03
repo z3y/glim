@@ -42,7 +42,6 @@ pub struct FfiMesh {
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
     pub position: Vector3,
-    // pub flags: u32,
     lightmap_group: u8,
     resolution: u8,
     flags: u8,
@@ -99,6 +98,7 @@ pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub main_uvs: Vec<[f32; 4]>,
+    pub chart_ids: Vec<u32>,
 
     pub transparent: bool,
     pub no_shadows: bool,
@@ -136,6 +136,81 @@ pub fn decode_normal_octahedron(p: Vector2) -> Vector3 {
     }
 
     n.normalize()
+}
+
+use std::collections::HashMap;
+
+fn find(parent: &mut [u32], mut x: u32) -> u32 {
+    while parent[x as usize] != x {
+        parent[x as usize] = parent[parent[x as usize] as usize]; // path halving
+        x = parent[x as usize];
+    }
+    x
+}
+
+fn union(parent: &mut [u32], a: u32, b: u32) {
+    let (ra, rb) = (find(parent, a), find(parent, b));
+    if ra != rb {
+        parent[rb.max(ra) as usize] = ra.min(rb);
+    }
+}
+
+/// Returns one chart id per triangle (0-based, sequential, local to this mesh).
+/// Two triangles are in the same chart if they share an edge whose two endpoints
+/// are identical in BOTH position and lightmap uv.
+fn compute_chart_ids(vertices: &[Vertex], indices: &[u32], vertex_base: u32) -> Vec<u32> {
+    // Weld vertices by (position, uv), so split-by-normal duplicates still connect.
+    // `+ 0.0` normalizes -0.0 to 0.0 so they hash equal.
+    let key = |v: &Vertex| -> [u32; 5] {
+        [
+            (v.position.x + 0.0).to_bits(),
+            (v.position.y + 0.0).to_bits(),
+            (v.position.z + 0.0).to_bits(),
+            (v.uv.x + 0.0).to_bits(),
+            (v.uv.y + 0.0).to_bits(),
+        ]
+    };
+
+    let mut weld: HashMap<[u32; 5], u32> = HashMap::with_capacity(vertices.len());
+    let welded: Vec<u32> = vertices
+        .iter()
+        .map(|v| {
+            let next = weld.len() as u32;
+            *weld.entry(key(v)).or_insert(next)
+        })
+        .collect();
+
+    let tri_count = indices.len() / 3;
+    let mut parent: Vec<u32> = (0..tri_count as u32).collect();
+    let mut edges: HashMap<(u32, u32), u32> = HashMap::with_capacity(tri_count * 3);
+
+    for t in 0..tri_count {
+        let tri = &indices[t * 3..t * 3 + 3];
+        for e in 0..3 {
+            let a = welded[(tri[e] - vertex_base) as usize];
+            let b = welded[(tri[(e + 1) % 3] - vertex_base) as usize];
+            if a == b {
+                continue; // degenerate edge
+            }
+            let edge = (a.min(b), a.max(b));
+            match edges.get(&edge) {
+                Some(&other) => union(&mut parent, other, t as u32),
+                None => {
+                    edges.insert(edge, t as u32);
+                }
+            }
+        }
+    }
+
+    // Compact roots into sequential ids, in order of first appearance.
+    let mut remap: HashMap<u32, u32> = HashMap::new();
+    (0..tri_count as u32)
+        .map(|t| {
+            let root = find(&mut parent, t);
+            let next = remap.len() as u32;
+            *remap.entry(root).or_insert(next)
+        })
+        .collect()
 }
 
 impl Mesh {
@@ -202,6 +277,13 @@ impl Mesh {
             self.vertices.push(vertex);
         }
 
+        let chart_base = self.chart_ids.iter().max().map_or(0, |m| m + 1);
+
+        let local_vertices = &self.vertices[offset as usize..];
+        let local_charts = compute_chart_ids(local_vertices, indices, 0);
+        self.chart_ids
+            .extend(local_charts.iter().map(|c| c + chart_base));
+
         self.main_uvs.reserve(index_count);
 
         let alpha_id: u32 = if mesh.alpha_index < 0 {
@@ -236,6 +318,7 @@ impl Mesh {
         }
 
         assert!(self.main_uvs.len() == self.indices.len());
+        assert!(self.chart_ids.len() * 3 == self.indices.len());
     }
 
     pub fn merge_mesh(&mut self, mesh: &Mesh) {
@@ -244,6 +327,8 @@ impl Mesh {
         self.vertices.extend(&mesh.vertices);
         self.main_uvs.extend(&mesh.main_uvs);
         self.indices.extend(mesh.indices.iter().map(|i| i + offset));
+        self.chart_ids
+            .extend(mesh.chart_ids.iter().map(|i| i + offset));
     }
 }
 
@@ -677,6 +762,7 @@ impl GpuMesh {
                 main_uvs: Vec::new(),
                 transparent: false,
                 no_shadows: false,
+                chart_ids: Vec::new(),
             },
         }
     }

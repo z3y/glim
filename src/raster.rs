@@ -235,9 +235,8 @@ pub fn decompact_diffuse(
 }
 
 pub fn decompact_validity(
-    buffer: &mut [f32],
+    buffer: &mut [bool],
     texels: &[VisibilityTexel],
-    coverage: &[f32],
     validity: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
@@ -246,10 +245,10 @@ pub fn decompact_validity(
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
-    let count = resolution * resolution * 4;
+    let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(0.0);
+    buffer.fill(false);
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -269,26 +268,9 @@ pub fn decompact_validity(
 
         let index = texel.index(resolution);
 
-        let value = if v > texel_validity_threshold {
-            1.0
-        } else {
-            0.0
+        if v < texel_validity_threshold {
+            buffer[index] = true;
         };
-
-        buffer[index * 4 + 0] += value;
-        buffer[index * 4 + 3] += 1.0;
-    }
-
-    for px in buffer.chunks_exact_mut(4) {
-        let w = px[3].min(1.0);
-
-        if w > 0.0 {
-            px[0] /= w;
-            px[0] = 1.0 - px[0];
-            px[3] = 1.0;
-        } else {
-            px[3] = 0.0;
-        }
     }
 }
 
@@ -399,6 +381,43 @@ pub fn decompact_directional(
     }
 }
 
+pub fn decompact_chart_ids(
+    buffer: &mut [u32],
+    texels: &[VisibilityTexel],
+    mesh: &Mesh,
+    group: &LightmapGroup,
+) {
+    let resolution = group.settings.width as usize;
+    let group_id = group.id;
+
+    let count = resolution * resolution;
+
+    let buffer = &mut buffer[0..count];
+    buffer.fill(u32::MAX);
+
+    for compacted_index in 0..texels.len() {
+        let texel = &texels[compacted_index];
+
+        let primitive_id = texel.primitive_id;
+        if primitive_id == u32::MAX {
+            continue;
+        }
+        let i0 = mesh.indices[(primitive_id as usize) * 3 + 0] as usize;
+        let v0 = mesh.vertices[i0];
+
+        if v0.group() != group_id {
+            continue;
+        }
+
+        let chart_id = mesh.chart_ids[primitive_id as usize];
+        let index = texel.index(resolution);
+
+        if buffer[index] == u32::MAX {
+            buffer[index] = chart_id;
+        }
+    }
+}
+
 #[inline]
 fn encode_combined_sh(l0: Vector3, l1: Vector3) -> Vector3 {
     let safe_f0 = l0.luminance().max(1e-4);
@@ -488,13 +507,24 @@ pub fn decompact_combined_sh(
     }
 }
 
-pub fn dilate_texture(pixels: &mut [f32], resolution: usize, radius: usize) {
+pub fn dilate_texture(
+    color: &mut [f32],
+    resolution: usize,
+    radius: usize,
+    chart_ids: &[u32],
+    validity: &[bool],
+) {
     for y in 0..resolution {
         for x in 0..resolution {
             let i = (y * resolution + x) * 4;
 
-            let cov = pixels[i + 3];
-            if cov > 0.0 {
+            let current_id = chart_ids[y * resolution + x];
+            let invalid = validity[y * resolution + x];
+
+            let cov = color[i + 3];
+            let empty = cov <= 0.0;
+
+            if !(empty || invalid) {
                 continue;
             }
 
@@ -519,12 +549,39 @@ pub fn dilate_texture(pixels: &mut [f32], resolution: usize, radius: usize) {
                     }
 
                     let si = (sy * resolution + sx) * 4;
-                    let sample_cov = pixels[si + 3];
-                    if sample_cov <= 0.0 {
+                    let dist = dx * dx + dy * dy;
+
+                    if invalid {
+                        let id = chart_ids[sy * resolution + sx];
+                        if id == u32::MAX {
+                            continue;
+                        }
+
+                        if id != current_id {
+                            continue;
+                        }
+
+                        let v = validity[sy * resolution + sx];
+
+                        if v {
+                            continue;
+                        }
+
+                        let better = ring < best_ring || (dist < best_dist);
+
+                        if better {
+                            best_index = Some(si);
+                            best_ring = ring;
+                            best_dist = dist;
+                        }
+
                         continue;
                     }
 
-                    let dist = dx * dx + dy * dy;
+                    let sample_cov = color[si + 3];
+                    if sample_cov <= 0.0 {
+                        continue;
+                    }
 
                     let better = ring < best_ring
                         || sample_cov > best_cov
@@ -540,13 +597,13 @@ pub fn dilate_texture(pixels: &mut [f32], resolution: usize, radius: usize) {
             }
 
             if let Some(si) = best_index {
-                pixels[i + 0] = pixels[si + 0];
-                pixels[i + 1] = pixels[si + 1];
-                pixels[i + 2] = pixels[si + 2];
+                color[i + 0] = color[si + 0];
+                color[i + 1] = color[si + 1];
+                color[i + 2] = color[si + 2];
             } else {
-                pixels[i + 0] = 0.0;
-                pixels[i + 1] = 0.0;
-                pixels[i + 2] = 0.0;
+                color[i + 0] = 0.0;
+                color[i + 1] = 0.0;
+                color[i + 2] = 0.0;
             }
         }
     }

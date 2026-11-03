@@ -19,8 +19,9 @@ use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
-    Texels, build_compaction, decompact_combined_sh, decompact_diffuse, decompact_directional,
-    decompact_validity, dilate_texture, encode_directional, rasterize_texels, render_normals,
+    Texels, build_compaction, decompact_chart_ids, decompact_combined_sh, decompact_diffuse,
+    decompact_directional, decompact_validity, dilate_texture, encode_directional,
+    rasterize_texels, render_normals,
 };
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
@@ -1303,6 +1304,7 @@ impl Glim {
                 main_uvs: Vec::new(),
                 transparent: false,
                 no_shadows: false,
+                chart_ids: Vec::new(),
             },
             Mesh {
                 vertices: Vec::new(),
@@ -1310,6 +1312,7 @@ impl Glim {
                 main_uvs: Vec::new(),
                 transparent: true,
                 no_shadows: false,
+                chart_ids: Vec::new(),
             },
             Mesh {
                 vertices: Vec::new(),
@@ -1317,6 +1320,7 @@ impl Glim {
                 main_uvs: Vec::new(),
                 transparent: false,
                 no_shadows: true,
+                chart_ids: Vec::new(),
             },
             Mesh {
                 vertices: Vec::new(),
@@ -1324,6 +1328,7 @@ impl Glim {
                 main_uvs: Vec::new(),
                 transparent: true,
                 no_shadows: true,
+                chart_ids: Vec::new(),
             },
         ];
 
@@ -2184,28 +2189,6 @@ fn render_lightmaps(app: &mut Glim) {
 
     let export_debug_textures = true;
 
-    if export_debug_textures {
-        let mut buffer = vec![0.0; max_resolution * max_resolution * 4];
-        export_validity(
-            app,
-            &texels,
-            validity,
-            &mut buffer,
-            texel_validity_threshold,
-        );
-    }
-
-    for i in 0..validity.len() {
-        let v = validity[i];
-        if v >= texel_validity_threshold {
-            texels.coverage[i] *= v;
-        } else {
-            texels.coverage[i] = 0.0;
-        }
-    }
-    texel_validity_readback.destroy(&app.vk);
-    drop(texel_validity_readback);
-
     // todo area lights with more samples
     let mut mixed_start = 0;
     let mut area_start = 0;
@@ -2336,6 +2319,9 @@ fn render_lightmaps(app: &mut Glim) {
         Vec::new()
     };
 
+    let mut chart_ids_buffer = vec![0u32; max_resolution * max_resolution];
+    let mut validity_buffer = vec![false; max_resolution * max_resolution];
+
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index];
         let settings = &group.settings;
@@ -2358,13 +2344,77 @@ fn render_lightmaps(app: &mut Glim) {
             app.config.lightmap_mode == LightmapMode::CombinedSH,
         );
 
+        decompact_chart_ids(&mut chart_ids_buffer, &texels.visibility, &mesh, &group);
+
+        decompact_validity(
+            &mut validity_buffer,
+            &texels.visibility,
+            &validity,
+            mesh,
+            group,
+            texel_validity_threshold,
+        );
+
+        if export_debug_textures {
+            let full_path = app
+                .output_dir
+                .join(format!("Lightmap-{}_Charts.tga", group_index));
+
+            let mut pixels = vec![0.0; max_resolution * max_resolution * 4];
+            for i in 0..chart_ids_buffer.len() {
+                let mut x = chart_ids_buffer[i];
+
+                if x == u32::MAX {
+                    pixels[i * 4 + 0] = 0.0;
+                    pixels[i * 4 + 1] = 0.0;
+                    pixels[i * 4 + 2] = 0.0;
+                    pixels[i * 4 + 3] = 1.0;
+                    continue;
+                }
+
+                x ^= x >> 16;
+                x = x.wrapping_mul(0x7feb352d);
+                x ^= x >> 15;
+                x = x.wrapping_mul(0x846ca68b);
+                x ^= x >> 16;
+
+                pixels[i * 4 + 0] = ((x >> 0) & 255) as f32 / 255.0;
+                pixels[i * 4 + 1] = ((x >> 8) & 255) as f32 / 255.0;
+                pixels[i * 4 + 2] = ((x >> 16) & 255) as f32 / 255.0;
+                pixels[i * 4 + 3] = 1.0;
+            }
+            save_tga(full_path, resolution, resolution, &pixels, false).unwrap();
+
+            pixels.fill(0.0);
+
+            for i in 0..chart_ids_buffer.len() {
+                let mut x = validity_buffer[i];
+                pixels[i * 4 + 0] = if x { 1.0 } else { 0.0 };
+                pixels[i * 4 + 1] = if x { 1.0 } else { 0.0 };
+                pixels[i * 4 + 2] = if x { 1.0 } else { 0.0 };
+                pixels[i * 4 + 3] = 1.0;
+            }
+
+            let full_path = app
+                .output_dir
+                .join(format!("Lightmap-{}_Validity.tga", group_index));
+
+            save_tga(full_path, resolution, resolution, &pixels, false).unwrap();
+        }
+
         const DILATE_DENOISE: usize = 2;
         const DILATE_FINAL: usize = 8;
 
         if settings.denoise {
             // fix denoiser artifacts on edges
             if settings.dilate {
-                dilate_texture(&mut buffer, resolution, DILATE_DENOISE);
+                dilate_texture(
+                    &mut buffer,
+                    resolution,
+                    DILATE_DENOISE,
+                    &chart_ids_buffer,
+                    &validity_buffer,
+                );
             }
             match &oidn {
                 Some(oidn) => {
@@ -2378,7 +2428,13 @@ fn render_lightmaps(app: &mut Glim) {
         }
 
         if settings.dilate {
-            dilate_texture(&mut buffer, resolution, DILATE_FINAL);
+            dilate_texture(
+                &mut buffer,
+                resolution,
+                DILATE_FINAL,
+                &chart_ids_buffer,
+                &validity_buffer,
+            );
         }
 
         if settings.fix_seams {
@@ -2435,7 +2491,13 @@ fn render_lightmaps(app: &mut Glim) {
             if settings.denoise {
                 // fix denoiser artifacts on edges
                 if settings.dilate {
-                    dilate_texture(&mut buffer, resolution, DILATE_DENOISE);
+                    dilate_texture(
+                        &mut buffer,
+                        resolution,
+                        DILATE_DENOISE,
+                        &chart_ids_buffer,
+                        &validity_buffer,
+                    );
                 }
                 match &oidn {
                     Some(oidn) => {
@@ -2457,8 +2519,20 @@ fn render_lightmaps(app: &mut Glim) {
             );
 
             if settings.dilate {
-                dilate_texture(&mut buffer, resolution, DILATE_FINAL);
-                dilate_texture(&mut buffer_normal, resolution, DILATE_FINAL);
+                dilate_texture(
+                    &mut buffer,
+                    resolution,
+                    DILATE_FINAL,
+                    &chart_ids_buffer,
+                    &validity_buffer,
+                );
+                dilate_texture(
+                    &mut buffer_normal,
+                    resolution,
+                    DILATE_FINAL,
+                    &chart_ids_buffer,
+                    &validity_buffer,
+                );
             }
 
             if export_debug_textures {
@@ -2502,7 +2576,13 @@ fn render_lightmaps(app: &mut Glim) {
             if settings.denoise {
                 // fix denoiser artifacts on edges
                 if settings.dilate {
-                    dilate_texture(&mut buffer, resolution, DILATE_DENOISE);
+                    dilate_texture(
+                        &mut buffer,
+                        resolution,
+                        DILATE_DENOISE,
+                        &chart_ids_buffer,
+                        &validity_buffer,
+                    );
                 }
                 match &oidn {
                     Some(oidn) => {
@@ -2516,7 +2596,13 @@ fn render_lightmaps(app: &mut Glim) {
             }
 
             if settings.dilate {
-                dilate_texture(&mut buffer, resolution, DILATE_FINAL);
+                dilate_texture(
+                    &mut buffer,
+                    resolution,
+                    DILATE_FINAL,
+                    &chart_ids_buffer,
+                    &validity_buffer,
+                );
             }
 
             if settings.fix_seams {
@@ -2539,6 +2625,9 @@ fn render_lightmaps(app: &mut Glim) {
         }
     }
 
+    texel_validity_readback.destroy(&app.vk);
+    drop(texel_validity_readback);
+
     drop(buffer);
     drop(buffer_normal);
     readback_buffer.destroy(&app.vk);
@@ -2556,30 +2645,29 @@ fn render_lightmaps(app: &mut Glim) {
     drop(lightmap_texels);
 }
 
-fn export_validity(
-    app: &Glim,
-    texels: &Texels,
-    validity: &[f32],
-    temp_buffer: &mut [f32],
-    texel_validity_threshold: f32,
-) {
-    for group_index in 0..app.groups.len() {
-        let group = &app.groups[group_index];
-        let resolution = group.settings.width as usize;
+// fn export_validity(
+//     app: &Glim,
+//     texels: &Texels,
+//     validity: &[f32],
+//     temp_buffer: &mut [bool],
+//     texel_validity_threshold: f32,
+// ) {
+//     for group_index in 0..app.groups.len() {
+//         let group = &app.groups[group_index];
+//         let resolution = group.settings.width as usize;
 
-        decompact_validity(
-            temp_buffer,
-            &texels.visibility,
-            &texels.coverage,
-            &validity,
-            &app.gpu_mesh.merged_mesh,
-            &group,
-            texel_validity_threshold,
-        );
+//         decompact_validity(
+//             temp_buffer,
+//             &texels.visibility,
+//             &validity,
+//             &app.gpu_mesh.merged_mesh,
+//             &group,
+//             texel_validity_threshold,
+//         );
 
-        let full_path = app
-            .output_dir
-            .join(format!("Lightmap-{}_Validity.tga", group_index));
-        save_tga(full_path, resolution, resolution, &temp_buffer, true).unwrap();
-    }
-}
+//         let full_path = app
+//             .output_dir
+//             .join(format!("Lightmap-{}_Validity.tga", group_index));
+//         save_tga(full_path, resolution, resolution, &temp_buffer, true).unwrap();
+//     }
+// }
