@@ -157,6 +157,7 @@ fn union(parent: &mut [u32], a: u32, b: u32) {
 /// Returns one chart id per triangle (0-based, sequential, local to this mesh).
 /// Two triangles are in the same chart if they share an edge whose two endpoints
 /// are identical in BOTH position and lightmap uv.
+#[allow(dead_code)]
 fn compute_chart_ids(vertices: &[Vertex], indices: &[u32], vertex_base: u32) -> Vec<u32> {
     // Weld vertices by (position, uv), so split-by-normal duplicates still connect.
     // `+ 0.0` normalizes -0.0 to 0.0 so they hash equal.

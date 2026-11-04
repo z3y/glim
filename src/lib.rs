@@ -2350,7 +2350,7 @@ fn render_lightmaps(app: &mut Glim) {
             app.config.lightmap_mode == LightmapMode::CombinedSH,
         );
 
-        const DILATE_DENOISE: usize = 2;
+        const DILATE_DENOISE: usize = 1;
         const DILATE_FINAL: usize = 8;
 
         if settings.denoise {

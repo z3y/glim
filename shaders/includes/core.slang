@@ -843,17 +843,13 @@ bool ShadowMaskVisibility(Light light, float3 positionWS, out float3 L)
 
 void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 positionWS, out float3 normalWS, out uint3 indexing)
 {
-    // uint x = asuint(visibility.w) & 0xFFFF;
-    // uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
     uint pixelSeed = RNGPixelInit1D(index);
-
-    // uint pixelSeed = asuint(visibility.w);
     indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, ~0u, sampleCount, SamplingPattern::BlueNoiseFirst);
-    float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
 
     float4 visibility = CompactedVisibility[index];
     bool moved = asuint(visibility.w) != 0u;
 
+    [branch]
     if (moved || JITTER_BARYCENTRICS == 0)
     {
         positionWS = visibility.xyz;
@@ -874,8 +870,6 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     float2 uv2 = v[2].uv;
     uint resolution = v[0].Resolution();
 
-    float3 edge1 = p1 - p0;
-    float3 edge2 = p2 - p0;
     float2 duv1 = uv1 - uv0;
     float2 duv2 = uv2 - uv0;
 
@@ -884,20 +878,29 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
 
     if (JITTER_BARYCENTRICS > 0)
     {
-        float2 jitterUV = (xiAA - 0.5) / (float)resolution;
-
-        // todo its possible to jitter multiple times until it lands on the triangle instead of giving up
-        float2 dBary;
-        dBary.x = (duv2.y * jitterUV.x - duv2.x * jitterUV.y) * invDetSigned;
-        dBary.y = (-duv1.y * jitterUV.x + duv1.x * jitterUV.y) * invDetSigned;
-
-        float2 jBary = bary + dBary;
-
-        bool inside = jBary.x > 0.0 && jBary.y > 0.0 && (jBary.x + jBary.y) < 1.0;
-        [flatten]
-        if (inside)
+        float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
+        // inspired by cycles
+        // https://projects.blender.org/blender/cycles/src/branch/main/src/kernel/integrator/init_from_bake.h
+        const uint attempts = 10;
+        [loop]
+        for (uint i = 0; i < attempts; i++)
         {
-            bary = jBary;
+            float2 jitterUV = (xiAA - 0.5) / (float)resolution;
+
+            float2 dBary;
+            dBary.x = (duv2.y * jitterUV.x - duv2.x * jitterUV.y) * invDetSigned;
+            dBary.y = (-duv1.y * jitterUV.x + duv1.x * jitterUV.y) * invDetSigned;
+
+            float2 jBary = bary + dBary;
+
+            bool inside = jBary.x > 0.0 && jBary.y > 0.0 && (jBary.x + jBary.y) < 1.0;
+            if (inside)
+            {
+                bary = jBary;
+                break;
+            }
+
+            xiAA = hash_float2_to_float2(xiAA);
         }
     }
 

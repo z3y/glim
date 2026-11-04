@@ -99,8 +99,53 @@ uint hash_uint2(const uint kx, const uint ky)
     return c;
 }
 
+uint hash_uint3(const uint kx, const uint ky, const uint kz)
+{
+    uint a;
+    uint b;
+    uint c;
+    a = b = c = 0xdeadbeef + (3 << 2) + 13;
+
+    c += kz;
+    b += ky;
+    a += kx;
+    final(a, b, c);
+
+    return c;
+}
+
 #undef final
 #undef rot
+
+float uint_to_float_incl(const uint n)
+{
+    return (float)n * (1.0f / (float)0xFFFFFFFFu);
+}
+
+float hash_uint2_to_float(const uint kx, const uint ky)
+{
+    return uint_to_float_incl(hash_uint2(kx, ky));
+}
+
+float hash_float2_to_float(const float2 k)
+{
+    return hash_uint2_to_float(asuint(k.x), asuint(k.y));
+}
+
+float hash_uint3_to_float(const uint kx, const uint ky, const uint kz)
+{
+    return uint_to_float_incl(hash_uint3(kx, ky, kz));
+}
+
+float hash_float3_to_float(const float3 k)
+{
+    return hash_uint3_to_float(asuint(k.x), asuint(k.y), asuint(k.z));
+}
+
+float2 hash_float2_to_float2(const float2 k)
+{
+    return float2(hash_float2_to_float(k), hash_float3_to_float(float3(k.x, k.y, 1.0)));
+}
 
 uint InterleaveWithZero(uint x)
 {
