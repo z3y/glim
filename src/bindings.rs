@@ -55,6 +55,7 @@ pub struct GlimConfig {
     pub coverage_max_samples: u32,
     pub coverage_min_threshold: f32,
     pub antialiasing: bool,
+    pub leak_detection: bool,
 }
 
 #[repr(u32)]

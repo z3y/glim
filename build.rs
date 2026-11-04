@@ -21,6 +21,11 @@ fn main() {
     });
 
     shaders.push(Shader {
+        src: "adjust_samples.slang".into(),
+        dst: "adjust_samples.spv".into(),
+    });
+
+    shaders.push(Shader {
         src: "preview.slang".into(),
         dst: "preview.spv".into(),
     });

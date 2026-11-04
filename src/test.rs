@@ -83,6 +83,7 @@ mod tests {
             coverage_max_samples: 4,
             coverage_min_threshold: 0.1,
             antialiasing: true,
+            leak_detection: true,
         };
         config
     }

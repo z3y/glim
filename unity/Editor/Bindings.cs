@@ -55,6 +55,7 @@ namespace Glim
             public readonly uint coverage_max_samples;
             public readonly float coverage_min_threshold;
             [MarshalAs(UnmanagedType.I1)] public readonly bool antialiasing;
+            [MarshalAs(UnmanagedType.I1)] public readonly bool leak_detection;
 
             public GlimConfig(CoordinateSystem coordinate_system,
                                uint direct_light_samples,
@@ -79,7 +80,8 @@ namespace Glim
                                float ao_range,
                                uint coverage_max_samples,
                                float coverage_min_threshold,
-                               bool antialiasing
+                               bool antialiasing,
+                               bool leak_detection
                                )
             {
                 this.coordinate_system = coordinate_system;
@@ -116,6 +118,7 @@ namespace Glim
                 this.coverage_max_samples = coverage_max_samples;
                 this.coverage_min_threshold = coverage_min_threshold;
                 this.antialiasing = antialiasing;
+                this.leak_detection = leak_detection;
 
                 var currentPipeline = GraphicsSettings.currentRenderPipeline;
                 uint autoFalloff = 0;

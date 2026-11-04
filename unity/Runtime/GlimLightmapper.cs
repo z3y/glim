@@ -91,6 +91,8 @@ Affects lightmaps, light probes and light volumes.")]
         [Tooltip("Jitter barycentrics inside a triangle per sample.")]
         public bool antiAliasing = true;
 
+        [Tooltip("Move starting ray positions of texels that can hit back faces to prevent leaks. This also disables anti aliasing for those texels.")]
+        public bool leakDetection = true;
 
         [Space]
         [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;
