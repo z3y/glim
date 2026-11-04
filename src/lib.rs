@@ -1684,7 +1684,7 @@ fn bake_direct_lights(
         pub mixed: u32,
 
         pub lights_start: u32,
-        pub lights_count: u32,
+        pub lights_end: u32,
         pub pad1: u32,
         pub pad2: u32,
     }
@@ -1718,7 +1718,7 @@ fn bake_direct_lights(
         max_samples: samples,
         mixed: mixed as u32,
         lights_start: lights_start as u32,
-        lights_count: lights_count as u32,
+        lights_end: (lights_start + lights_count) as u32,
         pad1: 0,
         pad2: 0,
     };
@@ -2128,7 +2128,6 @@ fn render_lightmaps(app: &mut Glim) {
 
     let export_debug_textures = false;
 
-    // todo area lights with more samples
     let mut mixed_start = 0;
     let mut area_start = 0;
     let mut area_count = 0;

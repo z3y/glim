@@ -12,7 +12,7 @@ struct PushConstants
     uint mixed;
 
     uint lightsStart;
-    uint lightsCount;
+    uint lightsEnd;
     uint pad1;
     uint pad2;
 };
@@ -31,7 +31,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.sampleCount;
     uint lightsStart = Push.lightsStart;
-    uint lightsCount = Push.lightsCount;
+    uint lightsEnd = Push.lightsEnd;
     bool mixed = Push.mixed == 1;
     float sampleScale = 1.0 / float(sampleCount);
 
@@ -47,7 +47,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
 
-    for (uint lightIndex = lightsStart; lightIndex < lightsCount; lightIndex++)
+    for (uint lightIndex = lightsStart; lightIndex < lightsEnd; lightIndex++)
     {
         Light light = Lights[lightIndex];
         float3 L;
