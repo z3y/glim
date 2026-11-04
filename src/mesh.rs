@@ -98,7 +98,6 @@ pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub main_uvs: Vec<[f32; 4]>,
-    pub chart_ids: Vec<u32>,
 
     pub transparent: bool,
     pub no_shadows: bool,
@@ -277,13 +276,6 @@ impl Mesh {
             self.vertices.push(vertex);
         }
 
-        let chart_base = self.chart_ids.iter().max().map_or(0, |m| m + 1);
-
-        let local_vertices = &self.vertices[offset as usize..];
-        let local_charts = compute_chart_ids(local_vertices, indices, 0);
-        self.chart_ids
-            .extend(local_charts.iter().map(|c| c + chart_base));
-
         self.main_uvs.reserve(index_count);
 
         let alpha_id: u32 = if mesh.alpha_index < 0 {
@@ -318,7 +310,6 @@ impl Mesh {
         }
 
         assert!(self.main_uvs.len() == self.indices.len());
-        assert!(self.chart_ids.len() * 3 == self.indices.len());
     }
 
     pub fn merge_mesh(&mut self, mesh: &Mesh) {
@@ -327,8 +318,6 @@ impl Mesh {
         self.vertices.extend(&mesh.vertices);
         self.main_uvs.extend(&mesh.main_uvs);
         self.indices.extend(mesh.indices.iter().map(|i| i + offset));
-        self.chart_ids
-            .extend(mesh.chart_ids.iter().map(|i| i + offset));
     }
 }
 
@@ -762,7 +751,6 @@ impl GpuMesh {
                 main_uvs: Vec::new(),
                 transparent: false,
                 no_shadows: false,
-                chart_ids: Vec::new(),
             },
         }
     }

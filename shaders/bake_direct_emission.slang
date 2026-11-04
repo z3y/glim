@@ -10,10 +10,6 @@ struct PushConstants
     uint sampleIndex;
     uint maxSamples;
     uint pad0;
-
-    float *validity;
-    float validityThreshold;
-    uint pad2;
 };
 
 // void InitSamples(uint index)
@@ -91,8 +87,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 
-    float validity = sampleScale;
-
     Hit hit;
     if (TraceRay(ray, hit))
     {
@@ -103,7 +97,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
             if (!surface.backfaceGI)
             {
                 color.a = 0.0;
-                validity = 0.0;
             }
         }
 
@@ -147,8 +140,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
     }
 
-    Push.validity[index] += validity;
-
     ValidateSampleColor(color);
 
     CompactedLightmap[index * 3 + 0] += color.x * sampleScale;
@@ -180,17 +171,5 @@ void main(uint3 threadID: SV_DispatchThreadID)
         CompactedLightmap[index * 3 + 0] += dominantDirection.x;
         CompactedLightmap[index * 3 + 1] += dominantDirection.y;
         CompactedLightmap[index * 3 + 2] += dominantDirection.z;
-    }
-
-    bool lastSample = sampleIndex == (sampleCount - 1);
-    [branch]
-    if (lastSample)
-    {
-        if (Push.validity[index] < Push.validityThreshold)
-        {
-            float4 visibility = CompactedVisibility[index];
-            visibility.w = asfloat(uint::maxValue);
-            CompactedVisibility[index] = visibility;
-        }
     }
 }
