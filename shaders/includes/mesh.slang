@@ -35,15 +35,21 @@ float2 EncodeNormalOctahedron(float3 n)
 
 float PackNormalOctahedron(float3 normalWS)
 {
-    float2 oct = EncodeNormalOctahedron(normalWS);
-
-    // [-1,1] -> [0,1]
-    oct = oct * 0.5 + 0.5;
+    float2 oct = EncodeNormalOctahedron(normalWS) * 0.5 + 0.5;
 
     uint x = (uint)round(saturate(oct.x) * 65535.0);
     uint y = (uint)round(saturate(oct.y) * 65535.0);
+    uint bits = (x << 16) | y;
 
-    return asfloat((x << 16) | y);
+    // corners (0,0) and (65535,65535) both decode to exactly -Z,
+    // so this changes nothing about the decoded normal
+    // adds an extra bit pattern that can be used as a flag
+    if (bits == 0u)
+    {
+        bits = 0xFFFFFFFFu;
+    }
+
+    return asfloat(bits);
 }
 
 float3 UnpackNormalOctahedron(float packed)
