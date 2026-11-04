@@ -16,15 +16,15 @@ struct PushConstants
     uint pad2;
 };
 
-void InitSamples(uint index)
-{
-    float4 visibility = CompactedVisibility[index];
-    uint x = asuint(visibility.w) & 0xFFFF;
-    uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
-    uint pixelSeed = RNGPixelInit(uint2(x, y), SamplingPattern::BlueNoiseFirst);
-    visibility.w = asfloat(pixelSeed);
-    CompactedVisibility[index] = visibility;
-}
+// void InitSamples(uint index)
+// {
+//     float4 visibility = CompactedVisibility[index];
+//     uint x = asuint(visibility.w) & 0xFFFF;
+//     uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
+//     uint pixelSeed = RNGPixelInit(uint2(x, y), SamplingPattern::BlueNoiseFirst);
+//     visibility.w = asfloat(pixelSeed);
+//     CompactedVisibility[index] = visibility;
+// }
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
@@ -37,10 +37,16 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
+    // [branch]
+    // if (Push.sampleIndex == 0)
+    // {
+    //     InitSamples(index);
+    // }
+
     [branch]
-    if (Push.sampleIndex == 0)
+    if (CompactedVisibility[index].w == asfloat(uint::maxValue))
     {
-        InitSamples(index);
+        return;
     }
 
     uint sampleIndex = Push.sampleIndex;

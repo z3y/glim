@@ -842,7 +842,11 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
 {
     float4 visibility = CompactedVisibility[index];
 
-    uint pixelSeed = asuint(visibility.w);
+    // uint x = asuint(visibility.w) & 0xFFFF;
+    // uint y = (asuint(visibility.w) >> 16) & 0xFFFF;
+    uint pixelSeed = RNGPixelInit1D(index);
+
+    // uint pixelSeed = asuint(visibility.w);
     indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, ~0u, sampleCount, SamplingPattern::BlueNoiseFirst);
     float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
 
@@ -890,4 +894,57 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
 
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
+
+    const bool leakDetection = true;
+    bool skipLeakRay = asuint(visibility.w) == uint::maxValue;
+    [branch]
+    if (leakDetection && !skipLeakRay)
+    {
+        float3 dPdU = (edge1 * duv2.y - edge2 * duv1.y) * invDetSigned;
+        float3 dPdV = (edge2 * duv1.x - edge1 * duv2.x) * invDetSigned;
+
+        float3 u = normalize(dPdU - dot(dPdU, surface.Ng) * surface.Ng);
+        float3 v = normalize(dPdV - dot(dPdV, surface.Ng) * surface.Ng);
+        float3 rayDirs[4] = { u, -u, v, -v };
+
+        float texelSize = 1.0 / float(resolution);
+        float3 worldTexelU = dPdU * texelSize;
+        float3 worldTexelV = dPdV * texelSize;
+
+        float rayLength = (length(worldTexelU) + length(worldTexelV)) * 2.0;
+
+        Ray ray;
+        ray.P = positionWS;
+        ray.tMin = 0;
+        ray.tMax = rayLength;
+        Hit leakHit;
+
+        bool canLeak = false;
+        [loop]
+        for (int i = 0; i < 4; i++)
+        {
+            ray.D = rayDirs[i];
+
+            if (TraceRay(ray, leakHit))
+            {
+                canLeak = true;
+                if (!leakHit.frontFace)
+                {
+                    Surface hitSurf = Surface::Get(leakHit.primitiveID, leakHit.bary, true);
+                    if (!hitSurf.backfaceGI)
+                    {
+                        positionWS = RayOffset(hitSurf.P, hitSurf.Ng);
+                        break;
+                    }
+                }
+            }
+        }
+
+        [branch]
+        if (sampleIndex == 0 && !canLeak)
+        {
+            visibility.w = asfloat(uint::maxValue);
+            CompactedVisibility[index] = visibility;
+        }
+    }
 }
