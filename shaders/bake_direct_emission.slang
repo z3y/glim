@@ -57,7 +57,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         float3 L;
         float pdf = 0.0;
         float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xi.y, throughput, randomEmissiveTrianglePdf, pdf, L, false);
-        float3 NoL = saturate(dot(L, normalWS));
+        float NoL = saturate(dot(L, normalWS));
 
         current *= MISWeight(pdf, bsdfPdf);
         color.rgb += current * NoL;

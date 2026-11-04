@@ -52,7 +52,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         Light light = Lights[lightIndex];
         float3 L;
         float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L, false);
-        float3 NoL = saturate(dot(L, normalWS));
+        float NoL = saturate(dot(L, normalWS));
         color.rgb += current * NoL;
         dominantDirection.xyz += L * Luminance(current * NoL);
 
