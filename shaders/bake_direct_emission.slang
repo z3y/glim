@@ -84,6 +84,9 @@ void InitSamples(uint index)
 
     bool canJitter = true;
     bool moved = false;
+    float bestT = float ::maxValue;
+    uint bestPrim = 0;
+    float2 bestBary = 0;
     [loop]
     for (int i = 0; i < 4; i++)
     {
@@ -91,11 +94,17 @@ void InitSamples(uint index)
 
         if (TraceRay(ray, hit))
         {
+            Surface hitSurf = Surface::Get(hit.primitiveID, hit.bary, true);
+
+            if (hitSurf.backfaceGI)
+            {
+                continue;
+            }
+
             float travelUV = MaxInsideTravel(bary, baryDirs[i], uvReach);
             float travelWS = travelUV * worldPerUV[i];
             float eps = 0.05 * worldPerUV[i] / float(resolution); // ~5% of a texel
 
-            Surface hitSurf = Surface::Get(hit.primitiveID, hit.bary, true);
             bool coplanar = dot(hitSurf.Ng, surface.Ng) > 0.999;
 
             if (!coplanar && hit.t < travelWS - eps)
@@ -103,16 +112,20 @@ void InitSamples(uint index)
                 canJitter = false;
             }
 
-            if (!hit.frontFace)
+            if (!hit.frontFace && hit.t < bestT)
             {
-                if (!hitSurf.backfaceGI)
-                {
-                    positionWS = RayOffset(hitSurf.P, hitSurf.Ng);
-                    moved = true;
-                    break;
-                }
+                moved = true;
+                bestT = hit.t;
+                bestBary = hit.bary;
+                bestPrim = hit.primitiveID;
             }
         }
+    }
+
+    if (moved)
+    {
+        Surface hitSurf = Surface::Get(bestPrim, bestBary, true);
+        positionWS = RayOffset(hitSurf.P, hitSurf.Ng);
     }
 
     if (moved || !canJitter || JITTER_BARYCENTRICS == 0)
