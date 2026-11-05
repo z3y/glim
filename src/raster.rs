@@ -430,7 +430,10 @@ pub fn decompact_combined_sh(
     }
 }
 
-pub fn dilate_texture(color: &mut [f32], resolution: usize, radius: usize) {
+pub fn dilate_texture(color: &mut [f32], mask: &mut [bool], resolution: usize, radius: usize) {
+    let mask = &mut mask[0..(resolution * resolution)];
+    mask.fill(false);
+
     for y in 0..resolution {
         for x in 0..resolution {
             let i = (y * resolution + x) * 4;
@@ -439,6 +442,7 @@ pub fn dilate_texture(color: &mut [f32], resolution: usize, radius: usize) {
             let covered = cov > 0.0;
 
             if covered {
+                mask[y * resolution + x] = true;
                 continue;
             }
 
@@ -487,10 +491,66 @@ pub fn dilate_texture(color: &mut [f32], resolution: usize, radius: usize) {
                 color[i + 0] = color[si + 0];
                 color[i + 1] = color[si + 1];
                 color[i + 2] = color[si + 2];
+                mask[y * resolution + x] = true;
             } else {
                 color[i + 0] = 0.0;
                 color[i + 1] = 0.0;
                 color[i + 2] = 0.0;
+            }
+        }
+    }
+}
+
+pub fn block_average_fill(color: &mut [f32], mask: &[bool], resolution: usize) {
+    const BLOCK_SIZE: usize = 4;
+
+    let blocks = resolution / BLOCK_SIZE;
+
+    for by in 0..blocks {
+        for bx in 0..blocks {
+            let mut avg = [0.0f32; 4];
+            let mut covered = 0;
+
+            for y in 0..BLOCK_SIZE {
+                for x in 0..BLOCK_SIZE {
+                    let px = bx * BLOCK_SIZE + x;
+                    let py = by * BLOCK_SIZE + y;
+                    let index = py * resolution + px;
+
+                    if mask[index] {
+                        avg[0] += color[index * 4 + 0];
+                        avg[1] += color[index * 4 + 1];
+                        avg[2] += color[index * 4 + 2];
+                        avg[3] += color[index * 4 + 3];
+                        covered += 1;
+                    }
+                }
+            }
+
+            if covered == 0 || covered == BLOCK_SIZE * BLOCK_SIZE {
+                continue;
+            }
+
+            let scale = 1.0 / covered as f32;
+
+            avg[0] *= scale;
+            avg[1] *= scale;
+            avg[2] *= scale;
+            avg[3] *= scale;
+
+            for y in 0..BLOCK_SIZE {
+                for x in 0..BLOCK_SIZE {
+                    let px = bx * BLOCK_SIZE + x;
+                    let py = by * BLOCK_SIZE + y;
+                    let index = py * resolution + px;
+
+                    if !mask[index] {
+                        color[index * 4 + 0] = avg[0];
+                        color[index * 4 + 1] = avg[1];
+                        color[index * 4 + 2] = avg[2];
+                        color[index * 4 + 3] = avg[3];
+                    }
+                }
             }
         }
     }

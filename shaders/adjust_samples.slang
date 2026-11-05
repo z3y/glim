@@ -119,17 +119,22 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
                 bool coplanar = dot(hitSurf.Ng, surface.Ng) > 0.999;
 
-                if (!coplanar && hit.t < travelWS - eps)
+                if (hit.frontFace)
                 {
-                    canJitter = false;
+                    if (!coplanar && hit.t < travelWS - eps)
+                    {
+                        canJitter = false;
+                    }
                 }
-
-                if (!hit.frontFace && hit.t < bestT)
+                else
                 {
-                    moved = true;
-                    bestT = hit.t;
-                    bestBary = hit.bary;
-                    bestPrim = hit.primitiveID;
+                    if (!hit.frontFace && hit.t < bestT)
+                    {
+                        moved = true;
+                        bestT = hit.t;
+                        bestBary = hit.bary;
+                        bestPrim = hit.primitiveID;
+                    }
                 }
             }
         }

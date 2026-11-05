@@ -19,8 +19,8 @@ use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
-    build_compaction, decompact_combined_sh, decompact_diffuse, decompact_directional,
-    dilate_texture, encode_directional, rasterize_texels, render_normals,
+    block_average_fill, build_compaction, decompact_combined_sh, decompact_diffuse,
+    decompact_directional, dilate_texture, encode_directional, rasterize_texels, render_normals,
 };
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
@@ -2322,6 +2322,7 @@ fn render_lightmaps(app: &mut Glim) {
     }
 
     let mut buffer = vec![0.0; max_resolution * max_resolution * 4];
+    let mut mask = vec![false; max_resolution * max_resolution];
     let mut buffer_normal = if app.config.lightmap_mode == LightmapMode::DominantDirection {
         vec![0.0; max_resolution * max_resolution * 4]
     } else {
@@ -2351,12 +2352,13 @@ fn render_lightmaps(app: &mut Glim) {
         );
 
         const DILATE_DENOISE: usize = 1;
-        const DILATE_FINAL: usize = 8;
+        const DILATE_FINAL: usize = 1;
+        const BLOCK_FILL: bool = true;
 
         if settings.denoise {
             // fix denoiser artifacts on edges
             if settings.dilate {
-                dilate_texture(&mut buffer, resolution, DILATE_DENOISE);
+                dilate_texture(&mut buffer, &mut mask, resolution, DILATE_DENOISE);
             }
             match &oidn {
                 Some(oidn) => {
@@ -2370,7 +2372,7 @@ fn render_lightmaps(app: &mut Glim) {
         }
 
         if settings.dilate {
-            dilate_texture(&mut buffer, resolution, DILATE_FINAL);
+            dilate_texture(&mut buffer, &mut mask, resolution, DILATE_FINAL);
         }
 
         if settings.fix_seams {
@@ -2384,6 +2386,10 @@ fn render_lightmaps(app: &mut Glim) {
                 group_index as u32,
                 channels,
             );
+        }
+
+        if BLOCK_FILL {
+            block_average_fill(&mut buffer, &mask, resolution);
         }
 
         use exr::prelude::*;
@@ -2427,7 +2433,7 @@ fn render_lightmaps(app: &mut Glim) {
             if settings.denoise {
                 // fix denoiser artifacts on edges
                 if settings.dilate {
-                    dilate_texture(&mut buffer, resolution, DILATE_DENOISE);
+                    dilate_texture(&mut buffer, &mut mask, resolution, DILATE_DENOISE);
                 }
                 match &oidn {
                     Some(oidn) => {
@@ -2449,8 +2455,8 @@ fn render_lightmaps(app: &mut Glim) {
             );
 
             if settings.dilate {
-                dilate_texture(&mut buffer, resolution, DILATE_FINAL);
-                dilate_texture(&mut buffer_normal, resolution, DILATE_FINAL);
+                dilate_texture(&mut buffer, &mut mask, resolution, DILATE_FINAL);
+                dilate_texture(&mut buffer_normal, &mut mask, resolution, DILATE_FINAL);
             }
 
             if export_debug_textures {
@@ -2475,6 +2481,10 @@ fn render_lightmaps(app: &mut Glim) {
                 );
             }
 
+            if BLOCK_FILL {
+                block_average_fill(&mut buffer, &mask, resolution);
+            }
+
             let full_path = app
                 .output_dir
                 .join(format!("Lightmap-{}_Directional.tga", group_index));
@@ -2494,7 +2504,7 @@ fn render_lightmaps(app: &mut Glim) {
             if settings.denoise {
                 // fix denoiser artifacts on edges
                 if settings.dilate {
-                    dilate_texture(&mut buffer, resolution, DILATE_DENOISE);
+                    dilate_texture(&mut buffer, &mut mask, resolution, DILATE_DENOISE);
                 }
                 match &oidn {
                     Some(oidn) => {
@@ -2508,7 +2518,7 @@ fn render_lightmaps(app: &mut Glim) {
             }
 
             if settings.dilate {
-                dilate_texture(&mut buffer, resolution, DILATE_FINAL);
+                dilate_texture(&mut buffer, &mut mask, resolution, DILATE_FINAL);
             }
 
             if settings.fix_seams {
@@ -2522,6 +2532,10 @@ fn render_lightmaps(app: &mut Glim) {
                     group_index as u32,
                     channels,
                 );
+            }
+
+            if BLOCK_FILL {
+                block_average_fill(&mut buffer, &mask, resolution);
             }
 
             let full_path = app
