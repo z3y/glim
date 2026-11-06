@@ -1479,7 +1479,9 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
         &app.vk,
         "Indirect Buffer".to_owned(),
         (visibility_texels_count * size_of::<f32>() * 4) as u64,
-        vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::TRANSFER_DST,
+        vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
     zero_buffer(&app.vk, &shadowmask_buffer);
