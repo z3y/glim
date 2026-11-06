@@ -14,8 +14,8 @@ struct PushConstants
     uint probeCount;
 
     SHProbeL2 *shProbes;
-    uint pad0;
-    uint pad1;
+    uint mixedStart;
+    uint mixedEnd;
 };
 
 const static float3 ProbeRayDirections[26] = {
@@ -148,7 +148,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         Light light = Lights[lightIndex];
-        if (light.Mixed() > 0)
+        if (light.Mixed())
         {
             continue;
         }
@@ -222,6 +222,28 @@ void main(uint3 threadID: SV_DispatchThreadID)
                                                 CompactedLightmap[compactIndex * 3 + 1],
                                                 CompactedLightmap[compactIndex * 3 + 2]);
                 AccumulateL2(probe, sampleIndex, lightmapDiffuse * bounceAlbedo * 4 * sampleScale, ray.D);
+            }
+
+            // handle mixed lights that were not shaded directly
+            // todo spec constant
+            if (true)
+            {
+                float3 positionWS = RayOffset(surface.P, surface.Ng);
+                float3 normalWS = surface.Ng;
+
+                for (uint lightIndex = Push.mixedStart; lightIndex < Push.mixedEnd; lightIndex++)
+                {
+                    Light light = Lights[lightIndex];
+                    if (!light.Mixed())
+                    {
+                        continue;
+                    }
+                    float3 L;
+                    float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L, false);
+                    float NoL = saturate(dot(L, normalWS));
+                    current *= NoL;
+                    AccumulateL2(probe, sampleIndex, current * bounceAlbedo * 4 * sampleScale, ray.D);
+                }
             }
         }
     }

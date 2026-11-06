@@ -2048,7 +2048,7 @@ fn bake_indirect(
     indirect_buffer.destroy(&app.vk);
 }
 
-fn bake_light_probes(app: &mut Glim) {
+fn bake_light_probes(app: &mut Glim, mixed_start: usize, mixed_count: usize) {
     if app.probes.len() == 0 || is_cancelled() {
         return;
     }
@@ -2073,7 +2073,8 @@ fn bake_light_probes(app: &mut Glim) {
         pub probes_count: u32,
 
         pub sh_probes_address: u64,
-        pub pad0: u64,
+        pub mixed_start: u32,
+        pub mixed_end: u32,
     }
 
     let shader_bindings = ShaderBindings {
@@ -2104,7 +2105,8 @@ fn bake_light_probes(app: &mut Glim) {
         sample_index: 0,
         probes_count: app.probes.len() as u32,
         sh_probes_address: probes_buffer.gpu_address,
-        pad0: 0,
+        mixed_start: mixed_start as u32,
+        mixed_end: (mixed_start + mixed_count) as u32,
     };
 
     let probes_count = app.probes.len() as u32;
@@ -2626,7 +2628,7 @@ fn render_lightmaps(app: &mut Glim) {
 
     drop(buffer);
 
-    bake_light_probes(app);
+    bake_light_probes(app, mixed_start, mixed_count);
 
     visibility_buffer.destroy(&app.vk);
     drop(visibility_buffer);
