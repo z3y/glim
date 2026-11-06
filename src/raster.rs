@@ -234,6 +234,62 @@ pub fn decompact_diffuse(
     }
 }
 
+pub fn decompact_shadowmask(
+    buffer: &mut [f32],
+    texels: &[VisibilityTexel],
+    coverage: &[f32],
+    lightmap_texels: &[f32],
+    mesh: &Mesh,
+    group: &LightmapGroup,
+) {
+    let resolution = group.settings.width as usize;
+    let group_id = group.id;
+
+    let count = resolution * resolution * 4;
+
+    let buffer = &mut buffer[0..count];
+    buffer.fill(0.0);
+
+    for compacted_index in 0..texels.len() {
+        let texel = &texels[compacted_index];
+
+        let primitive_id = texel.primitive_id;
+        if primitive_id == u32::MAX {
+            continue;
+        }
+        let i0 = mesh.indices[(primitive_id as usize) * 3 + 0] as usize;
+        let v0 = mesh.vertices[i0];
+
+        if v0.group() != group_id {
+            continue;
+        }
+
+        let cov = coverage[compacted_index];
+        let col_r = lightmap_texels[compacted_index * 4 + 0];
+        let col_g = lightmap_texels[compacted_index * 4 + 1];
+        let col_b = lightmap_texels[compacted_index * 4 + 2];
+        let col_a = lightmap_texels[compacted_index * 4 + 3];
+
+        let index = texel.index(resolution);
+
+        buffer[index * 4 + 0] += col_r;
+        buffer[index * 4 + 1] += col_g;
+        buffer[index * 4 + 2] += col_b;
+        buffer[index * 4 + 3] += col_a;
+    }
+
+    // for px in buffer.chunks_exact_mut(4) {
+    //     let w = px[3].min(1.0);
+
+    //     if w > 0.0 {
+    //         px[0] /= w;
+    //         px[1] /= w;
+    //         px[2] /= w;
+    //         px[3] = w;
+    //     }
+    // }
+}
+
 pub fn encode_directional(pixels: &mut [f32], normals: &[f32]) {
     for (i, px) in pixels.chunks_exact_mut(4).enumerate() {
         // let w = px[3];

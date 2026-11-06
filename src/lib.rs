@@ -19,8 +19,9 @@ use crate::lights::LightType;
 use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
-    block_average_fill, build_compaction, decompact_combined_sh, decompact_diffuse,
-    decompact_directional, dilate_texture, encode_directional, rasterize_texels, render_normals,
+    Texels, block_average_fill, build_compaction, decompact_combined_sh, decompact_diffuse,
+    decompact_directional, decompact_shadowmask, dilate_texture, encode_directional,
+    rasterize_texels, render_normals,
 };
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
@@ -1459,7 +1460,7 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
     Ok(())
 }
 
-fn bake_shadowmask(app: &mut Glim, pixel_buffer: &Buffer, lightmap_index: usize) {
+fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
     let mut requires_shadowmask = false;
     for l in &app.cpu_lights {
         if l.occlusion_channel != u8::MAX {
@@ -1472,27 +1473,31 @@ fn bake_shadowmask(app: &mut Glim, pixel_buffer: &Buffer, lightmap_index: usize)
         return;
     }
 
-    let group = &app.groups[lightmap_index].settings;
-    if group.discard {
-        return;
-    }
+    let visibility_texels_count = texels.visibility.len();
 
-    let resolution = group.width;
+    let mut shadowmask_buffer = Buffer::empty(
+        &app.vk,
+        "Indirect Buffer".to_owned(),
+        (visibility_texels_count * size_of::<f32>() * 4) as u64,
+        vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::TRANSFER_DST,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    );
+    zero_buffer(&app.vk, &shadowmask_buffer);
 
-    Log::msg(&format!(
-        "Baking Shadowmask ({}/{})",
-        lightmap_index + 1,
-        app.groups.len()
-    ));
+    Log::msg("Baking Shadowmasks");
+
+    const SHADOWMASK_SAMPLES: u32 = 32;
 
     #[repr(C)]
     pub struct PushConstants {
         pub lights_start: u32,
         pub lights_count: u32,
-        pub resolution: u32,
-        pub lightmap_group: u32,
+        pub compacted_count: u32,
+        pub pad0: u32,
 
         pub pixels_address: u64,
+        pub sample_index: u32,
+        pub sample_count: u32,
     }
 
     let albedos = app.albedo_array.views();
@@ -1521,54 +1526,109 @@ fn bake_shadowmask(app: &mut Glim, pixel_buffer: &Buffer, lightmap_index: usize)
     );
     update_compute_shader(&app.vk, &shader, &shader_bindings);
 
-    let push = PushConstants {
+    let groups_x = (visibility_texels_count as u32 + 63) / 64;
+
+    let mut push = PushConstants {
         lights_start: 0,
         lights_count: app.cpu_lights.len() as u32,
-        resolution: resolution,
-        lightmap_group: lightmap_index as u32,
-        pixels_address: pixel_buffer.gpu_address,
+        compacted_count: visibility_texels_count as u32,
+        pad0: 0,
+        pixels_address: shadowmask_buffer.gpu_address,
+        sample_index: 0,
+        sample_count: SHADOWMASK_SAMPLES,
     };
-    let push_bytes = as_bytes(&push);
 
-    let cmd = app.vk.begin_single_use_cmd();
-    unsafe {
-        let vk = &app.vk.device;
-        vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-        vk.cmd_bind_descriptor_sets(
-            cmd,
-            vk::PipelineBindPoint::COMPUTE,
-            shader.pipeline_layout,
-            0,
-            &[shader.descriptor_set],
-            &[],
-        );
-        vk.cmd_push_constants(
-            cmd,
-            shader.pipeline_layout,
-            vk::ShaderStageFlags::COMPUTE,
-            0,
-            &push_bytes,
-        );
-        vk.cmd_dispatch(cmd, resolution / 8, resolution / 8, 1);
+    for sample_index in 0..SHADOWMASK_SAMPLES {
+        push.sample_index = sample_index;
+        let push_bytes = as_bytes(&push);
+
+        let cmd = app.vk.begin_single_use_cmd();
+        unsafe {
+            let vk = &app.vk.device;
+            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                shader.pipeline_layout,
+                0,
+                &[shader.descriptor_set],
+                &[],
+            );
+            vk.cmd_push_constants(
+                cmd,
+                shader.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &push_bytes,
+            );
+            vk.cmd_dispatch(cmd, groups_x, 1, 1);
+        }
+        app.vk.end_single_use_cmd(cmd);
     }
-    app.vk.end_single_use_cmd(cmd);
 
     shader.destroy(&app.vk);
 
-    let pixels: &[f32] = unsafe {
+    let mut readback_buffer = Buffer::empty(
+        &app.vk,
+        "Readback Buffer".to_owned(),
+        shadowmask_buffer.bytes,
+        vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    );
+
+    unsafe {
+        let cmd = app.vk.begin_single_use_cmd();
+
+        let region = vk::BufferCopy {
+            src_offset: 0,
+            dst_offset: 0,
+            size: shadowmask_buffer.bytes,
+        };
+
+        app.vk.device.cmd_copy_buffer(
+            cmd,
+            shadowmask_buffer.buffer,
+            readback_buffer.buffer,
+            &[region],
+        );
+
+        app.vk.end_single_use_cmd(cmd);
+    }
+    shadowmask_buffer.destroy(&app.vk);
+    drop(shadowmask_buffer);
+
+    let readback_buffer_slice: &[f32] = unsafe {
         std::slice::from_raw_parts(
-            pixel_buffer.ptr as *const f32,
-            (resolution * resolution * 4) as usize,
+            readback_buffer.ptr as *const f32,
+            visibility_texels_count * 4,
         )
     };
 
-    let path = app
-        .output_dir
-        .join(format!("Lightmap-{}_ShadowMask.tga", lightmap_index));
+    for group_index in 0..app.groups.len() {
+        let group = &app.groups[group_index];
+        let resolution = group.settings.width as usize;
 
-    if let Err(err) = save_tga(path, resolution as usize, resolution as usize, pixels, true) {
-        Log::msg(&format!("Failed to save shadowmask: {}", err));
+        decompact_shadowmask(
+            buffer,
+            &texels.visibility,
+            &texels.coverage,
+            &readback_buffer_slice,
+            &app.gpu_mesh.merged_mesh,
+            &group,
+        );
+
+        let path = app
+            .output_dir
+            .join(format!("Lightmap-{}_ShadowMask.tga", group_index));
+
+        if let Err(err) = save_tga(path, resolution as usize, resolution as usize, buffer, true) {
+            Log::msg(&format!("Failed to save shadowmask: {}", err));
+        }
     }
+    readback_buffer.destroy(&app.vk);
+    drop(readback_buffer);
 }
 
 fn zero_buffer(vk: &VulkanContext, buffer: &Buffer) {
@@ -2285,9 +2345,9 @@ fn render_lightmaps(app: &mut Glim) {
         app.vk.end_single_use_cmd(cmd);
     }
 
-    let readback_buffer_slice: &mut [f32] = unsafe {
-        std::slice::from_raw_parts_mut(
-            readback_buffer.ptr as *mut f32,
+    let readback_buffer_slice: &[f32] = unsafe {
+        std::slice::from_raw_parts(
+            readback_buffer.ptr as *const f32,
             lightmap_texels_channels * texels_count,
         )
     };
@@ -2544,11 +2604,13 @@ fn render_lightmaps(app: &mut Glim) {
             save_tga(full_path, resolution, resolution, &buffer, false).unwrap();
         }
     }
-
-    drop(buffer);
     drop(buffer_normal);
     readback_buffer.destroy(&app.vk);
     drop(readback_buffer);
+
+    bake_shadowmasks(app, &texels, &mut buffer);
+
+    drop(buffer);
 
     bake_light_probes(app);
 

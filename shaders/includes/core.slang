@@ -786,6 +786,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     [branch]
     if (visible > 0.0 && light.CastShadows())
     {
+        // todo shadow terminator fix
         if (TraceShadowRay(shadowRay))
         {
             color = 0.0;
@@ -885,6 +886,9 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
         [loop]
         for (uint i = 0; i < attempts; i++)
         {
+            // barycentrics here are not always texel centers but centroids
+            // jittering always by half a texel means they can end up in another texel
+            // but it seems fine for now
             float2 jitterUV = (xiAA - 0.5) / (float)resolution;
 
             float2 dBary;

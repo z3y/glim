@@ -7,37 +7,33 @@ struct PushConstants
 {
     uint lightsStart;
     uint lightsCount;
-    uint resolution;
-    uint lightmapGroup;
+    uint compactedCount;
+    uint pad0;
 
     float4 *pixels;
+    uint sampleIndex;
+    uint sampleCount;
 };
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(64, 1, 1)]
 void main(uint3 threadID: SV_DispatchThreadID)
 {
-    uint2 coords = threadID.xy;
+    uint index = threadID.x;
 
-    if (any(coords.xy >= Push.resolution))
+    if (index >= Push.compactedCount)
     {
         return;
     }
 
-    float4 *pixels = Push.pixels;
+    uint sampleIndex = Push.sampleIndex;
+    uint sampleCount = Push.sampleCount;
+    float sampleScale = 1.0 / float(sampleCount);
 
-    uint compactedIndex = GetCompactedIndex(coords, Push.lightmapGroup, false);
-    uint linearIndex = coords.y * Push.resolution.x + coords.x;
-
-    if (compactedIndex == uint::maxValue)
-    {
-        pixels[linearIndex] = 0;
-        return;
-    }
-
-    float4 visibility = CompactedVisibility[compactedIndex];
-    float3 positionWS = visibility.xyz;
-    float3 normalWS = UnpackNormalOctahedron(visibility.w);
+    float3 positionWS;
+    float3 normalWS;
+    uint3 indexing;
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
 
     uint lightsStart = Push.lightsStart;
     uint lightsCount = Push.lightsCount;
@@ -67,5 +63,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         }
     }
 
-    pixels[linearIndex] = occlusionChannels;
+    occlusionChannels *= sampleScale;
+
+    Push.pixels[index] += occlusionChannels;
 }
