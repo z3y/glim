@@ -311,6 +311,8 @@ struct PixelInfo {
     color: [f32; 4],
 }
 
+// todo
+// there seems to be a bug where the seam fixer makes high contrast seams look even worse
 pub fn fix_seams(
     pixels: &mut [f32],
     width: u32,

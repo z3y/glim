@@ -316,6 +316,8 @@ impl UVPacker {
         chart
     }
 
+    // todo mixed split charts and scale offset mode
+    // todo 2D world scale for meshes where thats possibe (for example a plane)
     pub fn add_mesh(
         &mut self,
         positions: &[Vector3],
