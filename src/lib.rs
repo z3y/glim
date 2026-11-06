@@ -1461,6 +1461,10 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
 }
 
 fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
+    if is_cancelled() {
+        return;
+    }
+
     let mut requires_shadowmask = false;
     for l in &app.cpu_lights {
         if l.occlusion_channel != u8::MAX {
@@ -1617,7 +1621,12 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
 
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index];
-        let resolution = group.settings.width as usize;
+        let settings = &group.settings;
+        let resolution = settings.width as usize;
+
+        if settings.discard {
+            continue;
+        }
 
         decompact_shadowmask(
             buffer,
@@ -1724,6 +1733,10 @@ fn init_samples(app: &Glim, visibility_texels_count: usize) {
 }
 
 fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
+    if is_cancelled() {
+        return;
+    }
+
     let message = format!("Baking Direct Emission");
     Log::msg(&message);
 
@@ -2049,7 +2062,11 @@ fn bake_indirect(
 }
 
 fn bake_light_probes(app: &mut Glim, mixed_start: usize, mixed_count: usize) {
-    if app.probes.len() == 0 || is_cancelled() {
+    if app.probes.len() == 0 {
+        return;
+    }
+
+    if is_cancelled() {
         return;
     }
 
@@ -2409,6 +2426,14 @@ fn render_lightmaps(app: &mut Glim) {
         let group = &app.groups[group_index];
         let settings = &group.settings;
         let resolution = group.settings.width as usize;
+
+        if settings.discard {
+            continue;
+        }
+
+        if is_cancelled() {
+            continue;
+        }
 
         Log::msg(&format!(
             "Processing Lightmap {}/{}",
