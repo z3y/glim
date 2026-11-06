@@ -55,13 +55,13 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint previousOffset;
     if (Push.bounceIndex % 2 == 0)
     {
-        currentOffset = 0;
-        previousOffset = Push.compactedCount;
+        currentOffset = Push.compactedCount;
+        previousOffset = 0;
     }
     else
     {
-        currentOffset = Push.compactedCount;
-        previousOffset = 0;
+        currentOffset = 0;
+        previousOffset = Push.compactedCount;
     }
 
     float ao = 1.0;

@@ -1812,6 +1812,7 @@ fn bake_direct_lights(
     lights_count: usize,
     samples: u32,
     mixed: bool,
+    lightmap: &Buffer,
 ) {
     if lights_count == 0 {
         return;
@@ -1826,8 +1827,7 @@ fn bake_direct_lights(
 
         pub lights_start: u32,
         pub lights_end: u32,
-        pub pad1: u32,
-        pub pad2: u32,
+        pub lightmap_address: u64,
     }
 
     let shader_bindings = ShaderBindings {
@@ -1860,8 +1860,7 @@ fn bake_direct_lights(
         mixed: mixed as u32,
         lights_start: lights_start as u32,
         lights_end: (lights_start + lights_count) as u32,
-        pad1: 0,
-        pad2: 0,
+        lightmap_address: lightmap.gpu_address,
     };
 
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
@@ -1905,7 +1904,13 @@ fn bake_direct_lights(
     drop(bake_direct_light_shader);
 }
 
-fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: usize) {
+fn bake_indirect(
+    app: &Glim,
+    direct_buffer: &Buffer,
+    visibility_texels_count: usize,
+    mixed_start: usize,
+    mixed_count: usize,
+) {
     if app.config.bounce_count == 0 {
         return;
     }
@@ -1925,7 +1930,7 @@ fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: us
     let cmd = app.vk.begin_single_use_cmd();
     let region = vk::BufferCopy {
         src_offset: 0,
-        dst_offset: (size_of::<f32>() * 3 * visibility_texels_count) as u64,
+        dst_offset: 0,
         size: (size_of::<f32>() * 3 * visibility_texels_count) as u64,
     };
     unsafe {
@@ -1935,16 +1940,16 @@ fn bake_indirect(app: &Glim, direct_buffer: &Buffer, visibility_texels_count: us
     };
     app.vk.end_single_use_cmd(cmd);
 
-    // todo
-    // if mixed_count > 0 {
-    //     render_direct_light(
-    //         lights_count as u32 - mixed_count,
-    //         lights_count as u32,
-    //         app.config.direct_light_samples,
-    //         true,
-    //         &mut progress,
-    //     );
-    // }
+    Log::msg(&format!("Baking {} Mixed Lights", mixed_count));
+    bake_direct_lights(
+        app,
+        visibility_texels_count,
+        mixed_start,
+        mixed_count,
+        app.config.direct_light_samples,
+        true,
+        &indirect_buffer,
+    );
 
     #[repr(C)]
     pub struct PushConstants {
@@ -2303,6 +2308,7 @@ fn render_lightmaps(app: &mut Glim) {
         count,
         app.config.direct_light_samples,
         false,
+        &lightmap_texels,
     );
 
     Log::msg(&format!("Baking {} Area Lights", area_count));
@@ -2313,20 +2319,16 @@ fn render_lightmaps(app: &mut Glim) {
         area_count,
         app.config.direct_emission_samples,
         false,
+        &lightmap_texels,
     );
 
-    Log::msg(&format!("Baking {} Mixed Lights", mixed_count));
-    // todo mixed
-    // bake_direct_lights(
-    //     app,
-    //     texels_count,
-    //     mixed_start,
-    //     mixed_count,
-    //     app.config.direct_light_samples,
-    //     true,
-    // );
-
-    bake_indirect(app, &lightmap_texels, texels_count);
+    bake_indirect(
+        app,
+        &lightmap_texels,
+        texels_count,
+        mixed_start,
+        mixed_count,
+    );
 
     let mut readback_buffer = Buffer::empty(
         &app.vk,
