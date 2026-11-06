@@ -20,8 +20,8 @@ use crate::math::{Vector2, Vector3};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
     Texels, block_average_fill, build_compaction, decompact_combined_sh, decompact_diffuse,
-    decompact_directional, decompact_shadowmask, dilate_texture, encode_directional,
-    rasterize_texels, render_normals,
+    decompact_directional, decompact_shadowmask, dilate_shadowmask, dilate_texture,
+    encode_directional, rasterize_texels, render_normals,
 };
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
@@ -1608,18 +1608,28 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
         )
     };
 
+    let mut max_resolution = 1;
+    for g in &app.groups {
+        max_resolution = max_resolution.max(g.settings.width as usize);
+    }
+
+    let mut buffer_coverage = vec![0.0f32; max_resolution * max_resolution];
+
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index];
         let resolution = group.settings.width as usize;
 
         decompact_shadowmask(
             buffer,
+            &mut buffer_coverage,
             &texels.visibility,
             &texels.coverage,
             &readback_buffer_slice,
             &app.gpu_mesh.merged_mesh,
             &group,
         );
+
+        dilate_shadowmask(buffer, &mut buffer_coverage, resolution, 8);
 
         let path = app
             .output_dir

@@ -236,6 +236,7 @@ pub fn decompact_diffuse(
 
 pub fn decompact_shadowmask(
     buffer: &mut [f32],
+    buffer_coverage: &mut [f32],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     lightmap_texels: &[f32],
@@ -272,22 +273,24 @@ pub fn decompact_shadowmask(
 
         let index = texel.index(resolution);
 
-        buffer[index * 4 + 0] += col_r;
-        buffer[index * 4 + 1] += col_g;
-        buffer[index * 4 + 2] += col_b;
-        buffer[index * 4 + 3] += col_a;
+        buffer[index * 4 + 0] += col_r * cov;
+        buffer[index * 4 + 1] += col_g * cov;
+        buffer[index * 4 + 2] += col_b * cov;
+        buffer[index * 4 + 3] += col_a * cov;
+        buffer_coverage[index] += cov;
     }
 
-    // for px in buffer.chunks_exact_mut(4) {
-    //     let w = px[3].min(1.0);
+    for (i, px) in buffer.chunks_exact_mut(4).enumerate() {
+        let w = buffer_coverage[i].min(1.0);
 
-    //     if w > 0.0 {
-    //         px[0] /= w;
-    //         px[1] /= w;
-    //         px[2] /= w;
-    //         px[3] = w;
-    //     }
-    // }
+        if w > 0.0 {
+            px[0] /= w;
+            px[1] /= w;
+            px[2] /= w;
+            px[3] /= w;
+            buffer_coverage[i] = w;
+        }
+    }
 }
 
 pub fn encode_directional(pixels: &mut [f32], normals: &[f32]) {
@@ -552,6 +555,74 @@ pub fn dilate_texture(color: &mut [f32], mask: &mut [bool], resolution: usize, r
                 color[i + 0] = 0.0;
                 color[i + 1] = 0.0;
                 color[i + 2] = 0.0;
+            }
+        }
+    }
+}
+
+pub fn dilate_shadowmask(color: &mut [f32], coverage: &[f32], resolution: usize, radius: usize) {
+    for y in 0..resolution {
+        for x in 0..resolution {
+            let i = (y * resolution + x) * 4;
+
+            let cov = coverage[y * resolution + x];
+            let covered = cov > 0.0;
+
+            if covered {
+                continue;
+            }
+
+            let mut best_index = None;
+            let mut best_ring = usize::MAX;
+            let mut best_cov = 0.0f32;
+            let mut best_dist = usize::MAX;
+
+            let min_x = x.saturating_sub(radius);
+            let max_x = (x + radius).min(resolution - 1);
+            let min_y = y.saturating_sub(radius);
+            let max_y = (y + radius).min(resolution - 1);
+
+            for sy in min_y..=max_y {
+                for sx in min_x..=max_x {
+                    let dx = sx.abs_diff(x);
+                    let dy = sy.abs_diff(y);
+                    let ring = dx.max(dy);
+
+                    if ring > best_ring {
+                        continue;
+                    }
+
+                    let si = (sy * resolution + sx) * 4;
+                    let dist = dx * dx + dy * dy;
+
+                    let sample_cov = coverage[sy * resolution + sx];
+                    if sample_cov <= 0.0 {
+                        continue;
+                    }
+
+                    let better = ring < best_ring
+                        || sample_cov > best_cov
+                        || (sample_cov == best_cov && dist < best_dist);
+
+                    if better {
+                        best_index = Some(si);
+                        best_ring = ring;
+                        best_cov = sample_cov;
+                        best_dist = dist;
+                    }
+                }
+            }
+
+            if let Some(si) = best_index {
+                color[i + 0] = color[si + 0];
+                color[i + 1] = color[si + 1];
+                color[i + 2] = color[si + 2];
+                color[i + 3] = color[si + 3];
+            } else {
+                color[i + 0] = 0.0;
+                color[i + 1] = 0.0;
+                color[i + 2] = 0.0;
+                color[i + 3] = 0.0;
             }
         }
     }
