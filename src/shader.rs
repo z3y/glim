@@ -64,7 +64,7 @@ impl<'a> Default for ShaderBindings<'a> {
     }
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Default)]
 pub struct SpecializationConstants {
     pub hardware_rt: u32,              // 0
@@ -82,29 +82,15 @@ pub struct SpecializationConstants {
     pub lightprobe_deringing: f32, // 10
     pub emissive_multiplier: f32,  // 11
 
-    pub vertex_address: u64,  // 12 13
-    pub indices_address: u64, // 14 15
+    pub ao_intensity: f32, // 12
+    pub ao_range: f32,     // 13
+    pub pad0: u32,         // 14
+    pub pad1: u32,         // 15
 
-    pub emissive_triangles_address: u64, // 16 17
-    pub compacted_lightmap_address: u64, // 18 19
-
-    pub lightmaps_info_address: u64,       // 20 21
-    pub compacted_visibility_address: u64, // 22 23
-
-    pub lights_address: u64,            // 24 25
-    pub compaction_buffer_address: u64, // 26 27
-
-    pub bvh_nodes_address: u64,     // 28 29
-    pub bvh_triangles_address: u64, // 30 31
-
-    pub ao_intensity: f32,        // 32
-    pub ao_range: f32,            // 33
-    pub geometries_0_offset: u32, // 34
-    pub geometries_1_offset: u32, // 35
-
-    pub geometries_2_offset: u32, // 36
-    pub geometries_3_offset: u32, // 37
-    pub main_uv_address: u64,     // 38 39
+    pub geometries_0_offset: u32, // 16
+    pub geometries_1_offset: u32, // 17
+    pub geometries_2_offset: u32, // 18
+    pub geometries_3_offset: u32, // 19
 }
 
 pub const SPECIALIZATION_MAP_ENTRIES_LEN: usize =

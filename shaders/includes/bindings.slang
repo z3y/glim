@@ -1,5 +1,6 @@
 #pragma once
 
+#include "constants.slang"
 #include "light.slang"
 #include "mesh.slang"
 #include "sh.slang"
@@ -37,59 +38,6 @@ Texture2D<float4> Cookies[];
 [[vk::binding(7, 0)]]
 SamplerState LinearSampler;
 
-[vk::constant_id(0)]
-const uint HARDWARE_RT;
-
-[vk::constant_id(1)]
-const uint LIGHT_FALLOFF_TYPE;
-
-[vk::constant_id(2)]
-const uint JITTER_BARYCENTRICS;
-
-[vk::constant_id(3)]
-const uint EMISSIVE_TRIANGLES_COUNT;
-
-[vk::constant_id(4)]
-const uint MULTIPLE_IMPORTANCE_SAMPLING;
-
-[vk::constant_id(5)]
-const uint LIGHTMAP_GROUP_COUNT;
-
-[vk::constant_id(6)]
-const uint LIGHTMAP_MODE;
-
-[vk::constant_id(7)]
-const uint COORDINATE_SPACE;
-
-[vk::constant_id(8)]
-const float SKYBOX_INTENSITY;
-
-[vk::constant_id(9)]
-const float INDIRECT_INTENSITY;
-
-[vk::constant_id(10)]
-const float LIGHTPROBE_DERINGING;
-
-[vk::constant_id(11)]
-const float EMISSIVE_MULTIPLIER;
-
-[vk::constant_id(32)]
-const float AO_INTENSITY;
-[vk::constant_id(33)]
-const float AO_RANGE;
-
-[vk::constant_id(34)]
-const uint GEOMETRIES_0_OFFSET;
-
-[vk::constant_id(35)]
-const uint GEOMETRIES_1_OFFSET;
-
-[vk::constant_id(36)]
-const uint GEOMETRIES_2_OFFSET;
-
-[vk::constant_id(37)]
-const uint GEOMETRIES_3_OFFSET;
-
 struct RayTracingData
 {
     uint *indices;
@@ -100,13 +48,6 @@ struct RayTracingData
 
     float4 *visibility;
     float4 *mainUVs;
-};
-
-enum LightmapMode : uint
-{
-    NonDirectional = 0,
-    DominantDirection = 1,
-    CombinedSH = 3,
 };
 
 float4 SampleAlbedo(uint2 coords, uint lightmapGroup)

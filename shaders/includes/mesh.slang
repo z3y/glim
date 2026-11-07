@@ -1,7 +1,3 @@
-#pragma once
-
-#include "bindings.slang"
-
 float2 OctahedronWrap(float2 v)
 {
     return (1.0 - abs(v.yx)) * select(v.xy >= 0.0, 1.0, -1.0);

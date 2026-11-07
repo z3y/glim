@@ -1,4 +1,4 @@
-static const float RAY_MAX = 10000.0;
+static const float RAY_MAX = 100000.0;
 
 struct Ray
 {

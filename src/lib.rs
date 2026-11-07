@@ -112,6 +112,7 @@ pub struct Glim {
     pub probes: Vec<SHProbeL2>,
 
     pub render_target: RenderTarget,
+    pub compacted_visibility: Buffer,
 
     pub constants: SpecializationConstants,
 
@@ -541,6 +542,7 @@ fn initialize_render(app: &mut Glim) {
     app.constants = SpecializationConstants {
         hardware_rt: use_ray_query as u32,
         light_falloff_type: config.light_falloff as u32,
+        jitter_barycentrics: app.config.antialiasing as u32,
         emissive_triangles_count: app.emissive_triangles.len() as u32,
         multiple_importance_sampling: config.mis as u32,
         lightmap_group_count: app.groups.len() as u32,
@@ -549,25 +551,15 @@ fn initialize_render(app: &mut Glim) {
         skybox_intensity: config.skybox_intensity,
         indirect_intensity: config.indirect_intensity,
         lightprobe_deringing: config.lightprobe_deringing,
-        vertex_address: app.gpu_mesh.vertex_buffer.gpu_address,
-        indices_address: app.gpu_mesh.index_buffer.gpu_address,
-        emissive_triangles_address: app.emissive_triangles_buffer.gpu_address,
-        compacted_lightmap_address: 0,
-        lightmaps_info_address: 0,
-        compacted_visibility_address: 0,
-        lights_address: app.gpu_lights.gpu_address,
-        compaction_buffer_address: 0,
-        bvh_nodes_address: app.bvh_nodes.gpu_address,
-        bvh_triangles_address: app.bvh_triangles.gpu_address,
         emissive_multiplier: app.config.emissive_multiplier,
         ao_intensity: config.ao_intensity,
         ao_range: config.ao_range,
+        pad0: 0,
+        pad1: 0,
         geometries_0_offset: geometries_offsets[0],
         geometries_1_offset: geometries_offsets[1],
         geometries_2_offset: geometries_offsets[2],
         geometries_3_offset: geometries_offsets[3],
-        main_uv_address: app.gpu_mesh.main_uv_buffer.gpu_address,
-        jitter_barycentrics: app.config.antialiasing as u32,
     };
 
     if app.config.is_preview {
@@ -1354,6 +1346,7 @@ impl Glim {
             window_title,
             alphas: Vec::new(),
             alphas_array: TextureArray::null(),
+            compacted_visibility: Buffer::null(),
         }
     }
 
@@ -1384,7 +1377,7 @@ impl Glim {
             bvh_nodes: self.bvh_nodes.gpu_address,
             bvh_triangles: self.bvh_triangles.gpu_address,
             main_uv: self.gpu_mesh.main_uv_buffer.gpu_address,
-            visibility: self.constants.compacted_visibility_address,
+            visibility: self.compacted_visibility.gpu_address,
         }
     }
 }
@@ -1677,7 +1670,7 @@ fn zero_buffer(vk: &VulkanContext, buffer: &Buffer) {
     vk.end_single_use_cmd(cmd);
 }
 
-fn init_samples(app: &Glim, visibility_texels_count: usize, visibility: &Buffer) {
+fn init_samples(app: &Glim, visibility_texels_count: usize) {
     #[repr(C, align(16))]
     pub struct PushConstants {
         pub rt: RayTracingData,
@@ -1711,7 +1704,7 @@ fn init_samples(app: &Glim, visibility_texels_count: usize, visibility: &Buffer)
 
     let push = PushConstants {
         rt: app.rt_data(),
-        visibility: visibility.gpu_address,
+        visibility: app.compacted_visibility.gpu_address,
         compacted_count: visibility_texels_count as u32,
         leak_detection: app.config.leak_detection as u32,
     };
@@ -2317,7 +2310,6 @@ fn render_lightmaps(app: &mut Glim) {
         }
         lightmaps_info
     };
-    app.constants.lightmaps_info_address = lightmaps_info.gpu_address;
 
     let mut compaction_buffer = Buffer::new(
         &app.vk,
@@ -2328,18 +2320,17 @@ fn render_lightmaps(app: &mut Glim) {
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
-    app.constants.compaction_buffer_address = compaction_buffer.gpu_address;
 
     Log::msg(&format!("Created {} texels for baking.", texels_count));
 
-    let mut visibility_buffer = Buffer::new(
+    let visibility_buffer = Buffer::new(
         &app.vk,
         String::from("Visibility Buffer"),
         &texels.visibility,
         vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
-    app.constants.compacted_visibility_address = visibility_buffer.gpu_address;
+    app.compacted_visibility = visibility_buffer;
 
     let lightmap_texels_channels = match app.config.lightmap_mode {
         LightmapMode::NonDirectional => 3,
@@ -2356,10 +2347,9 @@ fn render_lightmaps(app: &mut Glim) {
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
-    app.constants.compacted_lightmap_address = lightmap_texels.gpu_address;
     zero_buffer(&app.vk, &lightmap_texels);
 
-    init_samples(app, texels_count, &visibility_buffer);
+    init_samples(app, texels_count);
 
     bake_direct_emission(app, texels_count, &lightmap_texels);
 
@@ -2734,8 +2724,8 @@ fn render_lightmaps(app: &mut Glim) {
         &lightmap_texels,
     );
 
-    visibility_buffer.destroy(&app.vk);
-    drop(visibility_buffer);
+    app.compacted_visibility.destroy(&app.vk);
+
     compaction_buffer.destroy(&app.vk);
     drop(compaction_buffer);
     lightmaps_info.destroy(&app.vk);
