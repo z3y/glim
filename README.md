@@ -11,11 +11,12 @@ Easy to use, lightweight (only ~1MB) and fast.
 - Software Ray-Tracing with [CWBVHs](https://research.nvidia.com/publication/2017-07_efficient-incoherent-ray-traversal-gpus-through-compressed-wide-bvhs)
 - Realtime path-traced preview window
 - Non-Directional, Dominant Direction and Monochromatic L1 SH Lightmaps
+- Multisampling and Anti-Aliasing
 - Unity BIRP and URP
 - Directional, Point, Spot, Rectangle and Disc Lights
 - RGB Light Cookies
 - Emissive Materials with Multiple Importance Sampling
-- UV Packing with hole filling
+- UV Packing with hole filling and split charts mode
 - Open Image Denoise 2.0
 - Seam stitching with a least squares solver
 - L2 SH Light Probe Baking
