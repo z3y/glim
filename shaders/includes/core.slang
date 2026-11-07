@@ -9,9 +9,11 @@ bool TriangleAlphaTest(uint primitiveID, float2 bary)
     float v = bary.y;
     float w = 1.0 - u - v;
 
-    float4 uv0 = MainUVs[primitiveID * 3 + 0];
-    float4 uv1 = MainUVs[primitiveID * 3 + 1];
-    float4 uv2 = MainUVs[primitiveID * 3 + 2];
+    float4 *mainUV = Push.rt.mainUVs;
+
+    float4 uv0 = mainUV[primitiveID * 3 + 0];
+    float4 uv1 = mainUV[primitiveID * 3 + 1];
+    float4 uv2 = mainUV[primitiveID * 3 + 2];
 
     float2 uv = uv0.xy * w + uv1.xy * u + uv2.xy * v;
 
@@ -66,6 +68,9 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
     uint hitTriIndex = 0;
     float hitA = 0;
 
+    float4 *bvhNodes = Push.rt.BVHNodes;
+    float4 *bvhTriangles = Push.rt.BVHTriangles;
+
     while (true)
     {
         if (nodeGroup.y > 0x00FFFFFFu)
@@ -84,11 +89,11 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
             uint relativeIndex = countbits(mask & ~(0xFFFFFFFFu << slotIndex));
             uint childNodeIndex = childNodeBaseIndex + relativeIndex;
 
-            float4 n0 = BVHNodes[childNodeIndex * 5 + 0];
-            float4 n1 = BVHNodes[childNodeIndex * 5 + 1];
-            float4 n2 = BVHNodes[childNodeIndex * 5 + 2];
-            float4 n3 = BVHNodes[childNodeIndex * 5 + 3];
-            float4 n4 = BVHNodes[childNodeIndex * 5 + 4];
+            float4 n0 = bvhNodes[childNodeIndex * 5 + 0];
+            float4 n1 = bvhNodes[childNodeIndex * 5 + 1];
+            float4 n2 = bvhNodes[childNodeIndex * 5 + 2];
+            float4 n3 = bvhNodes[childNodeIndex * 5 + 3];
+            float4 n4 = bvhNodes[childNodeIndex * 5 + 4];
 
             uint packed = asuint(n0.w);
             int3 ex = (int3(asint(packed)) << int3(24, 16, 8)) >> 24;
@@ -156,9 +161,9 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
             triGroup.y -= 1u << triangleIndex;
 
             // memory layout: [v2-v0, v1-v0, v0]
-            float4 e1 = BVHTriangles[triAddr + 0];
-            float4 e2 = BVHTriangles[triAddr + 1];
-            float4 v0 = BVHTriangles[triAddr + 2];
+            float4 e1 = bvhTriangles[triAddr + 0];
+            float4 e2 = bvhTriangles[triAddr + 1];
+            float4 v0 = bvhTriangles[triAddr + 2];
 
             if (!shadowRenderers)
             {
@@ -221,7 +226,7 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
     if (tmax < ray.tMax)
     {
         hit.bary = uv;
-        hit.primitiveID = asuint(BVHTriangles[hitTriIndex + 2].w);
+        hit.primitiveID = asuint(bvhTriangles[hitTriIndex + 2].w);
         hit.frontFace = hitA > 0.0;
         hit.t = tmax;
         return true;
@@ -376,13 +381,15 @@ bool TraceAnyHit(Ray ray)
 
 float CalculateTriangleArea(uint primitiveID)
 {
-    uint i0 = Indices[primitiveID * 3 + 0];
-    uint i1 = Indices[primitiveID * 3 + 1];
-    uint i2 = Indices[primitiveID * 3 + 2];
+    uint *indices = Push.rt.indices;
+    Vertex *vertices = Push.rt.vertices;
+    uint i0 = indices[primitiveID * 3 + 0];
+    uint i1 = indices[primitiveID * 3 + 1];
+    uint i2 = indices[primitiveID * 3 + 2];
 
-    float3 p0 = Vertices[i0].position;
-    float3 p1 = Vertices[i1].position;
-    float3 p2 = Vertices[i2].position;
+    float3 p0 = vertices[i0].position;
+    float3 p1 = vertices[i1].position;
+    float3 p2 = vertices[i2].position;
 
     float3 edge1 = p1 - p0;
     float3 edge2 = p2 - p0;
@@ -754,58 +761,12 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     return color;
 }
 
-bool ShadowMaskVisibility(Light light, float3 positionWS, out float3 L)
-{
-    Ray shadowRay;
-    shadowRay.P = positionWS;
-    shadowRay.tMin = 0;
-
-    LightType ty = light.Type();
-
-    if (ty == LightType::Directional)
-    {
-        shadowRay.D = light.direction;
-        shadowRay.tMax = RAY_MAX;
-
-        L = light.position;
-    }
-    else
-    {
-        float3 positionToLight = light.position - positionWS;
-        float distanceSquare = dot(positionToLight, positionToLight);
-
-        L = normalize(positionToLight);
-
-        if (distanceSquare > (light.range * light.range))
-        {
-            return false;
-        }
-
-        if (ty == LightType::Spot)
-        {
-            float spotScale;
-            float spotOffset;
-            SpotLightScaleOffset(light.SpotOuter + 1, light.SpotInnerPercent, spotScale, spotOffset);
-
-            if (SpotLightAngleAttenuation(light.direction, L, spotScale, spotOffset) <= 0.0)
-            {
-                return false;
-            }
-        }
-
-        shadowRay.D = L;
-        shadowRay.tMax = sqrt(distanceSquare);
-    }
-
-    return !TraceShadowRay(shadowRay);
-}
-
 void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 positionWS, out float3 normalWS, out uint3 indexing)
 {
     uint pixelSeed = RNGPixelInit1D(index);
     indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, ~0u, sampleCount, SamplingPattern::BlueNoiseFirst);
 
-    float4 visibility = CompactedVisibility[index];
+    float4 visibility = Push.rt.visibility[index];
     bool moved = asuint(visibility.w) != 0u;
 
     [branch]

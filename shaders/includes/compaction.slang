@@ -1,11 +1,11 @@
 #pragma once
 
-// struct LightmapInfo
-// {
-//     uint2 resolution;
-//     uint compactionOffset;
-//     uint cellTableBase;
-// };
+struct LightmapInfo
+{
+    uint2 resolution;
+    uint compactionOffset;
+    uint cellTableBase;
+};
 
 uint GetCompactedIndex(uint2 coords, uint lightmapGroup, uint primitiveID, bool flipY = true)
 {

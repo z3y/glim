@@ -482,8 +482,8 @@ pub struct RayTracingData {
     pub bvh_nodes: vk::DeviceAddress,
     pub bvh_triangles: vk::DeviceAddress,
 
+    pub visibility: vk::DeviceAddress,
     pub main_uv: vk::DeviceAddress,
-    pub pad0: vk::DeviceAddress,
 }
 
 #[repr(C, align(16))]

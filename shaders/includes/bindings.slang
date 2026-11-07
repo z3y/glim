@@ -37,20 +37,6 @@ Texture2D<float4> Cookies[];
 [[vk::binding(7, 0)]]
 SamplerState LinearSampler;
 
-struct LightmapInfo
-{
-    uint2 resolution;
-    uint compactionOffset;
-    uint cellTableBase;
-};
-
-#define DECLARE_CONST_PTR(name, type, lo_id) \
-    [vk::constant_id(lo_id)]                 \
-    const uint name##_ADDRESS_LO;            \
-    [vk::constant_id((lo_id) + 1)]           \
-    const uint name##_ADDRESS_HI;            \
-    static let name = reinterpret<Ptr<type, Access.ReadWrite>>(uint2(name##_ADDRESS_LO, name##_ADDRESS_HI));
-
 [vk::constant_id(0)]
 const uint HARDWARE_RT;
 
@@ -87,6 +73,23 @@ const float LIGHTPROBE_DERINGING;
 [vk::constant_id(11)]
 const float EMISSIVE_MULTIPLIER;
 
+[vk::constant_id(32)]
+const float AO_INTENSITY;
+[vk::constant_id(33)]
+const float AO_RANGE;
+
+[vk::constant_id(34)]
+const uint GEOMETRIES_0_OFFSET;
+
+[vk::constant_id(35)]
+const uint GEOMETRIES_1_OFFSET;
+
+[vk::constant_id(36)]
+const uint GEOMETRIES_2_OFFSET;
+
+[vk::constant_id(37)]
+const uint GEOMETRIES_3_OFFSET;
+
 struct RayTracingData
 {
     uint *indices;
@@ -95,36 +98,9 @@ struct RayTracingData
     float4 *BVHNodes;
     float4 *BVHTriangles;
 
+    float4 *visibility;
     float4 *mainUVs;
-    float *pad;
 };
-
-DECLARE_CONST_PTR(Vertices, Vertex, 12)
-DECLARE_CONST_PTR(Indices, uint, 14)
-DECLARE_CONST_PTR(EmissiveTriangles, uint, 16)
-DECLARE_CONST_PTR(CompactedLightmap, float, 18)
-DECLARE_CONST_PTR(LightmapsInfo, LightmapInfo, 20)
-DECLARE_CONST_PTR(CompactedVisibility, float4, 22)
-DECLARE_CONST_PTR(Lights, Light, 24)
-DECLARE_CONST_PTR(CompactionBuffer, uint2, 26)
-DECLARE_CONST_PTR(BVHNodes, float4, 28)
-DECLARE_CONST_PTR(BVHTriangles, float4, 30)
-
-[vk::constant_id(32)]
-const float AO_INTENSITY;
-[vk::constant_id(33)]
-const float AO_RANGE;
-
-[vk::constant_id(34)]
-const uint GEOMETRIES_0_OFFSET;
-[vk::constant_id(35)]
-const uint GEOMETRIES_1_OFFSET;
-[vk::constant_id(36)]
-const uint GEOMETRIES_2_OFFSET;
-[vk::constant_id(37)]
-const uint GEOMETRIES_3_OFFSET;
-
-DECLARE_CONST_PTR(MainUVs, float4, 38)
 
 enum LightmapMode : uint
 {

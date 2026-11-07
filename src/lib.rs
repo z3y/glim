@@ -1384,7 +1384,7 @@ impl Glim {
             bvh_nodes: self.bvh_nodes.gpu_address,
             bvh_triangles: self.bvh_triangles.gpu_address,
             main_uv: self.gpu_mesh.main_uv_buffer.gpu_address,
-            pad0: 0,
+            visibility: self.constants.compacted_visibility_address,
         }
     }
 }
@@ -1952,7 +1952,7 @@ fn bake_direct_lights(
 
 fn bake_indirect(
     app: &Glim,
-    direct_buffer: &Buffer,
+    lightmap: &Buffer,
     visibility_texels_count: usize,
     mixed_start: usize,
     mixed_count: usize,
@@ -1984,7 +1984,7 @@ fn bake_indirect(
     unsafe {
         app.vk
             .device
-            .cmd_copy_buffer(cmd, direct_buffer.buffer, indirect_buffer.buffer, &[region])
+            .cmd_copy_buffer(cmd, lightmap.buffer, indirect_buffer.buffer, &[region])
     };
     app.vk.end_single_use_cmd(cmd);
 
@@ -2012,8 +2012,7 @@ fn bake_indirect(
         pub compaction: vk::DeviceAddress,
 
         pub lightmaps_info: vk::DeviceAddress,
-        pub pad0: u32,
-        pub pad1: u32,
+        pub lightmap: vk::DeviceAddress,
     }
 
     let shader_bindings = ShaderBindings {
@@ -2049,8 +2048,7 @@ fn bake_indirect(
         bounce_buffer: indirect_buffer.gpu_address,
         compaction: compaction_buffer.gpu_address,
         lightmaps_info: lightmaps_info.gpu_address,
-        pad0: 0,
-        pad1: 0,
+        lightmap: lightmap.gpu_address,
     };
 
     let total_steps = (app.config.bounce_count * app.config.indirect_samples) as f32;
@@ -2110,6 +2108,7 @@ fn bake_light_probes(
     mixed_count: usize,
     compaction: &Buffer,
     lightmap_info: &Buffer,
+    lightmap: &Buffer,
 ) {
     if app.probes.len() == 0 {
         return;
@@ -2149,7 +2148,13 @@ fn bake_light_probes(
 
         pub lights: vk::DeviceAddress,
         pub emissive_triangles: vk::DeviceAddress,
+
+        pub lightmap: vk::DeviceAddress,
+        pub pad0: u32,
+        pub pad1: u32,
     }
+
+    assert!(size_of::<PushConstants>() <= 128);
 
     let shader_bindings = ShaderBindings {
         tlas: app.tlas.acceleration_structure,
@@ -2186,6 +2191,9 @@ fn bake_light_probes(
         lightmap_info: lightmap_info.gpu_address,
         lights: app.gpu_lights.gpu_address,
         emissive_triangles: app.emissive_triangles_buffer.gpu_address,
+        lightmap: lightmap.gpu_address,
+        pad0: 0,
+        pad1: 0,
     };
 
     let probes_count = app.probes.len() as u32;
@@ -2723,6 +2731,7 @@ fn render_lightmaps(app: &mut Glim) {
         mixed_count,
         &compaction_buffer,
         &lightmaps_info,
+        &lightmap_texels,
     );
 
     visibility_buffer.destroy(&app.vk);

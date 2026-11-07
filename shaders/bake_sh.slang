@@ -25,6 +25,10 @@ struct PushConstants
 
     Light *lights;
     uint *emissiveTriangles;
+
+    float *lightmap;
+    uint pad0;
+    uint pad1;
 };
 
 const static float3 ProbeRayDirections[26] = {
@@ -186,6 +190,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL2(probe, sampleIndex, current * sampleScale, L);
     }
 
+    float *lightmap = Push.lightmap;
+
     Ray ray;
     ray.P = probePosition;
     ray.D = RandomDirectionInSphere(xiBounce);
@@ -231,9 +237,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
             uint compactIndex = GetCompactedIndex(surface.coords, surface.lightmapGroup, hit.primitiveID);
             if (compactIndex != uint::maxValue)
             {
-                float3 lightmapDiffuse = float3(CompactedLightmap[compactIndex * 3 + 0],
-                                                CompactedLightmap[compactIndex * 3 + 1],
-                                                CompactedLightmap[compactIndex * 3 + 2]);
+                float3 lightmapDiffuse = float3(lightmap[compactIndex * 3 + 0],
+                                                lightmap[compactIndex * 3 + 1],
+                                                lightmap[compactIndex * 3 + 2]);
                 AccumulateL2(probe, sampleIndex, lightmapDiffuse * bounceAlbedo * 4 * sampleScale, ray.D);
             }
 
@@ -246,7 +252,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
                 for (uint lightIndex = Push.mixedStart; lightIndex < Push.mixedEnd; lightIndex++)
                 {
-                    Light light = Lights[lightIndex];
+                    Light light = lights[lightIndex];
                     if (!light.Mixed())
                     {
                         continue;

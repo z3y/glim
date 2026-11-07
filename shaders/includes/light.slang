@@ -1,3 +1,5 @@
+#pragma once
+
 enum LightType : uint
 {
     Directional = 0,
@@ -7,33 +9,9 @@ enum LightType : uint
     Disc = 4,
 };
 
-// #[repr(C)]
-// #[derive(Debug)]
-// pub struct Light {
-//     pub position: Vector3,
-//     pub ty: LightType,
-//     pub cast_shadows: bool,
-//     pub mixed: bool,
-//     pub occlusion_channel: u8,
-
-//     pub direction: Vector3,
-//     pub range: f32,
-
-//     pub color: Vector3,
-//     pub shadow_radius_or_angle: f32,
-
-//     pub spot_inner_percent: f32,
-//     pub spot_outer: f32,
-//     pub area_or_cookie_size: Vector2,
-
-//     pub up: Vector3,
-//     pub cookie: u32,
-// }
-
 struct Light
 {
     float3 position;
-    // LightType type;
     uint data0;
 
     float3 direction;

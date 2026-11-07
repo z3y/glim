@@ -123,11 +123,14 @@ struct Vertex
 
 Vertex[3] TriangleVertices(uint primitiveID)
 {
-    uint i0 = Indices[primitiveID * 3 + 0];
-    uint i1 = Indices[primitiveID * 3 + 1];
-    uint i2 = Indices[primitiveID * 3 + 2];
+    uint *indices = Push.rt.indices;
+    Vertex *vertices = Push.rt.vertices;
 
-    return { Vertices[i0], Vertices[i1], Vertices[i2] };
+    uint i0 = indices[primitiveID * 3 + 0];
+    uint i1 = indices[primitiveID * 3 + 1];
+    uint i2 = indices[primitiveID * 3 + 2];
+
+    return { vertices[i0], vertices[i1], vertices[i2] };
 }
 
 struct Surface
@@ -150,13 +153,16 @@ struct Surface
         float v = bary.y;
         float w = 1.0 - u - v;
 
-        uint i0 = Indices[primitiveID * 3 + 0];
-        uint i1 = Indices[primitiveID * 3 + 1];
-        uint i2 = Indices[primitiveID * 3 + 2];
+        uint *indices = Push.rt.indices;
+        Vertex *vertices = Push.rt.vertices;
 
-        Vertex v0 = Vertices[i0];
-        Vertex v1 = Vertices[i1];
-        Vertex v2 = Vertices[i2];
+        uint i0 = indices[primitiveID * 3 + 0];
+        uint i1 = indices[primitiveID * 3 + 1];
+        uint i2 = indices[primitiveID * 3 + 2];
+
+        Vertex v0 = vertices[i0];
+        Vertex v1 = vertices[i1];
+        Vertex v2 = vertices[i2];
 
         float3 p0 = v0.position;
         float3 p1 = v1.position;

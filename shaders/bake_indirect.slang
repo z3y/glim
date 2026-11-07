@@ -18,8 +18,7 @@ struct PushConstants
     uint2 *compaction;
 
     LightmapInfo *lightmapsInfo;
-    uint pad0;
-    uint pad1;
+    float *lightmap;
 };
 
 [shader("compute")]
@@ -132,29 +131,31 @@ void main(uint3 threadID: SV_DispatchThreadID)
     bounceBuffer[(currentOffset + index) * 3 + 1] = previous.g;
     bounceBuffer[(currentOffset + index) * 3 + 2] = previous.b;
 
+    float *lightmap = Push.lightmap;
+
     if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
     {
         float3 L0 = sh.sh[0].xyz * sampleScale;
 
         uint indexL0 = index + Push.compactedCount;
-        CompactedLightmap[indexL0 * 3 + 0] += L0.x;
-        CompactedLightmap[indexL0 * 3 + 1] += L0.y;
-        CompactedLightmap[indexL0 * 3 + 2] += L0.z;
+        lightmap[indexL0 * 3 + 0] += L0.x;
+        lightmap[indexL0 * 3 + 1] += L0.y;
+        lightmap[indexL0 * 3 + 2] += L0.z;
 
         float3 combinedSH = EncodeCombinedSHL1(sh);
         combinedSH *= sampleScale;
 
         uint indexL1 = indexL0 + Push.compactedCount;
-        CompactedLightmap[indexL1 * 3 + 0] += combinedSH.x;
-        CompactedLightmap[indexL1 * 3 + 1] += combinedSH.y;
-        CompactedLightmap[indexL1 * 3 + 2] += combinedSH.z;
+        lightmap[indexL1 * 3 + 0] += combinedSH.x;
+        lightmap[indexL1 * 3 + 1] += combinedSH.y;
+        lightmap[indexL1 * 3 + 2] += combinedSH.z;
     }
     else if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
     {
         uint indexDir = index + Push.compactedCount;
-        CompactedLightmap[indexDir * 3 + 0] += dominantDirection.x;
-        CompactedLightmap[indexDir * 3 + 1] += dominantDirection.y;
-        CompactedLightmap[indexDir * 3 + 2] += dominantDirection.z;
+        lightmap[indexDir * 3 + 0] += dominantDirection.x;
+        lightmap[indexDir * 3 + 1] += dominantDirection.y;
+        lightmap[indexDir * 3 + 2] += dominantDirection.z;
     }
 
     bool last = Push.sampleIndex == (Push.maxSamples - 1);
@@ -163,8 +164,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     {
         previous.rgb *= INDIRECT_INTENSITY;
 
-        CompactedLightmap[index * 3 + 0] += previous.r;
-        CompactedLightmap[index * 3 + 1] += previous.g;
-        CompactedLightmap[index * 3 + 2] += previous.b;
+        lightmap[index * 3 + 0] += previous.r;
+        lightmap[index * 3 + 1] += previous.g;
+        lightmap[index * 3 + 2] += previous.b;
     }
 }
