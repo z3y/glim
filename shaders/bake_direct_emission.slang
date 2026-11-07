@@ -6,10 +6,15 @@ PushConstants Push;
 
 struct PushConstants
 {
+    RayTracingData rt;
+
     uint compactedCount;
     uint sampleIndex;
     uint maxSamples;
     uint pad0;
+
+    float *lightmap;
+    uint *emissiveTriangles;
 };
 
 [shader("compute")]
@@ -50,9 +55,11 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
+        uint *emissiveTriangles = Push.emissiveTriangles;
+
         float2 xi = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
         uint triIndex = min(uint(xi.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
-        uint emissivePrimitiveID = EmissiveTriangles[triIndex];
+        uint emissivePrimitiveID = emissiveTriangles[triIndex];
 
         float3 L;
         float pdf = 0.0;
@@ -118,41 +125,36 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
     }
 
-    // if (asuint(CompactedVisibility[index].w) != 0u)
-    // {
-    //     color.rgb = float3(1, 0, 0);
-    // }
-
     ValidateSampleColor(color);
 
-    CompactedLightmap[index * 3 + 0] += color.x * sampleScale;
-    CompactedLightmap[index * 3 + 1] += color.y * sampleScale;
-    CompactedLightmap[index * 3 + 2] += color.z * sampleScale;
+    float *lightmap = Push.lightmap;
+
+    lightmap[index * 3 + 0] += color.x * sampleScale;
+    lightmap[index * 3 + 1] += color.y * sampleScale;
+    lightmap[index * 3 + 2] += color.z * sampleScale;
 
     if (LIGHTMAP_MODE == LightmapMode::CombinedSH)
     {
         float3 L0 = sh.sh[0].xyz * sampleScale;
 
-        // write L0
-        uint index = index + Push.compactedCount;
-        CompactedLightmap[index * 3 + 0] += L0.x;
-        CompactedLightmap[index * 3 + 1] += L0.y;
-        CompactedLightmap[index * 3 + 2] += L0.z;
+        uint indexL0 = index + Push.compactedCount;
+        lightmap[indexL0 * 3 + 0] += L0.x;
+        lightmap[indexL0 * 3 + 1] += L0.y;
+        lightmap[indexL0 * 3 + 2] += L0.z;
 
         float3 combinedSH = EncodeCombinedSHL1(sh);
         combinedSH *= sampleScale;
 
-        // write L1
-        index += Push.compactedCount;
-        CompactedLightmap[index * 3 + 0] += combinedSH.x;
-        CompactedLightmap[index * 3 + 1] += combinedSH.y;
-        CompactedLightmap[index * 3 + 2] += combinedSH.z;
+        uint indexL1 = indexL0 + Push.compactedCount;
+        lightmap[indexL1 * 3 + 0] += combinedSH.x;
+        lightmap[indexL1 * 3 + 1] += combinedSH.y;
+        lightmap[indexL1 * 3 + 2] += combinedSH.z;
     }
     else if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
     {
         uint index = index + Push.compactedCount;
-        CompactedLightmap[index * 3 + 0] += dominantDirection.x;
-        CompactedLightmap[index * 3 + 1] += dominantDirection.y;
-        CompactedLightmap[index * 3 + 2] += dominantDirection.z;
+        lightmap[index * 3 + 0] += dominantDirection.x;
+        lightmap[index * 3 + 1] += dominantDirection.y;
+        lightmap[index * 3 + 2] += dominantDirection.z;
     }
 }

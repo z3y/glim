@@ -7,10 +7,11 @@ PushConstants Push;
 
 struct PushConstants
 {
+    RayTracingData rt;
+
+    float4 *visibility;
     uint compactedCount;
     uint leakDetection;
-    uint pad0;
-    uint pad1;
 }
 
 float MaxInsideTravel(float2 bary, float2 dir, float maxS)
@@ -37,7 +38,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
-    float4 visibility = CompactedVisibility[index];
+    float4 visibility = Push.visibility[index];
 
     float2 bary = visibility.xy;
     uint primitiveID = asuint(visibility.z);
@@ -155,5 +156,5 @@ void main(uint3 threadID: SV_DispatchThreadID)
     {
         visibility.w = asfloat(0u);
     }
-    CompactedVisibility[index] = visibility;
+    Push.visibility[index] = visibility;
 }

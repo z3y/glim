@@ -7,11 +7,16 @@ PushConstants Push;
 
 struct PushConstants
 {
+    RayTracingData rt;
+
     float3 cameraPosition;
     float fov;
-
     float3 cameraDirection;
     float pad0;
+
+    uint2 resolution;
+    float pad1;
+    float pad2;
 }
 
 [shader("compute")]
@@ -20,10 +25,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint2 coords = threadID.xy;
 
-    uint2 resolution;
-    VisibilityBuffer.GetDimensions(resolution.x, resolution.y);
+    uint2 resolution = Push.resolution;
 
-    if (coords.x >= resolution.x || coords.y >= resolution.y)
+    if (any(coords >= resolution))
     {
         return;
     }

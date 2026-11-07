@@ -6,14 +6,20 @@ PushConstants Push;
 
 struct PushConstants
 {
+    RayTracingData rt;
+
     uint texelCount;
     uint sampleIndex;
     uint sampleCount;
     uint mixed;
 
+    float *lightmap;
+    uint pad0;
+    uint pad1;
+
+    Light *lights;
     uint lightsStart;
     uint lightsEnd;
-    float *lightmap;
 };
 
 [shader("compute")]
@@ -46,15 +52,15 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
 
+    Light *lights = Push.lights;
     for (uint lightIndex = lightsStart; lightIndex < lightsEnd; lightIndex++)
     {
-        Light light = Lights[lightIndex];
+        Light light = lights[lightIndex];
         float3 L;
         float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L, false);
         float NoL = saturate(dot(L, normalWS));
         color.rgb += current * NoL;
         dominantDirection.xyz += L * Luminance(current * NoL);
-
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 

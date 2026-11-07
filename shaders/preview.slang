@@ -6,13 +6,15 @@ PushConstants Push;
 
 struct PushConstants
 {
-    uint lightCount;
-    uint maxSamples;
+    RayTracingData rt;
 
     uint sampleIndex;
-    uint width;
-    uint height;
+    uint sampleCount;
+    uint lightCount;
     uint bounceCount;
+
+    uint2 resolution;
+    Light *lights;
 };
 
 [shader("compute")]
@@ -20,9 +22,8 @@ struct PushConstants
 void main(uint3 threadID: SV_DispatchThreadID)
 {
     uint2 coords = threadID.xy;
-    uint2 resolution = uint2(Push.width, Push.height);
 
-    if (coords.x >= resolution.x || coords.y >= resolution.y)
+    if (any(coords >= Push.resolution))
     {
         return;
     }
@@ -38,14 +39,14 @@ void main(uint3 threadID: SV_DispatchThreadID)
     Surface surface = Surface::Get(primitiveID, bary);
 
     uint sampleIndex = Push.sampleIndex;
-    uint sampleCount = Push.maxSamples;
+    uint sampleCount = Push.sampleCount;
 
     uint pixelSeed = asuint(visibility.w);
     uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, ~0u, sampleCount, SamplingPattern::BlueNoiseFirst);
     uint dimension = 0;
 
-    float4 color = 0.0;
-    float3 throughput = float3(1.0);
+    float4 color = float4(0.0, 0.0, 0.0, 1.0);
+    float3 throughput = float3(1.0, 1.0, 1.0);
 
     float3 emission = SampleEmission(surface.coords, surface.lightmapGroup).rgb;
     if (!surface.emissive)
@@ -66,7 +67,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
         for (uint lightIndex = 0; lightIndex < Push.lightCount; lightIndex++)
         {
             float3 L;
-            float3 current = ShadeLightDirect(Lights[lightIndex], positionWS, normalWS, xiLight, throughput, L, false);
+            Light light = Push.lights[lightIndex];
+            float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L, false);
             float NoL = saturate(dot(L, normalWS));
             color.rgb += current * NoL;
         }

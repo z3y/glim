@@ -1,5 +1,6 @@
 #define LIGHTPROBE_SH
 
+#include "includes/compaction.slang"
 #include "includes/core.slang"
 #include "includes/sobol_burley.slang"
 
@@ -8,6 +9,8 @@ PushConstants Push;
 
 struct PushConstants
 {
+    RayTracingData rt;
+
     uint lightCount;
     uint maxSamples;
     uint sampleIndex;
@@ -16,6 +19,12 @@ struct PushConstants
     SHProbeL2 *shProbes;
     uint mixedStart;
     uint mixedEnd;
+
+    uint2 *compaction;
+    LightmapInfo *lightmapsInfo;
+
+    Light *lights;
+    uint *emissiveTriangles;
 };
 
 const static float3 ProbeRayDirections[26] = {
@@ -65,7 +74,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
-    SHProbeL2 probe = Push.shProbes[probeIndex];
+    SHProbeL2 *probes = Push.shProbes;
+
+    SHProbeL2 probe = probes[probeIndex];
 
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
@@ -145,9 +156,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float3 throughput = float3(1.0);
 
+    Light *lights = Push.lights;
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
-        Light light = Lights[lightIndex];
+        Light light = lights[lightIndex];
         if (light.Mixed())
         {
             continue;
@@ -162,9 +174,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
+        uint *emissiveTriangles = Push.emissiveTriangles;
         float2 xiTriangle = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
         uint triIndex = min(uint(xiTriangle.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
-        uint emissivePrimitiveID = EmissiveTriangles[triIndex];
+        uint emissivePrimitiveID = emissiveTriangles[triIndex];
 
         float3 L;
         float pdf = 0.0;
@@ -254,11 +267,12 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     if (LIGHTPROBE_DERINGING > 0.0)
     {
-        if (Push.sampleIndex == Push.maxSamples - 1)
+        bool lastSample = sampleIndex == (sampleCount - 1);
+        if (lastSample)
         {
             DeringSHProbeL2(probe, LIGHTPROBE_DERINGING);
         }
     }
 
-    Push.shProbes[probeIndex] = probe;
+    probes[probeIndex] = probe;
 }

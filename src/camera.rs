@@ -1,4 +1,4 @@
-use crate::math::Vector3;
+use crate::{math::Vector3, shader::RayTracingData};
 
 pub struct Camera {
     pub position: Vector3,
@@ -9,31 +9,32 @@ pub struct Camera {
     pub last_cursor_pos: Option<(f64, f64)>,
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 pub struct InitializePreviewPushConstants {
+    pub rt: RayTracingData,
+
     pub camera_position: Vector3,
-    pub fov_half_tan: f32,
+    pub fov: f32,
 
     pub camera_direction: Vector3,
-    pub pad: u32,
+    pub pad0: u32,
+
+    pub resolution: [u32; 2],
+    pub pad1: u32,
+    pub pad2: u32,
 }
 
 impl Camera {
-    pub fn make_push_constants(&self) -> InitializePreviewPushConstants {
+    pub fn camera_direction(&self) -> Vector3 {
         let x = self.yaw.sin() * self.pitch.cos();
         let y = self.pitch.sin();
         let z = self.yaw.cos() * self.pitch.cos();
 
-        let camera_direction = Vector3::new(x, y, z).normalize();
+        Vector3::new(x, y, z).normalize()
+    }
 
-        let fov_half_tan = (self.fov.to_radians() * 0.5).tan();
-
-        InitializePreviewPushConstants {
-            camera_position: self.position,
-            fov_half_tan,
-            camera_direction,
-            pad: 0,
-        }
+    pub fn fov_half_tan(&self) -> f32 {
+        (self.fov.to_radians() * 0.5).tan()
     }
 
     pub fn look_at(&mut self, target: Vector3) {

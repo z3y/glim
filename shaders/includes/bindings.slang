@@ -87,6 +87,18 @@ const float LIGHTPROBE_DERINGING;
 [vk::constant_id(11)]
 const float EMISSIVE_MULTIPLIER;
 
+struct RayTracingData
+{
+    uint *indices;
+    Vertex *vertices;
+
+    float4 *BVHNodes;
+    float4 *BVHTriangles;
+
+    float4 *mainUVs;
+    float *pad;
+};
+
 DECLARE_CONST_PTR(Vertices, Vertex, 12)
 DECLARE_CONST_PTR(Indices, uint, 14)
 DECLARE_CONST_PTR(EmissiveTriangles, uint, 16)

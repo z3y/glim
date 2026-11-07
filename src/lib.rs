@@ -27,8 +27,8 @@ use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
 
 use crate::shader::{
-    PreviewPushConstants, ShaderBindings, ShaderName, SpecializationConstants, load_compute_shader,
-    update_compute_shader,
+    PreviewPushConstants, RayTracingData, ShaderBindings, ShaderName, SpecializationConstants,
+    load_compute_shader, update_compute_shader,
 };
 use crate::skybox::Skybox;
 use crate::texture_array::{TextureArray, TextureDescriptor};
@@ -108,8 +108,6 @@ pub struct Glim {
     pub preview_shader: ComputeShader,
     pub init_from_camera_shader: ComputeShader,
     pub preview_initialized: bool,
-
-    pub preview_push_constants: PreviewPushConstants,
 
     pub probes: Vec<SHProbeL2>,
 
@@ -229,16 +227,28 @@ fn update_visibility_from_camera(app: &mut Glim, cmd: vk::CommandBuffer) {
     let width = app.config.preview_settings.width;
     let height = app.config.preview_settings.height;
 
-    let vk = &mut app.vk;
     let shader = &app.init_from_camera_shader;
 
-    let push = app.camera.make_push_constants();
+    let push = InitializePreviewPushConstants {
+        rt: app.rt_data(),
+        camera_position: app.camera.position,
+        fov: app.camera.fov_half_tan(),
+        camera_direction: app.camera.camera_direction(),
+        pad0: 0,
+        resolution: [
+            app.config.preview_settings.width,
+            app.config.preview_settings.height,
+        ],
+        pad1: 0,
+        pad2: 0,
+    };
 
-    let constants_bytes = as_bytes(&push);
+    let push_bytes = as_bytes(&push);
 
     let visibility = &mut app.render_target.visibility;
     let diffuse = &mut app.render_target.diffuse;
 
+    let vk = &mut app.vk;
     unsafe {
         if visibility.layout() != vk::ImageLayout::GENERAL {
             let barrier = visibility.barrier(
@@ -291,7 +301,7 @@ fn update_visibility_from_camera(app: &mut Glim, cmd: vk::CommandBuffer) {
             shader.pipeline_layout,
             vk::ShaderStageFlags::COMPUTE,
             0,
-            &constants_bytes,
+            &push_bytes,
         );
 
         let groups_x = (width + 7) / 8;
@@ -624,34 +634,44 @@ fn render_preview(app: &mut Glim) {
     );
     update_compute_shader(&app.vk, &app.preview_shader, &shader_bindings);
 
+    let mut push = PreviewPushConstants {
+        rt: app.rt_data(),
+        sample_index: 0,
+        sample_count: app.config.direct_emission_samples,
+        light_count: app.cpu_lights.len() as u32,
+        bounce_count: app.config.bounce_count,
+        resolution: [
+            app.config.preview_settings.width,
+            app.config.preview_settings.height,
+        ],
+        lights: app.gpu_lights.gpu_address,
+    };
+
     let mut previous_time = std::time::Instant::now();
 
     let mut bake_start_time = std::time::Instant::now();
     let mut bake_complete_printed = false;
 
+    let hardware_rt = app.config.hardware_rt && app.vk.as_device.is_some();
+
     unsafe {
         while glfwWindowShouldClose(window) == 0 {
             glfwPollEvents();
 
-            Log::progress(
-                app.preview_push_constants.sample_index as f32
-                    / app.config.direct_emission_samples as f32,
-            );
+            Log::progress(push.sample_index as f32 / push.sample_count as f32);
 
             {
                 use std::ffi::c_char;
-
-                let hardwar_rt = app.config.hardware_rt && app.vk.as_device.is_some();
 
                 let (mut w, mut h) = (0, 0);
                 glfwGetWindowSize(window, &mut w, &mut h);
 
                 format_window_title(
                     &mut app.window_title,
-                    app.preview_push_constants.sample_index,
-                    app.config.direct_emission_samples,
+                    push.sample_index,
+                    push.sample_count,
                     app.cpu_lights.len(),
-                    hardwar_rt,
+                    hardware_rt,
                     w,
                     h,
                 );
@@ -670,13 +690,13 @@ fn render_preview(app: &mut Glim) {
             update_camera(app, delta_time);
 
             if !app.preview_initialized {
-                app.preview_push_constants.sample_index = 0;
+                push.sample_index = 0;
                 bake_start_time = std::time::Instant::now();
                 bake_complete_printed = false;
             }
 
             // render finished
-            if app.preview_push_constants.sample_index >= app.preview_push_constants.max_samples {
+            if push.sample_index >= push.sample_count {
                 std::thread::sleep(Duration::from_millis(16));
                 if !bake_complete_printed {
                     io::stdout().flush().unwrap();
@@ -686,7 +706,7 @@ fn render_preview(app: &mut Glim) {
                 }
             }
 
-            if !render_sample_camera(app) {
+            if !render_sample_camera(app, &mut push) {
                 // restart bake
                 app.config.preview_settings.width = app.vk.swapchain.extent.width;
                 app.config.preview_settings.height = app.vk.swapchain.extent.height;
@@ -732,7 +752,7 @@ fn render_preview(app: &mut Glim) {
     };
 }
 
-fn render_sample_camera(app: &mut Glim) -> bool {
+fn render_sample_camera(app: &mut Glim, push: &mut PreviewPushConstants) -> bool {
     let frame_index = app.vk.swapchain.frame_index;
 
     let frame = &app.vk.swapchain.frames[frame_index];
@@ -792,7 +812,7 @@ fn render_sample_camera(app: &mut Glim) -> bool {
 
         vk.begin_command_buffer(cmd, &begin_info).unwrap();
 
-        if app.preview_push_constants.sample_index == 0 {
+        if push.sample_index == 0 {
             update_visibility_from_camera(app, cmd);
             app.preview_initialized = true;
 
@@ -837,16 +857,15 @@ fn render_sample_camera(app: &mut Glim) -> bool {
             &[barrier],
         );
 
-        if app.preview_push_constants.sample_index < app.preview_push_constants.max_samples {
+        if push.sample_index < push.sample_count {
             let shader = &app.preview_shader;
 
-            let constants_bytes = as_bytes(&app.preview_push_constants);
+            let push_bytes = as_bytes(push);
 
             let groups_x = (width + 7) / 8;
             let groups_y = (height + 7) / 8;
 
             vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
-
             vk.cmd_bind_descriptor_sets(
                 cmd,
                 vk::PipelineBindPoint::COMPUTE,
@@ -855,18 +874,15 @@ fn render_sample_camera(app: &mut Glim) -> bool {
                 &[shader.descriptor_set],
                 &[],
             );
-
             vk.cmd_push_constants(
                 cmd,
                 shader.pipeline_layout,
                 vk::ShaderStageFlags::COMPUTE,
                 0,
-                &constants_bytes,
+                &push_bytes,
             );
-
             vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
-
-            app.preview_push_constants.sample_index += 1;
+            push.sample_index += 1;
         }
 
         let swapchain_image = &app.vk.swapchain.frames[image_index as usize];
@@ -1083,19 +1099,6 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
     app.render_target.diffuse = diffuse;
     app.render_target.visibility = visibility;
 
-    {
-        let max_samples = app.config.direct_emission_samples;
-        let bounce_count = app.config.bounce_count;
-        app.preview_push_constants = PreviewPushConstants {
-            lights_count: app.cpu_lights.len() as u32,
-            sample_index: 0,
-            width: width,
-            height: height,
-            max_samples,
-            bounce_count,
-        };
-    };
-
     app.preview_initialized = false;
 }
 
@@ -1263,15 +1266,6 @@ impl Glim {
 
         let gpu_lights = Buffer::null();
 
-        let preview_push_constants = PreviewPushConstants {
-            lights_count: 0,
-            sample_index: 0,
-            width: 0,
-            height: 0,
-            max_samples: 0,
-            bounce_count: 0,
-        };
-
         let render_target = RenderTarget {
             visibility: Texture2D::null(),
             diffuse: Texture2D::null(),
@@ -1342,7 +1336,6 @@ impl Glim {
             init_from_camera_shader,
             preview_initialized: false,
             gpu_lights,
-            preview_push_constants,
             render_target,
             probes: Vec::new(),
             seams: Vec::new(),
@@ -1382,6 +1375,17 @@ impl Glim {
         };
 
         self.alphas.push(alpha);
+    }
+
+    pub fn rt_data(&self) -> RayTracingData {
+        RayTracingData {
+            indices: self.gpu_mesh.index_buffer.gpu_address,
+            vertices: self.gpu_mesh.vertex_buffer.gpu_address,
+            bvh_nodes: self.bvh_nodes.gpu_address,
+            bvh_triangles: self.bvh_triangles.gpu_address,
+            main_uv: self.gpu_mesh.main_uv_buffer.gpu_address,
+            pad0: 0,
+        }
     }
 }
 
@@ -1494,16 +1498,22 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
 
     const SHADOWMASK_SAMPLES: u32 = 32;
 
-    #[repr(C)]
+    #[repr(C, align(16))]
     pub struct PushConstants {
+        pub rt: RayTracingData,
+
         pub lights_start: u32,
         pub lights_count: u32,
         pub compacted_count: u32,
         pub pad0: u32,
 
-        pub pixels_address: u64,
+        pub pixels: vk::DeviceAddress,
         pub sample_index: u32,
         pub sample_count: u32,
+
+        pub lights: vk::DeviceAddress,
+        pub pad1: u32,
+        pub pad2: u32,
     }
 
     let albedos = app.albedo_array.views();
@@ -1535,13 +1545,17 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
 
     let mut push = PushConstants {
+        rt: app.rt_data(),
         lights_start: 0,
         lights_count: app.cpu_lights.len() as u32,
         compacted_count: visibility_texels_count as u32,
         pad0: 0,
-        pixels_address: shadowmask_buffer.gpu_address,
+        pixels: shadowmask_buffer.gpu_address,
         sample_index: 0,
         sample_count: SHADOWMASK_SAMPLES,
+        lights: app.gpu_lights.gpu_address,
+        pad1: 0,
+        pad2: 0,
     };
 
     for sample_index in 0..SHADOWMASK_SAMPLES {
@@ -1663,13 +1677,14 @@ fn zero_buffer(vk: &VulkanContext, buffer: &Buffer) {
     vk.end_single_use_cmd(cmd);
 }
 
-fn init_samples(app: &Glim, visibility_texels_count: usize) {
-    #[repr(C)]
+fn init_samples(app: &Glim, visibility_texels_count: usize, visibility: &Buffer) {
+    #[repr(C, align(16))]
     pub struct PushConstants {
+        pub rt: RayTracingData,
+
+        pub visibility: vk::DeviceAddress,
         pub compacted_count: u32,
         pub leak_detection: u32,
-        pub pad0: u32,
-        pub pad1: u32,
     }
 
     let shader_bindings = ShaderBindings {
@@ -1695,10 +1710,10 @@ fn init_samples(app: &Glim, visibility_texels_count: usize) {
     update_compute_shader(&app.vk, &shader, &shader_bindings);
 
     let push = PushConstants {
+        rt: app.rt_data(),
+        visibility: visibility.gpu_address,
         compacted_count: visibility_texels_count as u32,
         leak_detection: app.config.leak_detection as u32,
-        pad0: 0,
-        pad1: 0,
     };
 
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
@@ -1732,7 +1747,7 @@ fn init_samples(app: &Glim, visibility_texels_count: usize) {
     shader.destroy(&app.vk);
 }
 
-fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
+fn bake_direct_emission(app: &Glim, visibility_texels_count: usize, lightmap: &Buffer) {
     if is_cancelled() {
         return;
     }
@@ -1740,12 +1755,17 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
     let message = format!("Baking Direct Emission");
     Log::msg(&message);
 
-    #[repr(C)]
+    #[repr(C, align(16))]
     pub struct PushConstants {
+        pub rt: RayTracingData,
+
         pub compacted_count: u32,
         pub sample_index: u32,
         pub max_samples: u32,
         pub pad0: u32,
+
+        pub lightmap: vk::DeviceAddress,
+        pub emissive_triangles: vk::DeviceAddress,
     }
 
     let shader_bindings = ShaderBindings {
@@ -1771,10 +1791,13 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize) {
     update_compute_shader(&app.vk, &bake_direct_emission_shader, &shader_bindings);
 
     let mut push = PushConstants {
+        rt: app.rt_data(),
         compacted_count: visibility_texels_count as u32,
         sample_index: 0,
         max_samples: app.config.direct_emission_samples,
         pad0: 0,
+        lightmap: lightmap.gpu_address,
+        emissive_triangles: app.emissive_triangles_buffer.gpu_address,
     };
 
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
@@ -1831,16 +1854,22 @@ fn bake_direct_lights(
         return;
     }
 
-    #[repr(C)]
+    #[repr(C, align(16))]
     pub struct PushConstants {
+        pub rt: RayTracingData,
+
         pub texel_count: u32,
         pub sample_index: u32,
         pub max_samples: u32,
         pub mixed: u32,
 
+        pub lightmap: vk::DeviceAddress,
+        pub pad0: u32,
+        pub pad1: u32,
+
+        pub lights: vk::DeviceAddress,
         pub lights_start: u32,
         pub lights_end: u32,
-        pub lightmap_address: u64,
     }
 
     let shader_bindings = ShaderBindings {
@@ -1867,13 +1896,17 @@ fn bake_direct_lights(
     update_compute_shader(&app.vk, &bake_direct_light_shader, &shader_bindings);
 
     let mut push = PushConstants {
+        rt: app.rt_data(),
         texel_count: visibility_texels_count as u32,
         sample_index: 0,
         max_samples: samples,
         mixed: mixed as u32,
+        lightmap: lightmap.gpu_address,
+        pad0: 0,
+        pad1: 0,
+        lights: app.gpu_lights.gpu_address,
         lights_start: lights_start as u32,
         lights_end: (lights_start + lights_count) as u32,
-        lightmap_address: lightmap.gpu_address,
     };
 
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
@@ -1923,6 +1956,8 @@ fn bake_indirect(
     visibility_texels_count: usize,
     mixed_start: usize,
     mixed_count: usize,
+    compaction_buffer: &Buffer,
+    lightmaps_info: &Buffer,
 ) {
     if app.config.bounce_count == 0 {
         return;
@@ -1964,14 +1999,19 @@ fn bake_indirect(
         &indirect_buffer,
     );
 
-    #[repr(C)]
+    #[repr(C, align(16))]
     pub struct PushConstants {
+        pub rt: RayTracingData,
+
         pub compacted_count: u32,
         pub sample_index: u32,
-        pub max_samples: u32,
+        pub sample_count: u32,
         pub bounce_index: u32,
 
-        pub indirect_address: u64,
+        pub bounce_buffer: vk::DeviceAddress,
+        pub compaction: vk::DeviceAddress,
+
+        pub lightmaps_info: vk::DeviceAddress,
         pub pad0: u32,
         pub pad1: u32,
     }
@@ -2001,11 +2041,14 @@ fn bake_indirect(
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
 
     let mut push = PushConstants {
+        rt: app.rt_data(),
         compacted_count: visibility_texels_count as u32,
         sample_index: 0,
-        max_samples: app.config.indirect_samples,
+        sample_count: app.config.indirect_samples,
         bounce_index: 0,
-        indirect_address: indirect_buffer.gpu_address,
+        bounce_buffer: indirect_buffer.gpu_address,
+        compaction: compaction_buffer.gpu_address,
+        lightmaps_info: lightmaps_info.gpu_address,
         pad0: 0,
         pad1: 0,
     };
@@ -2061,7 +2104,13 @@ fn bake_indirect(
     indirect_buffer.destroy(&app.vk);
 }
 
-fn bake_light_probes(app: &mut Glim, mixed_start: usize, mixed_count: usize) {
+fn bake_light_probes(
+    app: &mut Glim,
+    mixed_start: usize,
+    mixed_count: usize,
+    compaction: &Buffer,
+    lightmap_info: &Buffer,
+) {
     if app.probes.len() == 0 {
         return;
     }
@@ -2082,16 +2131,24 @@ fn bake_light_probes(app: &mut Glim, mixed_start: usize, mixed_count: usize) {
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
 
-    #[repr(C)]
+    #[repr(C, align(16))]
     pub struct PushConstants {
+        pub rt: RayTracingData,
+
         pub lights_count: u32,
         pub max_samples: u32,
         pub sample_index: u32,
         pub probes_count: u32,
 
-        pub sh_probes_address: u64,
+        pub sh_probes: vk::DeviceAddress,
         pub mixed_start: u32,
         pub mixed_end: u32,
+
+        pub compaction: vk::DeviceAddress,
+        pub lightmap_info: vk::DeviceAddress,
+
+        pub lights: vk::DeviceAddress,
+        pub emissive_triangles: vk::DeviceAddress,
     }
 
     let shader_bindings = ShaderBindings {
@@ -2117,13 +2174,18 @@ fn bake_light_probes(app: &mut Glim, mixed_start: usize, mixed_count: usize) {
     update_compute_shader(&app.vk, &shader, &shader_bindings);
 
     let mut push = PushConstants {
+        rt: app.rt_data(),
         lights_count: app.cpu_lights.len() as u32,
         max_samples: app.config.probe_samples,
         sample_index: 0,
         probes_count: app.probes.len() as u32,
-        sh_probes_address: probes_buffer.gpu_address,
+        sh_probes: probes_buffer.gpu_address,
         mixed_start: mixed_start as u32,
         mixed_end: (mixed_start + mixed_count) as u32,
+        compaction: compaction.gpu_address,
+        lightmap_info: lightmap_info.gpu_address,
+        lights: app.gpu_lights.gpu_address,
+        emissive_triangles: app.emissive_triangles_buffer.gpu_address,
     };
 
     let probes_count = app.probes.len() as u32;
@@ -2289,9 +2351,9 @@ fn render_lightmaps(app: &mut Glim) {
     app.constants.compacted_lightmap_address = lightmap_texels.gpu_address;
     zero_buffer(&app.vk, &lightmap_texels);
 
-    init_samples(app, texels_count);
+    init_samples(app, texels_count, &visibility_buffer);
 
-    bake_direct_emission(app, texels_count);
+    bake_direct_emission(app, texels_count, &lightmap_texels);
 
     let export_debug_textures = false;
 
@@ -2347,6 +2409,8 @@ fn render_lightmaps(app: &mut Glim) {
         texels_count,
         mixed_start,
         mixed_count,
+        &compaction_buffer,
+        &lightmaps_info,
     );
 
     let mut readback_buffer = Buffer::empty(
@@ -2653,7 +2717,13 @@ fn render_lightmaps(app: &mut Glim) {
 
     drop(buffer);
 
-    bake_light_probes(app, mixed_start, mixed_count);
+    bake_light_probes(
+        app,
+        mixed_start,
+        mixed_count,
+        &compaction_buffer,
+        &lightmaps_info,
+    );
 
     visibility_buffer.destroy(&app.vk);
     drop(visibility_buffer);

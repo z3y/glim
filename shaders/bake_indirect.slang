@@ -1,3 +1,4 @@
+#include "includes/compaction.slang"
 #include "includes/core.slang"
 #include "includes/sobol_burley.slang"
 
@@ -6,12 +7,17 @@ PushConstants Push;
 
 struct PushConstants
 {
+    RayTracingData rt;
+
     uint compactedCount;
     uint sampleIndex;
     uint maxSamples;
     uint bounceIndex;
 
     float *bounceBuffer;
+    uint2 *compaction;
+
+    LightmapInfo *lightmapsInfo;
     uint pad0;
     uint pad1;
 };

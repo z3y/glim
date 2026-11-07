@@ -5,6 +5,8 @@ PushConstants Push;
 
 struct PushConstants
 {
+    RayTracingData rt;
+
     uint lightsStart;
     uint lightsCount;
     uint compactedCount;
@@ -13,6 +15,10 @@ struct PushConstants
     float4 *pixels;
     uint sampleIndex;
     uint sampleCount;
+
+    Light *lights;
+    uint pad1;
+    uint pad2;
 };
 
 [shader("compute")]
@@ -40,9 +46,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float4 occlusionChannels = float4(0.0, 0.0, 0.0, 0.0);
 
+    Light *lights = Push.lights;
     for (uint lightIndex = lightsStart; lightIndex < lightsCount; lightIndex++)
     {
-        Light light = Lights[lightIndex];
+        Light light = lights[lightIndex];
 
         uint channel = light.OcclusionChannel();
         bool shadows = light.CastShadows();

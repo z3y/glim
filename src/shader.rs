@@ -474,13 +474,27 @@ pub fn update_compute_shader(
     unsafe { vk.device.update_descriptor_sets(&descriptor_writes, &[]) };
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
+pub struct RayTracingData {
+    pub indices: vk::DeviceAddress,
+    pub vertices: vk::DeviceAddress,
+
+    pub bvh_nodes: vk::DeviceAddress,
+    pub bvh_triangles: vk::DeviceAddress,
+
+    pub main_uv: vk::DeviceAddress,
+    pub pad0: vk::DeviceAddress,
+}
+
+#[repr(C, align(16))]
 pub struct PreviewPushConstants {
-    pub lights_count: u32,
-    pub max_samples: u32,
+    pub rt: RayTracingData,
 
     pub sample_index: u32,
-    pub width: u32,
-    pub height: u32,
+    pub sample_count: u32,
+    pub light_count: u32,
     pub bounce_count: u32,
+
+    pub resolution: [u32; 2],
+    pub lights: vk::DeviceAddress,
 }
