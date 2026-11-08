@@ -4,6 +4,7 @@ use ash::vk::{self, Handle};
 use std::io::{self, Write};
 use std::mem;
 use std::path::PathBuf;
+use std::time::Instant;
 use std::{ptr, time::Duration};
 
 use glfw_sys::{
@@ -16,7 +17,7 @@ use crate::bindings::*;
 use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
-use crate::math::{Vector2, Vector3};
+use crate::math::{Vector2, Vector3, Vector4};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::raster::{
     Texels, block_average_fill, build_compaction, decompact_combined_sh, decompact_diffuse,
@@ -127,6 +128,8 @@ pub struct Glim {
 
     pub linear_sampler: vk::Sampler,
     pub window_title: String,
+
+    pub benchmarks: Vec<(&'static str, f32)>,
 }
 
 impl Drop for Glim {
@@ -1347,6 +1350,7 @@ impl Glim {
             alphas: Vec::new(),
             alphas_array: TextureArray::null(),
             compacted_visibility: Buffer::null(),
+            benchmarks: Vec::with_capacity(32),
         }
     }
 
@@ -1382,7 +1386,7 @@ impl Glim {
     }
 }
 
-fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> io::Result<()> {
+fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[Vector4], alpha: bool) -> io::Result<()> {
     use std::fs::File;
     use std::io::BufWriter;
 
@@ -1421,11 +1425,11 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
         for y in 0..h {
             for x in 0..w {
                 let flipped_y = h - 1 - y;
-                let index = (x + flipped_y * w) * 4;
-                let r = (pixels[index + 0].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-                let g = (pixels[index + 1].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-                let b = (pixels[index + 2].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-                let a = (pixels[index + 3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let index = x + flipped_y * w;
+                let r = (pixels[index].x.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let g = (pixels[index].y.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let b = (pixels[index].z.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let a = (pixels[index].w.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
 
                 let out = x * 4;
                 row[out + 0] = b;
@@ -1440,10 +1444,10 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
         for y in 0..h {
             for x in 0..w {
                 let flipped_y = h - 1 - y;
-                let index = (x + flipped_y * w) * 4;
-                let r = (pixels[index + 0].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-                let g = (pixels[index + 1].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-                let b = (pixels[index + 2].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let index = x + flipped_y * w;
+                let r = (pixels[index].x.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let g = (pixels[index].y.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                let b = (pixels[index].z.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
 
                 let out = x * 3;
                 row[out + 0] = b;
@@ -1457,7 +1461,7 @@ fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[f32], alpha: bool) -> i
     Ok(())
 }
 
-fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
+fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vector4>) {
     if is_cancelled() {
         return;
     }
@@ -1551,6 +1555,8 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
         pad2: 0,
     };
 
+    let start = Instant::now();
+
     for sample_index in 0..SHADOWMASK_SAMPLES {
         push.sample_index = sample_index;
         let push_bytes = as_bytes(&push);
@@ -1578,6 +1584,9 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<f32>) {
         }
         app.vk.end_single_use_cmd(cmd);
     }
+
+    let elapsed = start.elapsed().as_secs_f32();
+    app.benchmarks.push(("Shadow Mask Bake", elapsed));
 
     shader.destroy(&app.vk);
 
@@ -1740,7 +1749,7 @@ fn init_samples(app: &Glim, visibility_texels_count: usize) {
     shader.destroy(&app.vk);
 }
 
-fn bake_direct_emission(app: &Glim, visibility_texels_count: usize, lightmap: &Buffer) {
+fn bake_direct_emission(app: &mut Glim, visibility_texels_count: usize, lightmap: &Buffer) {
     if is_cancelled() {
         return;
     }
@@ -1796,6 +1805,8 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize, lightmap: &B
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
     let shader = &bake_direct_emission_shader;
 
+    let start = Instant::now();
+
     for sample_index in 0..push.max_samples {
         if is_cancelled() {
             break;
@@ -1830,12 +1841,16 @@ fn bake_direct_emission(app: &Glim, visibility_texels_count: usize, lightmap: &B
         };
         app.vk.end_single_use_cmd(cmd);
     }
+
+    let elapsed = start.elapsed().as_secs_f32();
+    app.benchmarks.push(("Direct Emission Bake", elapsed));
+
     bake_direct_emission_shader.destroy(&app.vk);
     drop(bake_direct_emission_shader);
 }
 
 fn bake_direct_lights(
-    app: &Glim,
+    app: &mut Glim,
     visibility_texels_count: usize,
     lights_start: usize,
     lights_count: usize,
@@ -1905,6 +1920,8 @@ fn bake_direct_lights(
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
     let shader = &bake_direct_light_shader;
 
+    let start = Instant::now();
+
     for sample_index in 0..samples {
         if is_cancelled() {
             break;
@@ -1939,12 +1956,15 @@ fn bake_direct_lights(
         app.vk.end_single_use_cmd(cmd);
     }
 
+    let elapsed = start.elapsed().as_secs_f32();
+    app.benchmarks.push(("Direct Lights Bake", elapsed));
+
     bake_direct_light_shader.destroy(&app.vk);
     drop(bake_direct_light_shader);
 }
 
 fn bake_indirect(
-    app: &Glim,
+    app: &mut Glim,
     lightmap: &Buffer,
     visibility_texels_count: usize,
     mixed_start: usize,
@@ -2046,6 +2066,8 @@ fn bake_indirect(
 
     let total_steps = (app.config.bounce_count * app.config.indirect_samples) as f32;
 
+    let start = Instant::now();
+
     'bounces: for bounce_index in 0..app.config.bounce_count {
         push.bounce_index = bounce_index;
 
@@ -2090,6 +2112,9 @@ fn bake_indirect(
             app.vk.end_single_use_cmd(cmd);
         }
     }
+
+    let elapsed = start.elapsed().as_secs_f32();
+    app.benchmarks.push(("Bounces Bake", elapsed));
 
     indirect_shader.destroy(&app.vk);
     indirect_buffer.destroy(&app.vk);
@@ -2193,6 +2218,8 @@ fn bake_light_probes(
     let groups_x = (probes_count + 63) / 64;
     let vk = &app.vk.device;
 
+    let start = Instant::now();
+
     for sample_index in 0..app.config.probe_samples {
         if is_cancelled() {
             break;
@@ -2228,6 +2255,9 @@ fn bake_light_probes(
         }
         app.vk.end_single_use_cmd(cmd);
     }
+
+    let elapsed = start.elapsed().as_secs_f32();
+    app.benchmarks.push(("Light Probes Bake", elapsed));
 
     let mut staging_buffer_light_probes = Buffer::empty(
         &app.vk,
@@ -2270,10 +2300,8 @@ fn render_lightmaps(app: &mut Glim) {
         max_resolution = max_resolution.max(g.settings.width as usize);
     }
 
-    let mesh = &app.gpu_mesh.merged_mesh;
-
     let texels = rasterize_texels(
-        &mesh,
+        &app.gpu_mesh.merged_mesh,
         &app.groups,
         app.config.coverage_min_threshold.clamp(0.0, 1.0),
         app.config.coverage_max_samples.clamp(1, 32),
@@ -2281,7 +2309,7 @@ fn render_lightmaps(app: &mut Glim) {
     let texels_count = texels.visibility.len();
 
     let (comaction_buffer_data, offsets, table_base) =
-        build_compaction(&texels, &mesh, &app.groups);
+        build_compaction(&texels, &app.gpu_mesh.merged_mesh, &app.groups);
 
     let mut lightmaps_info = {
         let mut infos = Vec::with_capacity(app.groups.len());
@@ -2476,9 +2504,9 @@ fn render_lightmaps(app: &mut Glim) {
         }
     }
 
-    let mut buffer = vec![0.0; max_resolution * max_resolution * 4];
+    let mut buffer = vec![Vector4::ZERO; max_resolution * max_resolution];
     let mut mask = vec![false; max_resolution * max_resolution];
-    let mut buffer_copy = vec![0.0; max_resolution * max_resolution * 4];
+    let mut buffer_copy = vec![Vector4::ZERO; max_resolution * max_resolution];
 
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index];
@@ -2500,15 +2528,18 @@ fn render_lightmaps(app: &mut Glim) {
         ));
         Log::progress(group_index as f32 / app.groups.len() as f32);
 
+        let start = Instant::now();
         decompact_diffuse(
             &mut buffer,
             &texels.visibility,
             &texels.coverage,
             &readback_buffer_slice,
-            &mesh,
+            &app.gpu_mesh.merged_mesh,
             &group,
             app.config.lightmap_mode == LightmapMode::CombinedSH,
         );
+        let elapsed = start.elapsed().as_secs_f32();
+        app.benchmarks.push(("Diffuse Decompact", elapsed));
 
         const DILATE_DENOISE: usize = 1;
         const DILATE_FINAL: usize = 1;
@@ -2521,7 +2552,10 @@ fn render_lightmaps(app: &mut Glim) {
             }
             match &oidn {
                 Some(oidn) => {
+                    let start = Instant::now();
                     oidn.denoise(&mut buffer, resolution, resolution, false);
+                    let elapsed = start.elapsed().as_secs_f32();
+                    app.benchmarks.push(("Denoise Diffuse", elapsed));
                 }
                 None => {
                     let message = format!("<color=red>Denoise Failed</color>");
@@ -2530,12 +2564,16 @@ fn render_lightmaps(app: &mut Glim) {
             }
         }
 
+        let start = Instant::now();
         if settings.dilate {
             dilate_texture(&mut buffer, &mut mask, resolution, DILATE_FINAL);
         }
+        let elapsed = start.elapsed().as_secs_f32();
+        app.benchmarks.push(("Diffuse Dilate", elapsed));
 
         if settings.fix_seams {
             let channels = 3;
+            let start = Instant::now();
             fix_seams(
                 &mut buffer,
                 resolution as u32,
@@ -2545,10 +2583,15 @@ fn render_lightmaps(app: &mut Glim) {
                 group_index as u32,
                 channels,
             );
+            let elapsed = start.elapsed().as_secs_f32();
+            app.benchmarks.push(("Diffuse Fix Seams", elapsed));
         }
 
         if BLOCK_FILL {
+            let start = Instant::now();
             block_average_fill(&mut buffer, &mut buffer_copy, &mask, resolution);
+            let elapsed = start.elapsed().as_secs_f32();
+            app.benchmarks.push(("Diffuse Block Fill", elapsed));
         }
 
         use exr::prelude::*;
@@ -2558,15 +2601,16 @@ fn render_lightmaps(app: &mut Glim) {
             .output_dir
             .join(format!("Lightmap-{}_Diffuse.exr", group_index));
 
+        let start = Instant::now();
         let channels = SpecificChannels::rgb(|pos: Vec2<usize>| {
             let x = pos.x();
             let flipped_y = resolution - 1 - pos.y();
             let index = x + flipped_y * resolution;
 
             (
-                f16::from_f32(buffer[index * 4 + 0]),
-                f16::from_f32(buffer[index * 4 + 1]),
-                f16::from_f32(buffer[index * 4 + 2]),
+                f16::from_f32(buffer[index].x),
+                f16::from_f32(buffer[index].y),
+                f16::from_f32(buffer[index].z),
             )
         });
 
@@ -2579,13 +2623,16 @@ fn render_lightmaps(app: &mut Glim) {
 
         Image::from_layer(layer).write().to_file(full_path).unwrap();
 
+        let elapsed = start.elapsed().as_secs_f32();
+        app.benchmarks.push(("Diffuse Save", elapsed));
+
         if app.config.lightmap_mode == LightmapMode::DominantDirection {
             decompact_directional(
                 &mut buffer,
                 &texels.visibility,
                 &texels.coverage,
                 &readback_buffer_slice,
-                &mesh,
+                &app.gpu_mesh.merged_mesh,
                 &group,
             );
 
@@ -2609,7 +2656,7 @@ fn render_lightmaps(app: &mut Glim) {
                 &mut buffer_copy,
                 &texels.visibility,
                 &texels.coverage,
-                &mesh,
+                &app.gpu_mesh.merged_mesh,
                 &group,
             );
 
@@ -2622,6 +2669,7 @@ fn render_lightmaps(app: &mut Glim) {
                 let full_path = app
                     .output_dir
                     .join(format!("Lightmap-{}_Normal.tga", group_index));
+
                 save_tga(full_path, resolution, resolution, &buffer_copy, false).unwrap();
             }
 
@@ -2656,7 +2704,7 @@ fn render_lightmaps(app: &mut Glim) {
                 &texels.visibility,
                 &texels.coverage,
                 &readback_buffer_slice,
-                &mesh,
+                &app.gpu_mesh.merged_mesh,
                 &group,
             );
 
@@ -2728,4 +2776,6 @@ fn render_lightmaps(app: &mut Glim) {
     drop(lightmaps_info);
     lightmap_texels.destroy(&app.vk);
     drop(lightmap_texels);
+
+    Log::msg(&format!("Benchmarks: {:#?}", app.benchmarks));
 }

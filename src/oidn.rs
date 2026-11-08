@@ -5,7 +5,7 @@ use std::{
     ptr,
 };
 
-use crate::bindings::Log;
+use crate::{bindings::Log, math::Vector4};
 
 #[repr(C)]
 pub struct OIDNDeviceImpl(c_void);
@@ -211,10 +211,10 @@ impl Oidn {
         true
     }
 
-    pub fn denoise(&self, pixels: &mut [f32], width: usize, height: usize, directional: bool) {
-        let pixel_stride = 4 * std::mem::size_of::<f32>();
+    pub fn denoise(&self, pixels: &mut [Vector4], width: usize, height: usize, directional: bool) {
+        let pixel_stride = std::mem::size_of::<Vector4>();
         let byte_size = width * height * pixel_stride;
-        assert!(pixels.len() * std::mem::size_of::<f32>() >= byte_size);
+        assert!(pixels.len() * size_of::<Vector4>() >= byte_size);
 
         if self.buffer.is_null() {
             panic!("reserve_buffer first")

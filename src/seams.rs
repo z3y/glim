@@ -314,7 +314,7 @@ struct PixelInfo {
 // todo
 // there seems to be a bug where the seam fixer makes high contrast seams look even worse
 pub fn fix_seams(
-    pixels: &mut [f32],
+    pixels: &mut [Vector4],
     width: u32,
     height: u32,
     seams: &[Seam],
@@ -323,6 +323,8 @@ pub fn fix_seams(
     channels: usize,
 ) {
     let mut sample_points = Vec::new();
+
+    debug_assert!(channels == 3 || channels == 4);
 
     let sample_scale = (width * height).isqrt() as f32 * 1.5;
 
@@ -368,20 +370,20 @@ pub fn fix_seams(
                     continue;
                 }
 
-                let i = ((y * w + x) * 4) as usize;
-                let color = [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]];
+                let index = (y * w + x) as usize;
+                let color = pixels[index];
 
                 if debug {
                     // side 0 = red, side 1 = green
-                    pixels[i] = if side == 0 { 1.0 } else { 0.0 };
-                    pixels[i + 1] = if side == 0 { 0.0 } else { 1.0 };
-                    pixels[i + 2] = 0.0;
+                    pixels[index].x = if side == 0 { 1.0 } else { 0.0 };
+                    pixels[index].y = if side == 0 { 0.0 } else { 1.0 };
+                    pixels[index].z = 0.0;
                 }
 
                 pixel_map.insert(key.clone(), pixel_info.len());
                 pixel_info.push(PixelInfo {
                     position: key,
-                    color,
+                    color: [color.x, color.y, color.z, color.w],
                 });
             }
         }
@@ -421,9 +423,17 @@ pub fn fix_seams(
         .collect();
 
     for (i, pixel) in pixel_info.iter().enumerate() {
-        let base = ((pixel.position.y * w + pixel.position.x) as usize) * 4;
-        for c in 0..channels {
-            pixels[base + c] = solutions[c][i];
+        let index = (pixel.position.y * w + pixel.position.x) as usize;
+
+        if channels == 3 {
+            pixels[index].x = solutions[0][i];
+            pixels[index].y = solutions[1][i];
+            pixels[index].z = solutions[2][i];
+        } else if channels == 4 {
+            pixels[index].x = solutions[0][i];
+            pixels[index].y = solutions[1][i];
+            pixels[index].z = solutions[2][i];
+            pixels[index].w = solutions[3][i];
         }
     }
 }

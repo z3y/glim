@@ -1,4 +1,7 @@
-use crate::{LightmapGroup, Mesh, Vector2, math::Vector3};
+use crate::{
+    LightmapGroup, Mesh, Vector2,
+    math::{Vector3, Vector4, vec3, vec4},
+};
 
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -110,7 +113,7 @@ fn area_centroid(poly: &[P; MAX_VERTS], n: usize, origin: P) -> (f64, P) {
 }
 
 pub fn render_normals(
-    buffer: &mut [f32],
+    buffer: &mut [Vector4],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     mesh: &Mesh,
@@ -119,11 +122,11 @@ pub fn render_normals(
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
-    let count = resolution * resolution * 4;
+    let count = resolution * resolution;
     assert!(buffer.len() >= count);
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(0.0);
+    buffer.fill(Vector4::ZERO);
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -154,26 +157,27 @@ pub fn render_normals(
         let cov = coverage[compacted_index];
 
         let index = texel.index(resolution);
-        buffer[index * 4 + 0] += normal.x * cov;
-        buffer[index * 4 + 1] += normal.y * cov;
-        buffer[index * 4 + 2] += normal.z * cov;
-        buffer[index * 4 + 3] += cov;
+
+        let col = vec4(normal.x * cov, normal.y * cov, normal.z * cov, cov);
+        buffer[index] += col;
     }
 
-    for px in buffer.chunks_exact_mut(4) {
-        let w = px[3];
+    for px in buffer {
+        let w = px.w.min(1.0);
+
         if w > 0.0 {
-            let n = Vector3::new(px[0], px[1], px[2]);
+            let n = Vector3::new(px.x, px.y, px.z);
             let n = n.normalize();
-            px[0] = n.x;
-            px[1] = n.y;
-            px[2] = n.z;
+            px.x = n.x;
+            px.y = n.y;
+            px.z = n.z;
+            px.w = w;
         }
     }
 }
 
 pub fn decompact_diffuse(
-    buffer: &mut [f32],
+    buffer: &mut [Vector4],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     lightmap_texels: &[f32],
@@ -184,10 +188,10 @@ pub fn decompact_diffuse(
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
-    let count = resolution * resolution * 4;
+    let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(0.0);
+    buffer.fill(Vector4::ZERO);
 
     let diffuse_offset = if l0 { texels.len() } else { 0 };
 
@@ -216,26 +220,24 @@ pub fn decompact_diffuse(
 
         let index = texel.index(resolution);
 
-        buffer[index * 4 + 0] += col_x * cov;
-        buffer[index * 4 + 1] += col_y * cov;
-        buffer[index * 4 + 2] += col_z * cov;
-        buffer[index * 4 + 3] += cov;
+        let col = vec4(col_x * cov, col_y * cov, col_z * cov, cov);
+        buffer[index] += col;
     }
 
-    for px in buffer.chunks_exact_mut(4) {
-        let w = px[3].min(1.0);
+    for col in buffer {
+        let w = col.w.min(1.0);
 
         if w > 0.0 {
-            px[0] /= w;
-            px[1] /= w;
-            px[2] /= w;
-            px[3] = w;
+            col.x /= w;
+            col.y /= w;
+            col.z /= w;
+            col.w = w;
         }
     }
 }
 
 pub fn decompact_shadowmask(
-    buffer: &mut [f32],
+    buffer: &mut [Vector4],
     buffer_coverage: &mut [f32],
     texels: &[VisibilityTexel],
     coverage: &[f32],
@@ -246,10 +248,10 @@ pub fn decompact_shadowmask(
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
-    let count = resolution * resolution * 4;
+    let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(0.0);
+    buffer.fill(Vector4::ZERO);
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -273,52 +275,46 @@ pub fn decompact_shadowmask(
 
         let index = texel.index(resolution);
 
-        buffer[index * 4 + 0] += col_r * cov;
-        buffer[index * 4 + 1] += col_g * cov;
-        buffer[index * 4 + 2] += col_b * cov;
-        buffer[index * 4 + 3] += col_a * cov;
+        let col = vec4(col_r, col_g, col_b, col_a) * cov;
+        buffer[index] += col;
         buffer_coverage[index] += cov;
     }
 
-    for (i, px) in buffer.chunks_exact_mut(4).enumerate() {
+    for i in 0..buffer.len() {
         let w = buffer_coverage[i].min(1.0);
-
         if w > 0.0 {
-            px[0] /= w;
-            px[1] /= w;
-            px[2] /= w;
-            px[3] /= w;
+            buffer[i] /= w;
             buffer_coverage[i] = w;
         }
     }
 }
 
-pub fn encode_directional(pixels: &mut [f32], normals: &[f32]) {
-    for (i, px) in pixels.chunks_exact_mut(4).enumerate() {
-        // let w = px[3];
-        // if w > 0.0 {
-        let mut dir = Vector3::new(px[0], px[1], px[2]);
+pub fn encode_directional(pixels: &mut [Vector4], normals: &[Vector4]) {
+    for (i, px) in pixels.iter_mut().enumerate() {
+        let mut dir = Vector3::new(px.x, px.y, px.z);
 
         if dir.length() > 0.0 {
             dir = dir.normalize();
-            let n = Vector3::new(normals[i * 4 + 0], normals[i * 4 + 1], normals[i * 4 + 2]);
+            let n = vec3(normals[i].x, normals[i].y, normals[i].z);
             let nol = dir.dot(n).clamp(0.0, 1.0);
 
-            px[0] = dir.x * 0.5 + 0.5;
-            px[1] = dir.y * 0.5 + 0.5;
-            px[2] = (-dir.z) * 0.5 + 0.5;
-            px[3] = nol * 0.5 + 0.5;
+            dir.z = -dir.z; // unity
+
+            px.x = dir.x * 0.5 + 0.5;
+            px.y = dir.y * 0.5 + 0.5;
+            px.z = dir.z * 0.5 + 0.5;
+            px.w = nol * 0.5 + 0.5;
         } else {
-            px[0] = 0.5;
-            px[1] = 0.5;
-            px[2] = 0.5;
-            px[3] = 0.5;
+            px.x = 0.5;
+            px.y = 0.5;
+            px.z = 0.5;
+            px.w = 0.5;
         }
     }
 }
 
 pub fn decompact_directional(
-    buffer: &mut [f32],
+    buffer: &mut [Vector4],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     lightmap_texels: &[f32],
@@ -328,10 +324,10 @@ pub fn decompact_directional(
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
-    let count = resolution * resolution * 4;
+    let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(0.0);
+    buffer.fill(Vector4::ZERO);
 
     let directional_offset = texels.len();
 
@@ -375,27 +371,25 @@ pub fn decompact_directional(
             let dir = (directional / luminance).normalize();
             let index = texel.index(resolution);
 
-            buffer[index * 4 + 0] += dir.x * cov;
-            buffer[index * 4 + 1] += dir.y * cov;
-            buffer[index * 4 + 2] += dir.z * cov;
-            buffer[index * 4 + 3] += cov;
+            let col = vec4(dir.x * cov, dir.y * cov, dir.z * cov, cov);
+            buffer[index] += col;
         }
     }
 
-    for px in buffer.chunks_exact_mut(4) {
-        let w = px[3].min(1.0);
+    for px in buffer {
+        let w = px.w.min(1.0);
 
         if w > 0.0 {
-            let dir = Vector3::new(px[0], px[1], px[2]);
+            let dir = Vector3::new(px.x, px.y, px.z);
             let dir = dir.normalize();
-            px[0] = dir.x;
-            px[1] = dir.y;
-            px[2] = dir.z;
-            px[3] = w;
+            px.x = dir.x;
+            px.y = dir.y;
+            px.z = dir.z;
+            px.w = w;
         } else {
-            px[0] = 0.5;
-            px[1] = 0.5;
-            px[2] = 0.5;
+            px.x = 0.5;
+            px.y = 0.5;
+            px.z = 0.5;
         }
     }
 }
@@ -413,7 +407,7 @@ fn encode_combined_sh(l0: Vector3, l1: Vector3) -> Vector3 {
 }
 
 pub fn decompact_combined_sh(
-    buffer: &mut [f32],
+    buffer: &mut [Vector4],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     lightmap_texels: &[f32],
@@ -423,10 +417,10 @@ pub fn decompact_combined_sh(
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
-    let count = resolution * resolution * 4;
+    let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(0.0);
+    buffer.fill(Vector4::ZERO);
 
     let l0_offset = texels.len();
     let l1_offset = texels.len() * 2;
@@ -471,36 +465,34 @@ pub fn decompact_combined_sh(
 
         let index = texel.index(resolution);
 
-        buffer[index * 4 + 0] += sh.x * cov;
-        buffer[index * 4 + 1] += sh.y * cov;
-        buffer[index * 4 + 2] += sh.z * cov;
-        buffer[index * 4 + 3] += cov;
+        let col = vec4(sh.x * cov, sh.y * cov, sh.z * cov, cov);
+        buffer[index] += col;
     }
 
-    for px in buffer.chunks_exact_mut(4) {
-        let w = px[3].min(1.0);
+    for px in buffer {
+        let w = px.w.min(1.0);
 
         if w > 0.0 {
-            px[0] /= w;
-            px[1] /= w;
-            px[2] /= w;
-            px[3] = w;
+            px.x /= w;
+            px.y /= w;
+            px.z /= w;
+            px.w = w;
         }
     }
 }
 
-pub fn dilate_texture(color: &mut [f32], mask: &mut [bool], resolution: usize, radius: usize) {
+pub fn dilate_texture(pixels: &mut [Vector4], mask: &mut [bool], resolution: usize, radius: usize) {
     let mask = &mut mask[0..(resolution * resolution)];
 
     for y in 0..resolution {
         for x in 0..resolution {
-            let i = (y * resolution + x) * 4;
+            let index = y * resolution + x;
 
-            let cov = color[i + 3];
+            let cov = pixels[index].w;
             let covered = cov > 0.0;
 
             if covered {
-                mask[y * resolution + x] = true;
+                mask[index] = true;
                 continue;
             }
 
@@ -524,10 +516,10 @@ pub fn dilate_texture(color: &mut [f32], mask: &mut [bool], resolution: usize, r
                         continue;
                     }
 
-                    let si = (sy * resolution + sx) * 4;
+                    let si = sy * resolution + sx;
                     let dist = dx * dx + dy * dy;
 
-                    let sample_cov = color[si + 3];
+                    let sample_cov = pixels[si].w;
                     if sample_cov <= 0.0 {
                         continue;
                     }
@@ -546,26 +538,31 @@ pub fn dilate_texture(color: &mut [f32], mask: &mut [bool], resolution: usize, r
             }
 
             if let Some(si) = best_index {
-                color[i + 0] = color[si + 0];
-                color[i + 1] = color[si + 1];
-                color[i + 2] = color[si + 2];
-                mask[y * resolution + x] = true;
+                pixels[index].x = pixels[si].x;
+                pixels[index].y = pixels[si].y;
+                pixels[index].z = pixels[si].z;
+                mask[index] = true;
             } else {
-                color[i + 0] = 0.0;
-                color[i + 1] = 0.0;
-                color[i + 2] = 0.0;
-                mask[y * resolution + x] = false;
+                pixels[index].x = 0.0;
+                pixels[index].y = 0.0;
+                pixels[index].z = 0.0;
+                mask[index] = false;
             }
         }
     }
 }
 
-pub fn dilate_shadowmask(color: &mut [f32], coverage: &[f32], resolution: usize, radius: usize) {
+pub fn dilate_shadowmask(
+    color: &mut [Vector4],
+    coverage: &[f32],
+    resolution: usize,
+    radius: usize,
+) {
     for y in 0..resolution {
         for x in 0..resolution {
-            let i = (y * resolution + x) * 4;
+            let index = y * resolution + x;
 
-            let cov = coverage[y * resolution + x];
+            let cov = coverage[index];
             let covered = cov > 0.0;
 
             if covered {
@@ -592,7 +589,7 @@ pub fn dilate_shadowmask(color: &mut [f32], coverage: &[f32], resolution: usize,
                         continue;
                     }
 
-                    let si = (sy * resolution + sx) * 4;
+                    let si = sy * resolution + sx;
                     let dist = dx * dx + dy * dy;
 
                     let sample_cov = coverage[sy * resolution + sx];
@@ -614,21 +611,20 @@ pub fn dilate_shadowmask(color: &mut [f32], coverage: &[f32], resolution: usize,
             }
 
             if let Some(si) = best_index {
-                color[i + 0] = color[si + 0];
-                color[i + 1] = color[si + 1];
-                color[i + 2] = color[si + 2];
-                color[i + 3] = color[si + 3];
+                color[index] = color[si];
             } else {
-                color[i + 0] = 0.0;
-                color[i + 1] = 0.0;
-                color[i + 2] = 0.0;
-                color[i + 3] = 0.0;
+                color[index] = Vector4::ZERO;
             }
         }
     }
 }
 
-pub fn block_average_fill(pixels: &mut [f32], copy: &mut [f32], mask: &[bool], resolution: usize) {
+pub fn block_average_fill(
+    pixels: &mut [Vector4],
+    copy: &mut [Vector4],
+    mask: &[bool],
+    resolution: usize,
+) {
     const BLOCK: usize = 4;
 
     // level 0 = pixels, level l = (level l-1) reduced 4x4
@@ -646,9 +642,9 @@ pub fn block_average_fill(pixels: &mut [f32], copy: &mut [f32], mask: &[bool], r
         levels = next;
     }
 
-    // copy layout: [ rgba of every level (total * 4) | weight of every level (total) ]
-    let weight_base = total * 4;
-    assert!(copy.len() >= total * 5, "copy buffer too small");
+    // copy layout: [ color of every level (total) | weight of every level (total, stored in .x) ]
+    let weight_base = total;
+    assert!(copy.len() >= total * 2, "copy buffer too small");
 
     // Pull: average the blocks of the level below, weighted by how many real pixels they cover
     for l in 1..=levels {
@@ -657,7 +653,7 @@ pub fn block_average_fill(pixels: &mut [f32], copy: &mut [f32], mask: &[bool], r
 
         for y in 0..size {
             for x in 0..size {
-                let mut sum = [0.0f32; 4];
+                let mut sum = Vector4::ZERO;
                 let mut weight = 0.0f32;
 
                 for cy in (y * BLOCK)..((y + 1) * BLOCK).min(child) {
@@ -666,18 +662,14 @@ pub fn block_average_fill(pixels: &mut [f32], copy: &mut [f32], mask: &[bool], r
 
                         if l == 1 {
                             if mask[ci] {
-                                for k in 0..4 {
-                                    sum[k] += pixels[ci * 4 + k];
-                                }
+                                sum = sum + pixels[ci];
                                 weight += 1.0;
                             }
                         } else {
                             let t = color_base[l - 1] + ci;
-                            let w = copy[weight_base + t];
+                            let w = copy[weight_base + t].x;
                             if w > 0.0 {
-                                for k in 0..4 {
-                                    sum[k] += copy[t * 4 + k] * w;
-                                }
+                                sum = sum + copy[t] * w;
                                 weight += w;
                             }
                         }
@@ -686,10 +678,8 @@ pub fn block_average_fill(pixels: &mut [f32], copy: &mut [f32], mask: &[bool], r
 
                 let t = color_base[l] + y * size + x;
                 let scale = if weight > 0.0 { 1.0 / weight } else { 0.0 };
-                for k in 0..4 {
-                    copy[t * 4 + k] = sum[k] * scale;
-                }
-                copy[weight_base + t] = weight;
+                copy[t] = sum * scale;
+                copy[weight_base + t] = Vector4::new(weight, 0.0, 0.0, 0.0);
             }
         }
     }
@@ -708,10 +698,8 @@ pub fn block_average_fill(pixels: &mut [f32], copy: &mut [f32], mask: &[bool], r
                 y /= BLOCK;
                 let t = color_base[l] + y * sizes[l] + x;
 
-                if copy[weight_base + t] > 0.0 {
-                    for k in 0..4 {
-                        pixels[index * 4 + k] = copy[t * 4 + k];
-                    }
+                if copy[weight_base + t].x > 0.0 {
+                    pixels[index] = copy[t];
                     break;
                 }
             }
