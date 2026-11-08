@@ -2478,11 +2478,7 @@ fn render_lightmaps(app: &mut Glim) {
 
     let mut buffer = vec![0.0; max_resolution * max_resolution * 4];
     let mut mask = vec![false; max_resolution * max_resolution];
-    let mut buffer_normal = if app.config.lightmap_mode == LightmapMode::DominantDirection {
-        vec![0.0; max_resolution * max_resolution * 4]
-    } else {
-        Vec::new()
-    };
+    let mut buffer_copy = vec![0.0; max_resolution * max_resolution * 4];
 
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index];
@@ -2552,7 +2548,7 @@ fn render_lightmaps(app: &mut Glim) {
         }
 
         if BLOCK_FILL {
-            block_average_fill(&mut buffer, &mask, resolution);
+            block_average_fill(&mut buffer, &mut buffer_copy, &mask, resolution);
         }
 
         use exr::prelude::*;
@@ -2610,7 +2606,7 @@ fn render_lightmaps(app: &mut Glim) {
             }
 
             render_normals(
-                &mut buffer_normal,
+                &mut buffer_copy,
                 &texels.visibility,
                 &texels.coverage,
                 &mesh,
@@ -2619,17 +2615,17 @@ fn render_lightmaps(app: &mut Glim) {
 
             if settings.dilate {
                 dilate_texture(&mut buffer, &mut mask, resolution, DILATE_FINAL);
-                dilate_texture(&mut buffer_normal, &mut mask, resolution, DILATE_FINAL);
+                dilate_texture(&mut buffer_copy, &mut mask, resolution, DILATE_FINAL);
             }
 
             if export_debug_textures {
                 let full_path = app
                     .output_dir
                     .join(format!("Lightmap-{}_Normal.tga", group_index));
-                save_tga(full_path, resolution, resolution, &buffer_normal, false).unwrap();
+                save_tga(full_path, resolution, resolution, &buffer_copy, false).unwrap();
             }
 
-            encode_directional(&mut buffer, &buffer_normal);
+            encode_directional(&mut buffer, &buffer_copy);
 
             if settings.fix_seams {
                 let channels = 4;
@@ -2645,7 +2641,7 @@ fn render_lightmaps(app: &mut Glim) {
             }
 
             if BLOCK_FILL {
-                block_average_fill(&mut buffer, &mask, resolution);
+                block_average_fill(&mut buffer, &mut buffer_copy, &mask, resolution);
             }
 
             let full_path = app
@@ -2698,7 +2694,7 @@ fn render_lightmaps(app: &mut Glim) {
             }
 
             if BLOCK_FILL {
-                block_average_fill(&mut buffer, &mask, resolution);
+                block_average_fill(&mut buffer, &mut buffer_copy, &mask, resolution);
             }
 
             let full_path = app
@@ -2707,7 +2703,7 @@ fn render_lightmaps(app: &mut Glim) {
             save_tga(full_path, resolution, resolution, &buffer, false).unwrap();
         }
     }
-    drop(buffer_normal);
+    drop(buffer_copy);
     readback_buffer.destroy(&app.vk);
     drop(readback_buffer);
 
