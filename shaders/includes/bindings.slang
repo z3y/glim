@@ -52,8 +52,8 @@ struct RayTracingData
 
 float4 SampleAlbedo(uint2 coords, uint lightmapGroup)
 {
-    uint index = LIGHTMAP_GROUP_COUNT <= 1 ? 0 : NonUniformResourceIndex(lightmapGroup);
-    Texture2D tex = Albedo[index];
+    uint index = NonUniformResourceIndex(lightmapGroup);
+    Texture2D tex = Albedo[NonUniformResourceIndex(lightmapGroup)];
     return saturate(tex[coords]);
 }
 
@@ -75,7 +75,7 @@ float SampleAlpha(float2 uv, uint alphaIndex, bool wrapUV)
 
 float4 SampleEmission(uint2 coords, uint lightmapGroup)
 {
-    uint index = LIGHTMAP_GROUP_COUNT <= 1 ? 0 : NonUniformResourceIndex(lightmapGroup);
+    uint index = NonUniformResourceIndex(lightmapGroup);
     Texture2D tex = Emission[index];
     return max(0.0, tex[coords] * EMISSIVE_MULTIPLIER);
 }
