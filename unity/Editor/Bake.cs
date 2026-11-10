@@ -181,7 +181,74 @@ namespace Glim
                 }
 
                 l.position = ul.transform.position;
-                // l.color = (Vector3)ul.color; // todo temperature
+                var gammaColor = ul.color;
+                if (ul.useColorTemperature)
+                {
+                    Color temperature = Mathf.CorrelatedColorTemperatureToRGB(ul.colorTemperature).gamma;
+                    gammaColor *= temperature;
+                }
+                var linear = gammaColor.linear;
+
+                var color = new Vector3(linear.r, linear.g, linear.b) * ul.intensity;
+                l.color = color;
+                l.range = ul.range;
+
+                var lightType = Bindings.LightType.Directional;
+                if (ul.type == LightType.Directional)
+                {
+                    lightType = Bindings.LightType.Directional;
+                }
+                else if (ul.type == LightType.Point)
+                {
+                    lightType = Bindings.LightType.Point;
+                }
+                else if (ul.type == LightType.Rectangle)
+                {
+                    lightType = Bindings.LightType.Area;
+                }
+                else if (ul.type == LightType.Disc)
+                {
+                    lightType = Bindings.LightType.Disc;
+                }
+
+                l.ty = lightType;
+                l.direction = ul.transform.forward;
+                l.up = ul.transform.up;
+                l.cast_shadows = ul.shadows == LightShadows.None ? (byte)0 : (byte)1;
+
+                float radiusOrAngle = ul.type == LightType.Directional ? Mathf.Deg2Rad * ul.shadowAngle : ul.shadowRadius;
+                l.shadow_radius_or_angle = radiusOrAngle;
+
+                if (ul.type == LightType.Spot)
+                {
+                    l.spot_outer = ul.spotAngle;
+                    l.ty = Bindings.LightType.Spot;
+                    l.direction = -ul.transform.forward;
+                    l.spot_inner_percent = 80;
+                }
+                if (ul.type == LightType.Rectangle)
+                {
+                    l.direction = -ul.transform.forward;
+                    l.area_or_cookie_size = ul.areaSize;
+                }
+                if (ul.type == LightType.Disc)
+                {
+                    l.direction = -ul.transform.forward;
+                    l.area_or_cookie_size = new Vector2(ul.areaSize.x, ul.areaSize.x);
+                }
+
+                var builtIn = GraphicsSettings.currentRenderPipeline == null;
+
+                if (!builtIn)
+                {
+                    l.spot_inner_percent = ul.innerSpotAngle / ul.spotAngle * 100.0f;
+                }
+
+                var glimLight = ul.GetComponent<GlimAdditionalLightSettings>();
+                if (glimLight && glimLight.enabled)
+                {
+                    l.spot_inner_percent = ul.innerSpotAngle / ul.spotAngle * 100.0f;
+                }
 
                 _context.bakeLights[i] = l;
             }
