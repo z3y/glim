@@ -1,6 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use ash::vk::{self, Handle};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{self, Write};
 use std::mem;
 use std::path::PathBuf;
@@ -91,6 +92,7 @@ pub struct Glim {
     pub meshes: [Mesh; GEOMETRIES_VARIANTS],
 
     pub cpu_lights: Vec<Light>,
+    pub cpu_lights_hash: u64,
     pub light_cookies: Vec<TexturePixelsData>,
     pub alphas: Vec<TexturePixelsData>,
     pub emissive_triangles: Vec<u32>,
@@ -703,7 +705,10 @@ fn render_preview(app: &mut Glim) {
             update_camera(app, delta_time);
 
             if LIGHT_UPDATE_REQUESTED.load(Ordering::Relaxed) {
-                app.upload_lights();
+                let changed = app.upload_lights();
+                if changed {
+                    app.preview_initialized = false;
+                }
             }
 
             if !app.preview_initialized {
@@ -1374,6 +1379,7 @@ impl Glim {
             compacted_visibility: Buffer::null(),
             benchmarks: Vec::with_capacity(32),
             gpu_lights_staging: Buffer::null(),
+            cpu_lights_hash: 0,
         }
     }
 
@@ -1397,7 +1403,19 @@ impl Glim {
         self.alphas.push(alpha);
     }
 
-    fn upload_lights(&mut self) {
+    fn upload_lights(&mut self) -> bool {
+        if self.cpu_lights.len() == 0 {
+            return false;
+        }
+
+        let mut h = DefaultHasher::new();
+        self.cpu_lights.hash(&mut h);
+        let fingerprint = h.finish();
+
+        if self.cpu_lights_hash == fingerprint {
+            return false;
+        }
+
         let capacity = self.gpu_lights_staging.bytes as usize / size_of::<Light>();
 
         if capacity < self.cpu_lights.len() {
@@ -1444,6 +1462,10 @@ impl Glim {
         self.vk.end_single_use_cmd(cmd);
 
         LIGHT_UPDATE_REQUESTED.store(false, Ordering::Relaxed);
+
+        self.cpu_lights_hash = fingerprint;
+
+        true
     }
 
     pub fn rt_data(&self) -> RayTracingData {

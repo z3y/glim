@@ -1,7 +1,8 @@
 use crate::math::{Vector2, Vector3};
+use std::hash::{Hash, Hasher};
 
 #[repr(u8)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Hash)]
 pub enum LightType {
     Directional = 0,
     Point = 1,
@@ -31,6 +32,37 @@ pub struct Light {
 
     pub up: Vector3,
     pub cookie: u32,
+}
+
+impl Hash for Light {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.position.x.to_bits().hash(state);
+        self.position.y.to_bits().hash(state);
+        self.position.z.to_bits().hash(state);
+
+        self.direction.x.to_bits().hash(state);
+        self.direction.y.to_bits().hash(state);
+        self.direction.z.to_bits().hash(state);
+
+        self.up.x.to_bits().hash(state);
+        self.up.y.to_bits().hash(state);
+        self.up.z.to_bits().hash(state);
+
+        self.color.x.to_bits().hash(state);
+        self.color.y.to_bits().hash(state);
+        self.color.z.to_bits().hash(state);
+
+        self.range.to_bits().hash(state);
+        self.shadow_radius_or_angle.to_bits().hash(state);
+        self.spot_inner_percent.to_bits().hash(state);
+        self.spot_outer.to_bits().hash(state);
+
+        self.area_or_cookie_size.x.to_bits().hash(state);
+        self.area_or_cookie_size.y.to_bits().hash(state);
+
+        self.cast_shadows.hash(state);
+        self.ty.hash(state);
+    }
 }
 
 impl Default for Light {
