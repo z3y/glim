@@ -53,7 +53,7 @@ struct RayTracingData
 float4 SampleAlbedo(uint2 coords, uint lightmapGroup)
 {
     uint index = NonUniformResourceIndex(lightmapGroup);
-    Texture2D tex = Albedo[NonUniformResourceIndex(lightmapGroup)];
+    Texture2D tex = Albedo[index];
     return saturate(tex[coords]);
 }
 

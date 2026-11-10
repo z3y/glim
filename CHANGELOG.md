@@ -1,5 +1,16 @@
 # [Glim](https://github.com/z3y/glim)
 
+# v0.12.2
+
+- Implemented sync for light properties
+  - Changes to light settings affect the preview window now without having to relaunch it
+  - Limited only to certain properties (example light cookie textures do not change)
+- Preview window is now always on top
+- Fixed artifacts on certain AMD GPUs
+- Setting sample count to 0 now allows skipping certain baking stages
+  - For example to completely disable emission set direct emission samples to 0
+
+
 # v0.12.0
 
 - Implemented anti-aliasing
