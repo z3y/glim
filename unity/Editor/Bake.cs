@@ -170,6 +170,8 @@ namespace Glim
                 return;
             }
 
+            var builtIn = GraphicsSettings.currentRenderPipeline == null;
+
             for (int i = 0; i < _context.bakeLights.Count; i++)
             {
                 var l = _context.bakeLights[i];
@@ -236,8 +238,6 @@ namespace Glim
                     l.direction = -ul.transform.forward;
                     l.area_or_cookie_size = new Vector2(ul.areaSize.x, ul.areaSize.x);
                 }
-
-                var builtIn = GraphicsSettings.currentRenderPipeline == null;
 
                 if (!builtIn)
                 {

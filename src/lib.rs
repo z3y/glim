@@ -10,9 +10,9 @@ use std::time::Instant;
 use std::{ptr, time::Duration};
 
 use glfw_sys::{
-    GLFW_KEY_ESCAPE, GLFW_PRESS, GLFWwindow, glfwCreateWindowSurface, glfwGetKey,
-    glfwGetWindowSize, glfwPollEvents, glfwSetWindowShouldClose, glfwSetWindowTitle,
-    glfwWindowShouldClose,
+    GLFW_FLOATING, GLFW_KEY_ESCAPE, GLFW_PRESS, GLFW_TRUE, GLFWwindow, glfwCreateWindowSurface,
+    glfwGetKey, glfwGetWindowSize, glfwPollEvents, glfwSetWindowAttrib, glfwSetWindowShouldClose,
+    glfwSetWindowTitle, glfwWindowShouldClose,
 };
 
 use crate::bindings::*;
@@ -1258,6 +1258,7 @@ impl Glim {
             let instance = instance.handle().as_raw() as glfw_sys::VkInstance;
             let mut surface: glfw_sys::VkSurfaceKHR = ptr::null_mut();
             glfwCreateWindowSurface(instance, window, std::ptr::null(), &mut surface);
+            glfwSetWindowAttrib(window, GLFW_FLOATING, GLFW_TRUE);
             ash::vk::SurfaceKHR::from_raw(surface as u64)
         };
 
