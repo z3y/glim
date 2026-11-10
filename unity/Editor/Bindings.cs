@@ -190,6 +190,12 @@ namespace Glim
         public static extern void app_add_light(IntPtr app, Light light);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_upload_lights(IntPtr app);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_clear_lights(IntPtr app);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static unsafe extern void app_add_light_cookie(IntPtr app, Color32* pixels, uint pixels_length, uint width, uint height);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]

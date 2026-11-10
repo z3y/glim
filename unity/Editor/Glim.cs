@@ -99,6 +99,7 @@ namespace Glim
     public class BakeContext
     {
         public List<Bindings.Light> bakeLights = new();
+        public List<Light> unityLights = new();
         public List<CookiePixelsData> cookies = new();
         public List<AlphaPixelsData> alphas = new();
         public List<Glim.MeshData> sceneMesh = new();
@@ -351,6 +352,7 @@ namespace Glim
                 _ => MixedLightingMode.IndirectOnly,
             };
 
+            unityLights = addedLights;
             var lightsArray = addedLights.ToArray();
             List<int> occlusionChannels = new();
             if (mixedMode == MixedLightingMode.Shadowmask)

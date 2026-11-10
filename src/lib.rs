@@ -4,6 +4,7 @@ use ash::vk::{self, Handle};
 use std::io::{self, Write};
 use std::mem;
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 use std::{ptr, time::Duration};
 
@@ -98,6 +99,7 @@ pub struct Glim {
 
     pub gpu_mesh: GpuMesh,
     pub gpu_lights: Buffer,
+    pub gpu_lights_staging: Buffer,
     pub emissive_triangles_buffer: Buffer,
 
     pub tlas: VulkanAs,
@@ -172,6 +174,10 @@ impl Drop for Glim {
 
         if !self.gpu_lights.buffer.is_null() {
             self.gpu_lights.destroy(&self.vk);
+        }
+
+        if !self.gpu_lights_staging.buffer.is_null() {
+            self.gpu_lights_staging.destroy(&self.vk);
         }
 
         if !self.emissive_triangles_buffer.buffer.is_null() {
@@ -340,24 +346,36 @@ fn initialize_render(app: &mut Glim) {
 
     // upload lights
     if app.cpu_lights.len() > 0 {
-        // first other lights, then area, then mixed
-        app.cpu_lights.sort_unstable_by_key(|x| {
-            if x.ty == LightType::Area || x.ty == LightType::Disc {
-                1u8
-            } else if x.mixed {
-                2u8
-            } else {
-                0u8
-            }
-        });
+        if !app.config.is_preview {
+            // first other lights, then area, then mixed
+            app.cpu_lights.sort_unstable_by_key(|x| {
+                if x.ty == LightType::Area || x.ty == LightType::Disc {
+                    1u8
+                } else if x.mixed {
+                    2u8
+                } else {
+                    0u8
+                }
+            });
+        }
 
-        app.gpu_lights = Buffer::new(
+        app.gpu_lights_staging = Buffer::empty(
+            &app.vk,
+            String::from("Lights Staging"),
+            (app.cpu_lights.len() * size_of::<Light>()) as u64,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+
+        app.gpu_lights = Buffer::empty(
             &app.vk,
             String::from("Lights"),
-            &app.cpu_lights,
+            (app.cpu_lights.len() * size_of::<Light>()) as u64,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
+
+        app.upload_lights();
     } else {
         app.gpu_lights = Buffer::empty(
             &app.vk,
@@ -683,6 +701,10 @@ fn render_preview(app: &mut Glim) {
             let delta_time = now.duration_since(previous_time).as_secs_f32();
 
             update_camera(app, delta_time);
+
+            if LIGHT_UPDATE_REQUESTED.load(Ordering::Relaxed) {
+                app.upload_lights();
+            }
 
             if !app.preview_initialized {
                 push.sample_index = 0;
@@ -1351,6 +1373,7 @@ impl Glim {
             alphas_array: TextureArray::null(),
             compacted_visibility: Buffer::null(),
             benchmarks: Vec::with_capacity(32),
+            gpu_lights_staging: Buffer::null(),
         }
     }
 
@@ -1372,6 +1395,55 @@ impl Glim {
         };
 
         self.alphas.push(alpha);
+    }
+
+    fn upload_lights(&mut self) {
+        let capacity = self.gpu_lights_staging.bytes as usize / size_of::<Light>();
+
+        if capacity < self.cpu_lights.len() {
+            println!("Resizing Lights Staging Buffer");
+            self.gpu_lights_staging.destroy(&self.vk);
+            self.gpu_lights_staging = Buffer::empty(
+                &self.vk,
+                String::from("Lights Staging"),
+                (self.cpu_lights.len() * size_of::<Light>()) as u64,
+                vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            );
+        }
+
+        let lights: &mut [Light] = unsafe {
+            std::slice::from_raw_parts_mut(
+                self.gpu_lights_staging.ptr as *mut Light,
+                self.cpu_lights.len(),
+            )
+        };
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                self.cpu_lights.as_ptr(),
+                lights.as_mut_ptr(),
+                lights.len(),
+            )
+        };
+
+        let cmd = self.vk.begin_single_use_cmd();
+        unsafe {
+            let region = vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size: self.gpu_lights_staging.bytes,
+            };
+            self.vk.device.cmd_copy_buffer(
+                cmd,
+                self.gpu_lights_staging.buffer,
+                self.gpu_lights.buffer,
+                &[region],
+            );
+        }
+        self.vk.end_single_use_cmd(cmd);
+
+        LIGHT_UPDATE_REQUESTED.store(false, Ordering::Relaxed);
     }
 
     pub fn rt_data(&self) -> RayTracingData {

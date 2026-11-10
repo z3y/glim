@@ -216,6 +216,8 @@ fn handle_unwind_error(log_callback: LogCallback, err: Box<dyn Any + Send>) {
 // Atomic bool so compiler can be happy
 static CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 
+pub static LIGHT_UPDATE_REQUESTED: AtomicBool = AtomicBool::new(false);
+
 pub fn is_cancelled() -> bool {
     CANCEL_REQUESTED.load(Ordering::Relaxed)
 }
@@ -301,6 +303,40 @@ pub extern "C" fn app_add_light(app: *mut Glim, mut light: Light) {
         light.direction = Vector3::ZERO - light.direction; // ??
         light.shadow_radius_or_angle = light.shadow_radius_or_angle.max(0.0);
         app.cpu_lights.push(light);
+    }));
+
+    if let Err(err) = result {
+        handle_unwind_error(app.config.log_callback, err);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn app_clear_lights(app: *mut Glim) {
+    if app.is_null() {
+        return;
+    }
+
+    let app = unsafe { &mut *app };
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        app.cpu_lights.clear();
+    }));
+
+    if let Err(err) = result {
+        handle_unwind_error(app.config.log_callback, err);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn app_upload_lights(app: *mut Glim) {
+    if app.is_null() {
+        return;
+    }
+
+    let app = unsafe { &mut *app };
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        LIGHT_UPDATE_REQUESTED.store(true, Ordering::Relaxed);
     }));
 
     if let Err(err) = result {

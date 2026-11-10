@@ -35,6 +35,8 @@ namespace Glim
         static volatile bool _running = false;
         static int _progressID = -1;
 
+        static volatile IntPtr _app = IntPtr.Zero;
+
         static BakeContext _context = null;
 
         static volatile float _progress = 0f;
@@ -156,6 +158,42 @@ namespace Glim
             Progress.Report(_progressID, _progress, _bakeMessage);
         }
 
+        static void UpdatePreviewLights()
+        {
+            if (_app == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (_context.unityLights.Count != _context.bakeLights.Count)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _context.bakeLights.Count; i++)
+            {
+                var l = _context.bakeLights[i];
+                var ul = _context.unityLights[i];
+
+                if (!ul)
+                {
+                    continue;
+                }
+
+                l.position = ul.transform.position;
+                // l.color = (Vector3)ul.color; // todo temperature
+
+                _context.bakeLights[i] = l;
+            }
+
+            Bindings.app_clear_lights(_app);
+            foreach (var light in _context.bakeLights)
+            {
+                Bindings.app_add_light(_app, light);
+            }
+            Bindings.app_upload_lights(_app);
+        }
+
         static void PollBakeComplete()
         {
             if (!_isComplete)
@@ -163,6 +201,10 @@ namespace Glim
                 if (_progressID != -1)
                 {
                     Progress.Report(_progressID, _progress, _bakeMessage);
+                }
+                if (_context.isPreview)
+                {
+                    UpdatePreviewLights();
                 }
                 return;
             }
@@ -469,6 +511,7 @@ namespace Glim
         static void ResetBake()
         {
             EditorApplication.update -= PollBakeComplete;
+            _app = IntPtr.Zero;
             _bakeProbesResults = new();
             _isComplete = false;
             _running = false;
@@ -690,6 +733,7 @@ namespace Glim
                 {
                     var output_dir = Bindings.FfiString.FromString(ctx.outputDir);
                     var app = Bindings.app_new(config, output_dir);
+                    _app = app;
 
                     if (app == null)
                     {
