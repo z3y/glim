@@ -3,7 +3,7 @@ use crate::{
     math::{Vector3, Vector4, vec3, vec4},
 };
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Debug, Clone)]
 pub struct VisibilityTexel {
     pub bary: Vector2,

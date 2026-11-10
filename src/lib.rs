@@ -210,7 +210,7 @@ pub struct LightmapGroup {
     pub emission_pixels: Vec<u8>,
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Clone, Copy)]
 pub struct LightmapInfo {
     pub resolution: [u32; 2],
@@ -2433,20 +2433,16 @@ fn render_lightmaps(app: &mut Glim) {
             });
         }
 
-        let lightmaps_info = Buffer::empty(
+        let lightmaps_info = Buffer::new(
             &app.vk,
             "Lightmap Info".into(),
-            (infos.len() * std::mem::size_of::<LightmapInfo>()) as u64,
-            vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT, // todo device local
+            &infos,
+            vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                infos.as_ptr() as *const u8,
-                lightmaps_info.ptr as *mut u8,
-                infos.len() * std::mem::size_of::<LightmapInfo>(),
-            );
-        }
+
         lightmaps_info
     };
 

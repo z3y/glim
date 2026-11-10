@@ -38,7 +38,7 @@ pub struct FfiMesh {
     pub cutoff: f32,
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
     pub position: Vector3,
