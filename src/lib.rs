@@ -225,7 +225,7 @@ pub fn as_bytes<T>(v: &T) -> &[u8] {
 
 fn clamp_samples(samples: u32) -> u32 {
     const MAX_SAMPLES: u32 = 65536;
-    samples.clamp(1, MAX_SAMPLES)
+    samples.clamp(0, MAX_SAMPLES)
 }
 
 fn clamp_bounces(bounces: u32) -> u32 {
@@ -1849,6 +1849,10 @@ fn bake_direct_emission(app: &mut Glim, visibility_texels_count: usize, lightmap
         return;
     }
 
+    if app.config.direct_emission_samples == 0 {
+        return;
+    }
+
     let message = format!("Baking Direct Emission");
     Log::msg(&message);
 
@@ -1954,6 +1958,10 @@ fn bake_direct_lights(
     lightmap: &Buffer,
 ) {
     if lights_count == 0 {
+        return;
+    }
+
+    if samples == 0 {
         return;
     }
 
@@ -2068,6 +2076,10 @@ fn bake_indirect(
     lightmaps_info: &Buffer,
 ) {
     if app.config.bounce_count == 0 {
+        return;
+    }
+
+    if app.config.indirect_samples == 0 {
         return;
     }
 
@@ -2224,6 +2236,10 @@ fn bake_light_probes(
     lightmap: &Buffer,
 ) {
     if app.probes.len() == 0 {
+        return;
+    }
+
+    if app.config.probe_samples == 0 {
         return;
     }
 
