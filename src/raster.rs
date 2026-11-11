@@ -163,7 +163,7 @@ pub fn render_normals(
     }
 
     for px in buffer {
-        let w = px.w.min(1.0);
+        let w = px.w;
 
         if w > 0.0 {
             let n = Vector3::new(px.x, px.y, px.z);
@@ -171,7 +171,6 @@ pub fn render_normals(
             px.x = n.x;
             px.y = n.y;
             px.z = n.z;
-            px.w = w;
         }
     }
 }
@@ -225,13 +224,12 @@ pub fn decompact_diffuse(
     }
 
     for col in buffer {
-        let w = col.w.min(1.0);
+        let w = col.w;
 
         if w > 0.0 {
             col.x /= w;
             col.y /= w;
             col.z /= w;
-            col.w = w;
         }
     }
 }
@@ -281,10 +279,9 @@ pub fn decompact_shadowmask(
     }
 
     for i in 0..buffer.len() {
-        let w = buffer_coverage[i].min(1.0);
+        let w = buffer_coverage[i];
         if w > 0.0 {
             buffer[i] /= w;
-            buffer_coverage[i] = w;
         }
     }
 }
@@ -377,7 +374,7 @@ pub fn decompact_directional(
     }
 
     for px in buffer {
-        let w = px.w.min(1.0);
+        let w = px.w;
 
         if w > 0.0 {
             let dir = Vector3::new(px.x, px.y, px.z);
@@ -385,7 +382,6 @@ pub fn decompact_directional(
             px.x = dir.x;
             px.y = dir.y;
             px.z = dir.z;
-            px.w = w;
         } else {
             px.x = 0.5;
             px.y = 0.5;
@@ -470,13 +466,12 @@ pub fn decompact_combined_sh(
     }
 
     for px in buffer {
-        let w = px.w.min(1.0);
+        let w = px.w;
 
         if w > 0.0 {
             px.x /= w;
             px.y /= w;
             px.z /= w;
-            px.w = w;
         }
     }
 }
