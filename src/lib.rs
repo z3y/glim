@@ -1320,6 +1320,7 @@ impl Glim {
             Mesh {
                 vertices: Vec::new(),
                 indices: Vec::new(),
+                tangents: Vec::new(),
                 main_uvs: Vec::new(),
                 transparent: false,
                 no_shadows: false,
@@ -1327,6 +1328,7 @@ impl Glim {
             Mesh {
                 vertices: Vec::new(),
                 indices: Vec::new(),
+                tangents: Vec::new(),
                 main_uvs: Vec::new(),
                 transparent: true,
                 no_shadows: false,
@@ -1334,6 +1336,7 @@ impl Glim {
             Mesh {
                 vertices: Vec::new(),
                 indices: Vec::new(),
+                tangents: Vec::new(),
                 main_uvs: Vec::new(),
                 transparent: false,
                 no_shadows: true,
@@ -1341,6 +1344,7 @@ impl Glim {
             Mesh {
                 vertices: Vec::new(),
                 indices: Vec::new(),
+                tangents: Vec::new(),
                 main_uvs: Vec::new(),
                 transparent: true,
                 no_shadows: true,
@@ -2738,6 +2742,7 @@ fn render_lightmaps(app: &mut Glim) {
         app.benchmarks.push(("Diffuse Save", elapsed));
 
         if app.config.lightmap_mode == LightmapMode::DominantDirection {
+            let tangent_space = true;
             decompact_directional(
                 &mut buffer,
                 &texels.visibility,
@@ -2745,6 +2750,7 @@ fn render_lightmaps(app: &mut Glim) {
                 &readback_buffer_slice,
                 &app.gpu_mesh.merged_mesh,
                 &group,
+                tangent_space,
             );
 
             if settings.denoise {
@@ -2784,10 +2790,10 @@ fn render_lightmaps(app: &mut Glim) {
                 save_tga(full_path, resolution, resolution, &buffer_copy, false).unwrap();
             }
 
-            encode_directional(&mut buffer, &buffer_copy);
+            encode_directional(&mut buffer, &buffer_copy, tangent_space);
 
             if settings.fix_seams {
-                let channels = 4;
+                let channels = if tangent_space { 3 } else { 4 };
                 fix_seams(
                     &mut buffer,
                     resolution as u32,
@@ -2803,10 +2809,12 @@ fn render_lightmaps(app: &mut Glim) {
                 block_average_fill(&mut buffer, &mut buffer_copy, &mask, resolution);
             }
 
+            let alpha = if tangent_space { false } else { true };
+
             let full_path = app
                 .output_dir
                 .join(format!("Lightmap-{}_Directional.tga", group_index));
-            save_tga(full_path, resolution, resolution, &buffer, true).unwrap();
+            save_tga(full_path, resolution, resolution, &buffer, alpha).unwrap();
         }
 
         if app.config.lightmap_mode == LightmapMode::CombinedSH {

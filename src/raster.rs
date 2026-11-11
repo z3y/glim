@@ -1,6 +1,7 @@
 use crate::{
     LightmapGroup, Mesh, Vector2,
-    math::{Vector3, Vector4, vec3, vec4},
+    math::{Vector3, Vector4, vec3, vec4, vec4_slice},
+    mesh::encode_normal_octahedron,
 };
 
 #[repr(C, align(16))]
@@ -286,26 +287,45 @@ pub fn decompact_shadowmask(
     }
 }
 
-pub fn encode_directional(pixels: &mut [Vector4], normals: &[Vector4]) {
+pub fn encode_directional(pixels: &mut [Vector4], normals: &[Vector4], tangent_space: bool) {
     for (i, px) in pixels.iter_mut().enumerate() {
         let mut dir = Vector3::new(px.x, px.y, px.z);
 
         if dir.length() > 0.0 {
             dir = dir.normalize();
-            let n = vec3(normals[i].x, normals[i].y, normals[i].z);
+            let n = if tangent_space {
+                vec3(0.0, 0.0, 1.0)
+            } else {
+                vec3(normals[i].x, normals[i].y, normals[i].z)
+            };
+
             let nol = dir.dot(n).clamp(0.0, 1.0);
 
-            dir.z = -dir.z; // unity
+            if tangent_space {
+                let oct = encode_normal_octahedron(dir);
 
-            px.x = dir.x * 0.5 + 0.5;
-            px.y = dir.y * 0.5 + 0.5;
-            px.z = dir.z * 0.5 + 0.5;
-            px.w = nol * 0.5 + 0.5;
+                px.x = oct.x * 0.5 + 0.5;
+                px.y = oct.y * 0.5 + 0.5;
+                px.z = nol;
+            } else {
+                dir.z = -dir.z; // unity
+                px.x = dir.x * 0.5 + 0.5;
+                px.y = dir.y * 0.5 + 0.5;
+                px.z = dir.z * 0.5 + 0.5;
+                px.w = nol * 0.5 + 0.5;
+            }
         } else {
-            px.x = 0.5;
-            px.y = 0.5;
-            px.z = 0.5;
-            px.w = 0.5;
+            if tangent_space {
+                px.x = 0.5;
+                px.y = 0.5;
+                px.z = 0.0;
+                px.w = 0.0;
+            } else {
+                px.x = 0.5;
+                px.y = 0.5;
+                px.z = 0.5;
+                px.w = 0.5;
+            };
         }
     }
 }
@@ -317,6 +337,7 @@ pub fn decompact_directional(
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
+    tangent_space: bool,
 ) {
     let resolution = group.settings.width as usize;
     let group_id = group.id;
@@ -336,7 +357,12 @@ pub fn decompact_directional(
             continue;
         }
         let i0 = mesh.indices[(primitive_id as usize) * 3 + 0] as usize;
+        let i1 = mesh.indices[(primitive_id as usize) * 3 + 1] as usize;
+        let i2 = mesh.indices[(primitive_id as usize) * 3 + 2] as usize;
+
         let v0 = mesh.vertices[i0];
+        let v1 = mesh.vertices[i1];
+        let v2 = mesh.vertices[i2];
 
         if v0.group() != group_id {
             continue;
@@ -363,9 +389,34 @@ pub fn decompact_directional(
             continue;
         }
 
+        let u = texel.bary.x;
+        let v = texel.bary.y;
+        let w = 1.0 - u - v;
+
         let luminance = diffuse.luminance();
         if luminance > 0.0 {
-            let dir = (directional / luminance).normalize();
+            let mut dir = (directional / luminance).normalize();
+
+            if tangent_space {
+                let n0 = v0.decode_normal();
+                let n1 = v1.decode_normal();
+                let n2 = v2.decode_normal();
+
+                let normal = (n0 * w + n1 * u + n2 * v).normalize();
+
+                let t0 = vec4_slice(mesh.tangents[i0]);
+                let t1 = vec4_slice(mesh.tangents[i1]);
+                let t2 = vec4_slice(mesh.tangents[i2]);
+
+                let tangent4 = t0 * w + t1 * u + t2 * v;
+                let tangent = vec3(tangent4.x, tangent4.y, tangent4.z);
+                let tangent = (tangent - normal * normal.dot(tangent)).normalize();
+
+                let handedness = if tangent4.w < 0.0 { -1.0 } else { 1.0 };
+                let bitangent = normal.cross(tangent) * handedness;
+
+                dir = vec3(dir.dot(tangent), dir.dot(bitangent), dir.dot(normal));
+            }
             let index = texel.index(resolution);
 
             let col = vec4(dir.x * cov, dir.y * cov, dir.z * cov, cov);

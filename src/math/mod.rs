@@ -20,3 +20,13 @@ pub const fn vec3(x: f32, y: f32, z: f32) -> Vector3 {
 pub const fn vec4(x: f32, y: f32, z: f32, w: f32) -> Vector4 {
     Vector4 { x, y, z, w }
 }
+
+#[inline]
+pub const fn vec4_slice(slice: [f32; 4]) -> Vector4 {
+    Vector4 {
+        x: slice[0],
+        y: slice[1],
+        z: slice[2],
+        w: slice[3],
+    }
+}

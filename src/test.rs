@@ -291,6 +291,7 @@ mod tests {
             for primitive in mesh.primitives() {
                 let mut vertices = Vec::<Vector3>::new();
                 let mut normals = Vec::<Vector3>::new();
+                let mut tangents = Vec::<[f32; 4]>::new();
                 let mut uvs = Vec::<Vector2>::new();
                 let mut indices = Vec::<u32>::new();
 
@@ -307,6 +308,12 @@ mod tests {
                     for n in iter {
                         let v = Vector3::new(n[0], n[1], n[2]);
                         normals.push(v);
+                    }
+                }
+
+                if let Some(iter) = reader.read_tangents() {
+                    for t in iter {
+                        tangents.push(t);
                     }
                 }
 
@@ -334,11 +341,20 @@ mod tests {
                     indices.extend(iter.into_u32());
                 }
 
+                if tangents.is_empty() && !uvs.is_empty() && !normals.is_empty() {
+                    tangents = generate_tangents(&vertices, &normals, &uvs, &indices);
+                }
+
+                assert!(tangents.len() == vertices.len());
+                assert!(uvs.len() == vertices.len());
+                assert!(normals.len() == vertices.len());
+
                 let mesh = FfiMesh {
                     vertices: vertices.as_ptr(),
                     normals: normals.as_ptr(),
                     lightmap_uvs: uvs.as_ptr(),
                     main_uvs: uvs.as_ptr(),
+                    tangents: tangents.as_ptr(),
                     indices: indices.as_ptr(),
                     vertices_length: vertices.len() as u32,
                     indices_length: indices.len() as u32,
@@ -357,6 +373,102 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    fn generate_tangents(
+        positions: &[Vector3],
+        normals: &[Vector3],
+        uvs: &[Vector2],
+        indices: &[u32],
+    ) -> Vec<[f32; 4]> {
+        let n = positions.len();
+        let mut tan = vec![[0.0f32; 3]; n];
+        let mut bitan = vec![[0.0f32; 3]; n];
+
+        for tri in indices.chunks_exact(3) {
+            let (i0, i1, i2) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+
+            let (p0, p1, p2) = (positions[i0], positions[i1], positions[i2]);
+            let (uv0, uv1, uv2) = (uvs[i0], uvs[i1], uvs[i2]);
+
+            let e1 = [p1.x - p0.x, p1.y - p0.y, p1.z - p0.z];
+            let e2 = [p2.x - p0.x, p2.y - p0.y, p2.z - p0.z];
+
+            let du1 = uv1.x - uv0.x;
+            let dv1 = uv1.y - uv0.y;
+            let du2 = uv2.x - uv0.x;
+            let dv2 = uv2.y - uv0.y;
+
+            let det = du1 * dv2 - du2 * dv1;
+            if det.abs() < 1e-12 {
+                continue; // degenerate UVs, skip this triangle
+            }
+            let r = 1.0 / det;
+
+            let t = [
+                (e1[0] * dv2 - e2[0] * dv1) * r,
+                (e1[1] * dv2 - e2[1] * dv1) * r,
+                (e1[2] * dv2 - e2[2] * dv1) * r,
+            ];
+            let b = [
+                (e2[0] * du1 - e1[0] * du2) * r,
+                (e2[1] * du1 - e1[1] * du2) * r,
+                (e2[2] * du1 - e1[2] * du2) * r,
+            ];
+
+            for &i in &[i0, i1, i2] {
+                for k in 0..3 {
+                    tan[i][k] += t[k];
+                    bitan[i][k] += b[k];
+                }
+            }
+        }
+
+        let mut out = Vec::with_capacity(n);
+        for i in 0..n {
+            let nrm = [normals[i].x, normals[i].y, normals[i].z];
+            let t = tan[i];
+
+            // Gram-Schmidt: t' = normalize(t - n * dot(n, t))
+            let d = nrm[0] * t[0] + nrm[1] * t[1] + nrm[2] * t[2];
+            let mut o = [t[0] - nrm[0] * d, t[1] - nrm[1] * d, t[2] - nrm[2] * d];
+            let len = (o[0] * o[0] + o[1] * o[1] + o[2] * o[2]).sqrt();
+
+            if len > 1e-8 {
+                o = [o[0] / len, o[1] / len, o[2] / len];
+            } else {
+                // fallback: any vector perpendicular to the normal
+                let axis = if nrm[0].abs() < 0.9 {
+                    [1.0, 0.0, 0.0]
+                } else {
+                    [0.0, 1.0, 0.0]
+                };
+                let d = nrm[0] * axis[0] + nrm[1] * axis[1] + nrm[2] * axis[2];
+                o = [
+                    axis[0] - nrm[0] * d,
+                    axis[1] - nrm[1] * d,
+                    axis[2] - nrm[2] * d,
+                ];
+                let l = (o[0] * o[0] + o[1] * o[1] + o[2] * o[2]).sqrt();
+                o = [o[0] / l, o[1] / l, o[2] / l];
+            }
+
+            // handedness: sign of dot(cross(n, t), bitangent)
+            let c = [
+                nrm[1] * o[2] - nrm[2] * o[1],
+                nrm[2] * o[0] - nrm[0] * o[2],
+                nrm[0] * o[1] - nrm[1] * o[0],
+            ];
+            let b = bitan[i];
+            let w = if c[0] * b[0] + c[1] * b[1] + c[2] * b[2] < 0.0 {
+                -1.0
+            } else {
+                1.0
+            };
+
+            out.push([o[0], o[1], o[2], w]);
+        }
+        out
     }
 
     #[unsafe(no_mangle)]

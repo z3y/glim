@@ -20,6 +20,7 @@ pub struct FfiMesh {
     pub normals: *const Vector3,
     pub lightmap_uvs: *const Vector2,
     pub main_uvs: *const Vector2,
+    pub tangents: *const [f32; 4],
     pub indices: *const u32,
     pub vertices_length: u32,
     pub indices_length: u32,
@@ -96,6 +97,7 @@ impl Vertex {
 #[derive(Debug, Clone)]
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
+    pub tangents: Vec<[f32; 4]>,
     pub indices: Vec<u32>,
     pub main_uvs: Vec<[f32; 4]>,
 
@@ -230,6 +232,7 @@ impl Mesh {
         let normals = unsafe { slice::from_raw_parts(mesh.normals, vertex_count) };
         let lightmap_uvs = unsafe { slice::from_raw_parts(mesh.lightmap_uvs, vertex_count) };
         let main_uvs = unsafe { slice::from_raw_parts(mesh.main_uvs, vertex_count) };
+        let tangents = unsafe { slice::from_raw_parts(mesh.tangents, vertex_count) };
 
         let unity = system == CoordinateSystem::Unity;
 
@@ -241,6 +244,7 @@ impl Mesh {
         let backface_gi = mesh.backface_gi;
 
         self.vertices.reserve(vertex_count);
+        self.tangents.reserve(vertex_count);
 
         for i in 0..vertex_count {
             let mut normal = normals[i];
@@ -275,6 +279,8 @@ impl Mesh {
             vertex.position.transform_space(system);
 
             self.vertices.push(vertex);
+
+            self.tangents.push(tangents[i]);
         }
 
         self.main_uvs.reserve(index_count);
@@ -318,6 +324,7 @@ impl Mesh {
 
         self.vertices.extend(&mesh.vertices);
         self.main_uvs.extend(&mesh.main_uvs);
+        self.tangents.extend(&mesh.tangents);
         self.indices.extend(mesh.indices.iter().map(|i| i + offset));
     }
 }
@@ -748,6 +755,7 @@ impl GpuMesh {
             main_uv_buffer: Buffer::null(),
             merged_mesh: Mesh {
                 vertices: Vec::new(),
+                tangents: Vec::new(),
                 indices: Vec::new(),
                 main_uvs: Vec::new(),
                 transparent: false,
