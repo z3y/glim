@@ -840,6 +840,7 @@ namespace Glim
                             fixed (Vector3* nPtr = data.normals)
                             fixed (Vector2* lmuvPtr = data.lightmapUVs)
                             fixed (Vector2* mainuvPtr = data.mainUVs)
+                            fixed (Vector4* tangentsPtr = data.tangents)
                             fixed (int* iPtr = data.indices)
                             {
                                 var exportedMesh = new Bindings.Mesh
@@ -848,6 +849,7 @@ namespace Glim
                                     normals = nPtr,
                                     lightmapUVs = lmuvPtr,
                                     mainUVs = mainuvPtr,
+                                    tangents = tangentsPtr,
                                     indices = (uint*)iPtr,
                                     vertices_length = (uint)data.vertices.Length,
                                     indices_length = (uint)data.indices.Length,

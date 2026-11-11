@@ -22,6 +22,7 @@ pub struct FfiMesh {
     pub main_uvs: *const Vector2,
     pub tangents: *const [f32; 4],
     pub indices: *const u32,
+
     pub vertices_length: u32,
     pub indices_length: u32,
 
@@ -98,6 +99,7 @@ impl Vertex {
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub tangents: Vec<[f32; 4]>,
+    pub original_normals: Vec<Vector3>,
     pub indices: Vec<u32>,
     pub main_uvs: Vec<[f32; 4]>,
 
@@ -137,6 +139,11 @@ pub fn decode_normal_octahedron(p: Vector2) -> Vector3 {
     }
 
     n.normalize()
+}
+
+pub fn encode_hemi_octahedron(n: Vector3) -> Vector2 {
+    let inv_l1 = 1.0 / (n.x.abs() + n.y.abs() + n.z.abs());
+    Vector2::new(n.x * inv_l1, n.y * inv_l1)
 }
 
 use std::collections::HashMap;
@@ -245,6 +252,7 @@ impl Mesh {
 
         self.vertices.reserve(vertex_count);
         self.tangents.reserve(vertex_count);
+        self.original_normals.reserve(vertex_count);
 
         for i in 0..vertex_count {
             let mut normal = normals[i];
@@ -281,6 +289,7 @@ impl Mesh {
             self.vertices.push(vertex);
 
             self.tangents.push(tangents[i]);
+            self.original_normals.push(normals[i]);
         }
 
         self.main_uvs.reserve(index_count);
@@ -325,6 +334,7 @@ impl Mesh {
         self.vertices.extend(&mesh.vertices);
         self.main_uvs.extend(&mesh.main_uvs);
         self.tangents.extend(&mesh.tangents);
+        self.original_normals.extend(&mesh.original_normals);
         self.indices.extend(mesh.indices.iter().map(|i| i + offset));
     }
 }
@@ -760,6 +770,7 @@ impl GpuMesh {
                 main_uvs: Vec::new(),
                 transparent: false,
                 no_shadows: false,
+                original_normals: Vec::new(),
             },
         }
     }

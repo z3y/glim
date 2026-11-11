@@ -215,6 +215,7 @@ namespace Glim
             public Vector3* normals;
             public Vector2* lightmapUVs;
             public Vector2* mainUVs;
+            public Vector4* tangents;
             public uint* indices;
 
             public uint vertices_length;

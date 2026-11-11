@@ -1,7 +1,7 @@
 use crate::{
     LightmapGroup, Mesh, Vector2,
     math::{Vector3, Vector4, vec3, vec4, vec4_slice},
-    mesh::encode_normal_octahedron,
+    mesh::{encode_hemi_octahedron, encode_normal_octahedron},
 };
 
 #[repr(C, align(16))]
@@ -302,11 +302,15 @@ pub fn encode_directional(pixels: &mut [Vector4], normals: &[Vector4], tangent_s
             let nol = dir.dot(n).clamp(0.0, 1.0);
 
             if tangent_space {
-                let oct = encode_normal_octahedron(dir);
-
+                let oct = encode_hemi_octahedron(dir);
                 px.x = oct.x * 0.5 + 0.5;
                 px.y = oct.y * 0.5 + 0.5;
                 px.z = nol;
+
+                // px.x = dir.x * 0.5 + 0.5;
+                // px.y = dir.y * 0.5 + 0.5;
+                // px.z = dir.z * 0.5 + 0.5;
+                // px.w = nol;
             } else {
                 dir.z = -dir.z; // unity
                 px.x = dir.x * 0.5 + 0.5;
@@ -318,7 +322,8 @@ pub fn encode_directional(pixels: &mut [Vector4], normals: &[Vector4], tangent_s
             if tangent_space {
                 px.x = 0.5;
                 px.y = 0.5;
-                px.z = 0.0;
+                // px.z = 0.0;
+                px.z = 0.5;
                 px.w = 0.0;
             } else {
                 px.x = 0.5;
@@ -389,18 +394,20 @@ pub fn decompact_directional(
             continue;
         }
 
-        let u = texel.bary.x;
-        let v = texel.bary.y;
-        let w = 1.0 - u - v;
-
         let luminance = diffuse.luminance();
         if luminance > 0.0 {
             let mut dir = (directional / luminance).normalize();
 
             if tangent_space {
-                let n0 = v0.decode_normal();
-                let n1 = v1.decode_normal();
-                let n2 = v2.decode_normal();
+                let u = texel.bary.x;
+                let v = texel.bary.y;
+                let w = 1.0 - u - v;
+
+                let n0 = mesh.original_normals[i0];
+                let n1 = mesh.original_normals[i1];
+                let n2 = mesh.original_normals[i2];
+
+                dir.z = -dir.z; //unity
 
                 let normal = (n0 * w + n1 * u + n2 * v).normalize();
 

@@ -1028,6 +1028,7 @@ namespace Glim
             public Vector3[] normals;
             public Vector2[] lightmapUVs;
             public Vector2[] mainUVs;
+            public Vector4[] tangents;
             public int[] indices;
             public uint groupIndex;
             public bool backfaceGI;
@@ -1050,12 +1051,14 @@ namespace Glim
             var normals = new List<Vector3>();
             var lightmapUVs = new List<Vector2>();
             var mainUVs = new List<Vector2>();
+            var tangents = new List<Vector4>();
             var indices = new List<int>();
 
             var localVertices = new List<Vector3>();
             var localNormals = new List<Vector3>();
             var localLightmapUvs = new List<Vector2>();
             var localMainUvs = new List<Vector2>();
+            var localTangents = new List<Vector4>();
             var localIndices = new List<int>();
             var remap = new Dictionary<int, int>();
 
@@ -1094,6 +1097,7 @@ namespace Glim
                 }
 
                 mesh.GetUVs(0, mainUVs);
+                mesh.GetTangents(tangents);
 
                 var enlightenVertexStream = mr.enlightenVertexStream;
                 var additionalVertexStreams = mr.additionalVertexStreams;
@@ -1180,6 +1184,7 @@ namespace Glim
                     localLightmapUvs.Clear();
                     localMainUvs.Clear();
                     localIndices.Clear();
+                    localTangents.Clear();
                     localIndices.Capacity = indices.Count;
 
                     for (int j = 0; j < indices.Count; j++)
@@ -1195,9 +1200,25 @@ namespace Glim
                             localNormals.Add(normals[globalIndex]);
                             localLightmapUvs.Add(lightmapUVs[globalIndex]);
                             localMainUvs.Add(mainUVs[globalIndex]);
+                            localTangents.Add(tangents[globalIndex]);
                         }
 
                         localIndices.Add(localIndex);
+                    }
+
+                    var det = transform.localToWorldMatrix.determinant;
+                    for (int ti = 0; ti < localTangents.Count; ti++)
+                    {
+                        Vector3 tangentWS = transform.TransformDirection(
+                            new Vector3(localTangents[ti].x, localTangents[ti].y, localTangents[ti].z)
+                        ).normalized;
+
+                        localTangents[ti] = new Vector4(
+                            tangentWS.x,
+                            tangentWS.y,
+                            tangentWS.z,
+                            localTangents[ti].w * det
+                        );
                     }
 
                     if (localMainUvs.Count != localLightmapUvs.Count)
@@ -1244,7 +1265,7 @@ namespace Glim
                         Debug.LogError($"GameObject {mr.name} with Mesh {mesh.name} has an invalid mesh.", mr.gameObject);
                         continue;
                     }
-
+                    // todo tangents for terrain
                     var data = new MeshData
                     {
                         vertices = localVertices.ToArray(),
@@ -1252,6 +1273,7 @@ namespace Glim
                         lightmapUVs = localLightmapUvs.ToArray(),
                         mainUVs = localMainUvs.ToArray(),
                         indices = localIndices.ToArray(),
+                        tangents = localTangents.ToArray(),
                         groupIndex = groupIndex,
                         backfaceGI = backfaceGI,
                         transparent = transparent,
