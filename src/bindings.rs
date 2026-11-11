@@ -218,6 +218,8 @@ static CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub static LIGHT_UPDATE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
+pub static LIGHT_UPDATE_READY: AtomicBool = AtomicBool::new(false);
+
 pub fn is_cancelled() -> bool {
     CANCEL_REQUESTED.load(Ordering::Relaxed)
 }
@@ -230,6 +232,9 @@ pub extern "C" fn app_request_cancel() {
 #[unsafe(no_mangle)]
 pub extern "C" fn app_new(config: GlimConfig, output_dir: FfiString) -> *mut Glim {
     CANCEL_REQUESTED.store(false, Ordering::Relaxed);
+    LIGHT_UPDATE_READY.store(false, Ordering::Relaxed);
+    LIGHT_UPDATE_REQUESTED.store(false, Ordering::Relaxed);
+
     let result = catch_unwind(AssertUnwindSafe(|| {
         let output_dir = PathBuf::from(output_dir.to_string());
         let app = Glim::new(config.clone(), output_dir);
@@ -311,9 +316,17 @@ pub extern "C" fn app_add_light(app: *mut Glim, mut light: Light) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_clear_lights(app: *mut Glim) {
+pub extern "C" fn app_clear_lights(app: *mut Glim) -> bool {
     if app.is_null() {
-        return;
+        return false;
+    }
+
+    if !LIGHT_UPDATE_READY.load(Ordering::Acquire) {
+        return false;
+    }
+
+    if LIGHT_UPDATE_REQUESTED.load(Ordering::Acquire) {
+        return false;
     }
 
     let app = unsafe { &mut *app };
@@ -325,6 +338,8 @@ pub extern "C" fn app_clear_lights(app: *mut Glim) {
     if let Err(err) = result {
         handle_unwind_error(app.config.log_callback, err);
     }
+
+    true
 }
 
 #[unsafe(no_mangle)]
@@ -333,15 +348,7 @@ pub extern "C" fn app_upload_lights(app: *mut Glim) {
         return;
     }
 
-    let app = unsafe { &mut *app };
-
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        LIGHT_UPDATE_REQUESTED.store(true, Ordering::Relaxed);
-    }));
-
-    if let Err(err) = result {
-        handle_unwind_error(app.config.log_callback, err);
-    }
+    LIGHT_UPDATE_REQUESTED.store(true, Ordering::Relaxed);
 }
 
 #[unsafe(no_mangle)]

@@ -669,6 +669,8 @@ fn render_preview(app: &mut Glim) {
 
     let hardware_rt = app.config.hardware_rt && app.vk.as_device.is_some();
 
+    LIGHT_UPDATE_READY.store(true, Ordering::Release);
+
     unsafe {
         while glfwWindowShouldClose(window) == 0 {
             glfwPollEvents();
@@ -685,7 +687,7 @@ fn render_preview(app: &mut Glim) {
                     &mut app.window_title,
                     push.sample_index,
                     push.sample_count,
-                    app.cpu_lights.len(),
+                    push.light_count as usize,
                     hardware_rt,
                     w,
                     h,
@@ -704,7 +706,7 @@ fn render_preview(app: &mut Glim) {
 
             update_camera(app, delta_time);
 
-            if LIGHT_UPDATE_REQUESTED.load(Ordering::Relaxed) {
+            if LIGHT_UPDATE_REQUESTED.load(Ordering::Acquire) {
                 let changed = app.upload_lights();
                 if changed {
                     app.preview_initialized = false;
@@ -1406,6 +1408,7 @@ impl Glim {
 
     fn upload_lights(&mut self) -> bool {
         if self.cpu_lights.len() == 0 {
+            LIGHT_UPDATE_REQUESTED.store(false, Ordering::Relaxed);
             return false;
         }
 
@@ -1414,22 +1417,24 @@ impl Glim {
         let fingerprint = h.finish();
 
         if self.cpu_lights_hash == fingerprint {
+            LIGHT_UPDATE_REQUESTED.store(false, Ordering::Relaxed);
             return false;
         }
 
         let capacity = self.gpu_lights_staging.bytes as usize / size_of::<Light>();
+        assert!(capacity >= self.cpu_lights.len());
 
-        if capacity < self.cpu_lights.len() {
-            println!("Resizing Lights Staging Buffer");
-            self.gpu_lights_staging.destroy(&self.vk);
-            self.gpu_lights_staging = Buffer::empty(
-                &self.vk,
-                String::from("Lights Staging"),
-                (self.cpu_lights.len() * size_of::<Light>()) as u64,
-                vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            );
-        }
+        // if capacity < self.cpu_lights.len() {
+        //     Log::msg("Resizing Lights Buffer");
+        //     self.gpu_lights_staging.destroy(&self.vk);
+        //     self.gpu_lights_staging = Buffer::empty(
+        //         &self.vk,
+        //         String::from("Lights Staging"),
+        //         (self.cpu_lights.len() * size_of::<Light>()) as u64,
+        //         vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
+        //         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        //     );
+        // }
 
         let lights: &mut [Light] = unsafe {
             std::slice::from_raw_parts_mut(
@@ -1462,10 +1467,9 @@ impl Glim {
         }
         self.vk.end_single_use_cmd(cmd);
 
-        LIGHT_UPDATE_REQUESTED.store(false, Ordering::Relaxed);
-
         self.cpu_lights_hash = fingerprint;
 
+        LIGHT_UPDATE_REQUESTED.store(false, Ordering::Relaxed);
         true
     }
 

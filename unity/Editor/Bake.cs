@@ -253,12 +253,14 @@ namespace Glim
                 _context.bakeLights[i] = l;
             }
 
-            Bindings.app_clear_lights(_app);
-            foreach (var light in _context.bakeLights)
+            if (Bindings.app_clear_lights(_app))
             {
-                Bindings.app_add_light(_app, light);
+                foreach (var light in _context.bakeLights)
+                {
+                    Bindings.app_add_light(_app, light);
+                }
+                Bindings.app_upload_lights(_app);
             }
-            Bindings.app_upload_lights(_app);
         }
 
         static void PollBakeComplete()
@@ -800,7 +802,6 @@ namespace Glim
                 {
                     var output_dir = Bindings.FfiString.FromString(ctx.outputDir);
                     var app = Bindings.app_new(config, output_dir);
-                    _app = app;
 
                     if (app == null)
                     {
@@ -915,6 +916,8 @@ namespace Glim
 
                     Bindings.app_set_skybox(app, _context.skyboxPixels, (uint)_context.skyboxPixels.Length * 4, size, size);
 
+                    _app = app;
+
                     Bindings.app_run(app);
 
                     Bindings.app_destroy(app);
@@ -925,6 +928,7 @@ namespace Glim
                 {
                     _running = false;
                     _isComplete = true;
+                    _app = IntPtr.Zero;
                     PrintBakeLogs();
                     Debug.LogException(e);
                 }
@@ -933,8 +937,6 @@ namespace Glim
             thread.SetApartmentState(ApartmentState.STA);
             thread.IsBackground = true;
             thread.Start();
-
-
         }
 
         public static string CreateTextureImporterMeta(string guid, int type)
