@@ -10,7 +10,9 @@ pub enum MetaType {
 #[rustfmt::skip]
 pub fn write_unity_texture_meta(ty: MetaType, texture_path: &PathBuf, guid: &String) {
 
-    let path = texture_path.with_extension("meta");
+    let mut os = texture_path.as_os_str().to_owned();
+    os.push(".meta");
+    let path = PathBuf::from(os);
 
     if path.exists() {
         return;
