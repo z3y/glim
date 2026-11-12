@@ -2746,7 +2746,7 @@ fn render_lightmaps(app: &mut Glim) {
         app.benchmarks.push(("Diffuse Save", elapsed));
 
         if app.config.lightmap_mode == LightmapMode::DominantDirection {
-            let tangent_space = true;
+            let tangent_space = false;
             decompact_directional(
                 &mut buffer,
                 &texels.visibility,

@@ -68,7 +68,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
         current *= MISWeight(pdf, bsdfPdf);
         color.rgb += current * NoL;
-        dominantDirection.xyz += L * Luminance(current * NoL);
+        dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
     }
 
@@ -104,14 +104,14 @@ void main(uint3 threadID: SV_DispatchThreadID)
                         float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
                         emission *= MISWeight(bsdfPdf, lightPdf);
                         color.rgb += emission;
-                        dominantDirection.xyz += ray.D * Luminance(emission);
+                        dominantDirection.xyz += ray.D * Luminance(emission * sampleScale);
                         AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
                     }
                 }
                 else
                 {
                     color.rgb += emission;
-                    dominantDirection.xyz += ray.D * Luminance(emission);
+                    dominantDirection.xyz += ray.D * Luminance(emission * sampleScale);
                     AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
                 }
             }
@@ -121,7 +121,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     {
         float3 current = SampleSkybox(ray.D);
         color.rgb += current;
-        dominantDirection.xyz += ray.D * Luminance(current);
+        dominantDirection.xyz += ray.D * Luminance(current * sampleScale);
         AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
     }
 

@@ -1015,6 +1015,13 @@ namespace Glim
 
             if (!(hasUv0 || hasUv1))
             {
+                Debug.LogError("Lightmap static mesh has no UV0 and no UV1.", mesh);
+                return false;
+            }
+
+            if (!mesh.HasVertexAttribute(VertexAttribute.Normal))
+            {
+                Debug.LogError("Lightmap static mesh has no normals.", mesh);
                 return false;
             }
 
@@ -1084,10 +1091,15 @@ namespace Glim
                     continue;
                 }
 
+                bool hasTangents = mesh.HasVertexAttribute(VertexAttribute.Tangent);
+                bool hasUV0 = mesh.HasVertexAttribute(VertexAttribute.TexCoord0);
+                bool hasUV1 = mesh.HasVertexAttribute(VertexAttribute.TexCoord1);
+
                 mesh.GetVertices(vertices);
                 mesh.GetNormals(normals);
 
-                if (mesh.HasVertexAttribute(VertexAttribute.TexCoord1))
+                // meshes at this stage should have either UV0 or UV1
+                if (hasUV1)
                 {
                     mesh.GetUVs(1, lightmapUVs);
                 }
@@ -1096,8 +1108,21 @@ namespace Glim
                     mesh.GetUVs(0, lightmapUVs);
                 }
 
-                mesh.GetUVs(0, mainUVs);
-                mesh.GetTangents(tangents);
+                if (hasUV0)
+                {
+                    mesh.GetUVs(0, mainUVs);
+                }
+                else
+                {
+                    mesh.GetUVs(1, mainUVs);
+                }
+
+
+                if (hasTangents)
+                {
+                    mesh.GetTangents(tangents);
+                }
+
 
                 var enlightenVertexStream = mr.enlightenVertexStream;
                 var additionalVertexStreams = mr.additionalVertexStreams;
@@ -1200,25 +1225,36 @@ namespace Glim
                             localNormals.Add(normals[globalIndex]);
                             localLightmapUvs.Add(lightmapUVs[globalIndex]);
                             localMainUvs.Add(mainUVs[globalIndex]);
-                            localTangents.Add(tangents[globalIndex]);
+
+                            if (hasTangents)
+                            {
+                                localTangents.Add(tangents[globalIndex]);
+                            }
+                            else
+                            {
+                                localTangents.Add(Vector4.zero);
+                            }
                         }
 
                         localIndices.Add(localIndex);
                     }
 
                     var det = transform.localToWorldMatrix.determinant;
-                    for (int ti = 0; ti < localTangents.Count; ti++)
+                    if (hasTangents)
                     {
-                        Vector3 tangentWS = transform.TransformDirection(
-                            new Vector3(localTangents[ti].x, localTangents[ti].y, localTangents[ti].z)
-                        ).normalized;
+                        for (int ti = 0; ti < localTangents.Count; ti++)
+                        {
+                            Vector3 tangentWS = transform.TransformDirection(
+                                new Vector3(localTangents[ti].x, localTangents[ti].y, localTangents[ti].z)
+                            ).normalized;
 
-                        localTangents[ti] = new Vector4(
-                            tangentWS.x,
-                            tangentWS.y,
-                            tangentWS.z,
-                            localTangents[ti].w * det
-                        );
+                            localTangents[ti] = new Vector4(
+                                tangentWS.x,
+                                tangentWS.y,
+                                tangentWS.z,
+                                localTangents[ti].w * det
+                            );
+                        }
                     }
 
                     if (localMainUvs.Count != localLightmapUvs.Count)

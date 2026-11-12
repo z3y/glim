@@ -153,7 +153,7 @@ pub fn render_normals(
         let n1 = v1.decode_normal();
         let n2 = v2.decode_normal();
 
-        let normal = n0 * w + n1 * u + n2 * v;
+        let normal = (n0 * w + n1 * u + n2 * v).normalize();
 
         let cov = coverage[compacted_index];
 
@@ -292,31 +292,36 @@ pub fn encode_directional(pixels: &mut [Vector4], normals: &[Vector4], tangent_s
         let mut dir = Vector3::new(px.x, px.y, px.z);
 
         if dir.length() > 0.0 {
-            dir = dir.normalize();
+            dir = if dir.length() > 1.0 {
+                dir.normalize()
+            } else {
+                dir
+            };
+
             let n = if tangent_space {
                 vec3(0.0, 0.0, 1.0)
             } else {
                 vec3(normals[i].x, normals[i].y, normals[i].z)
             };
 
-            let nol = dir.dot(n).clamp(0.0, 1.0);
+            let nol = dir.dot(n);
 
             if tangent_space {
-                let oct = encode_hemi_octahedron(dir);
-                px.x = oct.x * 0.5 + 0.5;
-                px.y = oct.y * 0.5 + 0.5;
-                px.z = nol;
+                // let oct = encode_hemi_octahedron(dir);
+                // px.x = oct.x * 0.5 + 0.5;
+                // px.y = oct.y * 0.5 + 0.5;
+                // px.z = nol;
 
-                // px.x = dir.x * 0.5 + 0.5;
-                // px.y = dir.y * 0.5 + 0.5;
-                // px.z = dir.z * 0.5 + 0.5;
-                // px.w = nol;
+                px.x = dir.x * 0.5 + 0.5;
+                px.y = dir.y * 0.5 + 0.5;
+                px.z = dir.z * 0.5 + 0.5;
+                px.w = nol;
             } else {
                 dir.z = -dir.z; // unity
                 px.x = dir.x * 0.5 + 0.5;
                 px.y = dir.y * 0.5 + 0.5;
                 px.z = dir.z * 0.5 + 0.5;
-                px.w = nol * 0.5 + 0.5;
+                px.w = (nol * 0.5 + 0.5).max(1e-4);
             }
         } else {
             if tangent_space {
@@ -366,8 +371,6 @@ pub fn decompact_directional(
         let i2 = mesh.indices[(primitive_id as usize) * 3 + 2] as usize;
 
         let v0 = mesh.vertices[i0];
-        let v1 = mesh.vertices[i1];
-        let v2 = mesh.vertices[i2];
 
         if v0.group() != group_id {
             continue;
@@ -396,7 +399,7 @@ pub fn decompact_directional(
 
         let luminance = diffuse.luminance();
         if luminance > 0.0 {
-            let mut dir = (directional / luminance).normalize();
+            let mut dir = directional / luminance;
 
             if tangent_space {
                 let u = texel.bary.x;
@@ -435,15 +438,15 @@ pub fn decompact_directional(
         let w = px.w;
 
         if w > 0.0 {
-            let dir = Vector3::new(px.x, px.y, px.z);
-            let dir = dir.normalize();
-            px.x = dir.x;
-            px.y = dir.y;
-            px.z = dir.z;
+            // let dir = Vector3::new(px.x, px.y, px.z);
+            // let dir = dir.normalize();
+            px.x /= w;
+            px.y /= w;
+            px.z /= w;
         } else {
-            px.x = 0.5;
-            px.y = 0.5;
-            px.z = 0.5;
+            px.x = 0.0;
+            px.y = 0.0;
+            px.z = 0.0;
         }
     }
 }
