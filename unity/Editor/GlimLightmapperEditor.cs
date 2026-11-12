@@ -161,9 +161,37 @@ namespace Glim
             var clearButton = CreateIconButton("TreeEditor.Trash", "Clear", "Clear baked lighting data", 35);
             clearButton.clicked += () =>
             {
+                var lightmaps = LightmapSettings.lightmaps;
+
+                AssetDatabase.StartAssetEditing();
+
+                foreach (var l in lightmaps)
+                {
+                    if (l.lightmapColor)
+                    {
+                        AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(l.lightmapColor));
+                    }
+                    if (l.lightmapDir)
+                    {
+                        AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(l.lightmapDir));
+                    }
+                    if (l.shadowMask)
+                    {
+                        AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(l.shadowMask));
+                    }
+                }
+
+                if (Lightmapping.lightingDataAsset)
+                {
+                    AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(Lightmapping.lightingDataAsset));
+                }
+
+                AssetDatabase.StopAssetEditing();
+
                 Lightmapping.lightingDataAsset = null;
 
                 var scene = EditorSceneManager.GetActiveScene();
+
                 var selectors = scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<GlimLightmapGroupSelector>(true));
 
                 foreach (var selector in selectors)
