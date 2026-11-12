@@ -21,9 +21,17 @@ namespace Glim
         public Bindings.LightmapSettings settings;
         public GlimLightmapGroup groupAsset;
 
+        public string diffuseGuid;
+        public string directionalGuid;
+        public string shadowmaskGuid;
+
         public BakeContextGroup(GlimLightmapGroup group, IList<Renderer> renderers)
         {
             groupAsset = group;
+
+            diffuseGuid = GUID.Generate().ToString();
+            directionalGuid = GUID.Generate().ToString();
+            shadowmaskGuid = GUID.Generate().ToString();
 
             settings = new Bindings.LightmapSettings(group);
 

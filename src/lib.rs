@@ -21,6 +21,7 @@ use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::math::{Vector2, Vector3, Vector4};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
+use crate::meta::{MetaType, write_unity_texture_meta};
 use crate::raster::{
     Texels, block_average_fill, build_compaction, decompact_combined_sh, decompact_diffuse,
     decompact_directional, decompact_shadowmask, dilate_shadowmask, dilate_texture,
@@ -54,6 +55,7 @@ mod cwbvh;
 mod lights;
 mod math;
 mod mesh;
+mod meta;
 mod oidn;
 mod pack;
 mod raster;
@@ -206,6 +208,9 @@ pub struct TexturePixelsData {
 pub struct LightmapGroup {
     pub settings: LightmapSettings,
     pub id: u32,
+    pub diffuse_guid: String,
+    pub directional_guid: String,
+    pub shadowmask_guid: String,
     pub albedo_pixels: Vec<u8>,
     pub emission_pixels: Vec<u8>,
 }
@@ -1233,12 +1238,18 @@ impl LightmapGroup {
         settings: LightmapSettings,
         albedo_pixels: &[u8],   // RGB32
         emission_pixels: &[u8], // RGB111110Float
+        diffuse_guid: String,
+        directional_guid: String,
+        shadowmask_guid: String,
     ) -> LightmapGroup {
         LightmapGroup {
             settings,
             albedo_pixels: albedo_pixels.to_vec(),
             emission_pixels: emission_pixels.to_vec(),
             id: 0,
+            diffuse_guid,
+            directional_guid,
+            shadowmask_guid,
         }
     }
 }
@@ -1493,7 +1504,7 @@ impl Glim {
     }
 }
 
-fn save_tga(path: PathBuf, w: usize, h: usize, pixels: &[Vector4], alpha: bool) -> io::Result<()> {
+fn save_tga(path: &PathBuf, w: usize, h: usize, pixels: &[Vector4], alpha: bool) -> io::Result<()> {
     use std::fs::File;
     use std::io::BufWriter;
 
@@ -1767,9 +1778,17 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vector4>) 
             .output_dir
             .join(format!("Lightmap-{}_ShadowMask.tga", group_index));
 
-        if let Err(err) = save_tga(path, resolution as usize, resolution as usize, buffer, true) {
+        if let Err(err) = save_tga(
+            &path,
+            resolution as usize,
+            resolution as usize,
+            buffer,
+            true,
+        ) {
             Log::msg(&format!("Failed to save shadowmask: {}", err));
         }
+
+        write_unity_texture_meta(MetaType::Shadowmask, &path, &group.shadowmask_guid);
     }
     readback_buffer.destroy(&app.vk);
     drop(readback_buffer);
@@ -2740,7 +2759,12 @@ fn render_lightmaps(app: &mut Glim) {
             channels,
         );
 
-        Image::from_layer(layer).write().to_file(full_path).unwrap();
+        Image::from_layer(layer)
+            .write()
+            .to_file(&full_path)
+            .unwrap();
+
+        write_unity_texture_meta(MetaType::Diffuse, &full_path, &group.diffuse_guid);
 
         let elapsed = start.elapsed().as_secs_f32();
         app.benchmarks.push(("Diffuse Save", elapsed));
@@ -2791,7 +2815,7 @@ fn render_lightmaps(app: &mut Glim) {
                     .output_dir
                     .join(format!("Lightmap-{}_Normal.tga", group_index));
 
-                save_tga(full_path, resolution, resolution, &buffer_copy, false).unwrap();
+                save_tga(&full_path, resolution, resolution, &buffer_copy, false).unwrap();
             }
 
             encode_directional(&mut buffer, &buffer_copy, tangent_space);
@@ -2818,7 +2842,8 @@ fn render_lightmaps(app: &mut Glim) {
             let full_path = app
                 .output_dir
                 .join(format!("Lightmap-{}_Directional.tga", group_index));
-            save_tga(full_path, resolution, resolution, &buffer, alpha).unwrap();
+            save_tga(&full_path, resolution, resolution, &buffer, alpha).unwrap();
+            write_unity_texture_meta(MetaType::Directional, &full_path, &group.directional_guid);
         }
 
         if app.config.lightmap_mode == LightmapMode::CombinedSH {
@@ -2871,7 +2896,8 @@ fn render_lightmaps(app: &mut Glim) {
             let full_path = app
                 .output_dir
                 .join(format!("Lightmap-{}_Directional.tga", group_index));
-            save_tga(full_path, resolution, resolution, &buffer, false).unwrap();
+            save_tga(&full_path, resolution, resolution, &buffer, false).unwrap();
+            write_unity_texture_meta(MetaType::Directional, &full_path, &group.directional_guid);
         }
     }
     drop(buffer_copy);

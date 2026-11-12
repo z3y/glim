@@ -1,7 +1,6 @@
 use crate::{
     LightmapGroup, Mesh, Vector2,
     math::{Vector3, Vector4, vec3, vec4, vec4_slice},
-    mesh::{encode_hemi_octahedron, encode_normal_octahedron},
 };
 
 #[repr(C, align(16))]
@@ -321,7 +320,7 @@ pub fn encode_directional(pixels: &mut [Vector4], normals: &[Vector4], tangent_s
                 px.x = dir.x * 0.5 + 0.5;
                 px.y = dir.y * 0.5 + 0.5;
                 px.z = dir.z * 0.5 + 0.5;
-                px.w = (nol * 0.5 + 0.5).max(1e-4);
+                px.w = nol * 0.5 + 0.5;
             }
         } else {
             if tangent_space {
@@ -401,6 +400,10 @@ pub fn decompact_directional(
         if luminance > 0.0 {
             let mut dir = directional / luminance;
 
+            if dir.length() > 1.0 {
+                dir = dir.normalize();
+            }
+
             if tangent_space {
                 let u = texel.bary.x;
                 let v = texel.bary.y;
@@ -438,8 +441,6 @@ pub fn decompact_directional(
         let w = px.w;
 
         if w > 0.0 {
-            // let dir = Vector3::new(px.x, px.y, px.z);
-            // let dir = dir.normalize();
             px.x /= w;
             px.y /= w;
             px.z /= w;

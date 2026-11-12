@@ -359,6 +359,9 @@ pub extern "C" fn app_add_lightmap_group(
     albedo_pixels_length: u32,
     emission_pixels: *const u8,
     emission_pixels_length: u32,
+    diffuse_guid: FfiString,
+    directional_guid: FfiString,
+    shadowmask_guid: FfiString,
 ) {
     if app.is_null() {
         return;
@@ -373,7 +376,18 @@ pub extern "C" fn app_add_lightmap_group(
         let albedo_pixels =
             unsafe { slice::from_raw_parts(albedo_pixels, albedo_pixels_length as usize) };
 
-        let mut group = LightmapGroup::new(settings, albedo_pixels, emission_pixels);
+        let diffuse_guid = diffuse_guid.to_string();
+        let directional_guid = directional_guid.to_string();
+        let shadowmask_guid = shadowmask_guid.to_string();
+
+        let mut group = LightmapGroup::new(
+            settings,
+            albedo_pixels,
+            emission_pixels,
+            diffuse_guid,
+            directional_guid,
+            shadowmask_guid,
+        );
         group.id = app.groups.len() as u32;
         app.groups.push(group);
     }));

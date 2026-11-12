@@ -141,6 +141,7 @@ pub fn decode_normal_octahedron(p: Vector2) -> Vector3 {
     n.normalize()
 }
 
+#[allow(dead_code)]
 pub fn encode_hemi_octahedron(n: Vector3) -> Vector2 {
     let inv_l1 = 1.0 / (n.x.abs() + n.y.abs() + n.z.abs());
     Vector2::new(n.x * inv_l1, n.y * inv_l1)

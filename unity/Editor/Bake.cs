@@ -321,53 +321,6 @@ namespace Glim
 
                 bool hasDirectional = _context.lightmapMode == LightmapMode.DominantDirection || _context.lightmapMode == LightmapMode.MonoSH;
 
-                // hard coded paths for now in rust
-                for (int groupIndex = 0; groupIndex < _context.groups.Count; groupIndex++)
-                {
-                    BakeContextGroup group = _context.groups[groupIndex];
-
-                    if (group.settings.discard)
-                    {
-                        continue;
-                    }
-
-                    var diffuseName = $"Lightmap-{groupIndex}_Diffuse.exr";
-                    var directionalName = $"Lightmap-{groupIndex}_Directional.tga";
-                    var shadowMaskName = $"Lightmap-{groupIndex}_ShadowMask.tga";
-
-                    {
-                        string metaPath = Path.Combine(_context.outputDir, $"{diffuseName}.meta");
-                        if (!File.Exists(metaPath))
-                        {
-                            var guid = GUID.Generate().ToString();
-                            var yaml = CreateTextureImporterMeta(guid, 0);
-                            File.WriteAllText(metaPath, yaml);
-                        }
-                    }
-
-                    if (hasDirectional)
-                    {
-                        string metaPath = Path.Combine(_context.outputDir, $"{directionalName}.meta");
-                        if (!File.Exists(metaPath))
-                        {
-                            var guid = GUID.Generate().ToString();
-                            var yaml = CreateTextureImporterMeta(guid, 1);
-                            File.WriteAllText(metaPath, yaml);
-                        }
-                    }
-
-                    if (File.Exists(Path.Combine(_context.outputDir, shadowMaskName)))
-                    {
-                        string metaPath = Path.Combine(_context.outputDir, $"{shadowMaskName}.meta"); // todo shadow mask type
-                        if (!File.Exists(metaPath))
-                        {
-                            var guid = GUID.Generate().ToString();
-                            var yaml = CreateTextureImporterMeta(guid, 2);
-                            File.WriteAllText(metaPath, yaml);
-                        }
-                    }
-                }
-
                 AssetDatabase.Refresh();
 
                 for (int groupIndex = 0; groupIndex < _context.groups.Count; groupIndex++)
@@ -410,8 +363,6 @@ namespace Glim
                         lightmapBytes += new FileInfo(path).Length;
                     }
                 }
-
-                // EditorUtility.SetDirty(_context.baker);
 
                 using var lda = new SerializedObject(_context.storage);
                 LightingData.InspectorModeObject.SetValue(lda, InspectorMode.DebugInternal);
@@ -810,6 +761,9 @@ namespace Glim
 
                     foreach (var group in ctx.groups)
                     {
+                        var diffuseGuid = Bindings.FfiString.FromString(group.diffuseGuid);
+                        var directionalGuid = Bindings.FfiString.FromString(group.directionalGuid);
+                        var shadowmaskGuid = Bindings.FfiString.FromString(group.shadowmaskGuid);
                         unsafe
                         {
                             fixed (Color32* albedoPtr = group.albedo)
@@ -821,7 +775,10 @@ namespace Glim
                                     (byte*)albedoPtr,
                                     (uint)(group.albedo.Length * 4),
                                     emissionsPtr,
-                                    (uint)group.emission.Length
+                                    (uint)group.emission.Length,
+                                    diffuseGuid,
+                                    directionalGuid,
+                                    shadowmaskGuid
                                 );
                             }
                         }
@@ -939,128 +896,6 @@ namespace Glim
             thread.SetApartmentState(ApartmentState.STA);
             thread.IsBackground = true;
             thread.Start();
-        }
-
-        public static string CreateTextureImporterMeta(string guid, int type)
-        {
-            int alphaUsage = type > 0 ? 1 : 0;
-            int textureType = 6;
-
-            if (type == 1) // dir
-            {
-                textureType = 12;
-            }
-            if (type == 2) // shadowmask
-            {
-                textureType = 11;
-            }
-            string yaml = $@"
-fileFormatVersion: 2
-guid: {guid}
-TextureImporter:
-  internalIDToNameTable: []
-  externalObjects: {{}}
-  serializedVersion: 13
-  mipmaps:
-    mipMapMode: 0
-    enableMipMap: 0
-    sRGBTexture: 0
-    linearTexture: 1
-    fadeOut: 0
-    borderMipMap: 0
-    mipMapsPreserveCoverage: 0
-    alphaTestReferenceValue: 0.5
-    mipMapFadeDistanceStart: 1
-    mipMapFadeDistanceEnd: 3
-  bumpmap:
-    convertToNormalMap: 0
-    externalNormalMap: 0
-    heightScale: 0.25
-    normalMapFilter: 0
-    flipGreenChannel: 0
-  isReadable: 0
-  streamingMipmaps: 0
-  streamingMipmapsPriority: 0
-  vTOnly: 0
-  ignoreMipmapLimit: 0
-  grayScaleToAlpha: 0
-  generateCubemap: 6
-  cubemapConvolution: 0
-  seamlessCubemap: 0
-  textureFormat: 1
-  maxTextureSize: 2048
-  textureSettings:
-    serializedVersion: 2
-    filterMode: 1
-    aniso: 0
-    mipBias: 0
-    wrapU: 1
-    wrapV: 1
-    wrapW: 0
-  nPOTScale: 1
-  lightmap: 0
-  compressionQuality: 50
-  spriteMode: 0
-  spriteExtrude: 1
-  spriteMeshType: 1
-  alignment: 0
-  spritePivot: {{x: 0.5, y: 0.5}}
-  spritePixelsToUnits: 100
-  spriteBorder: {{x: 0, y: 0, z: 0, w: 0}}
-  spriteGenerateFallbackPhysicsShape: 1
-  alphaUsage: {alphaUsage}
-  alphaIsTransparency: 0
-  spriteTessellationDetail: -1
-  textureType: {textureType}
-  textureShape: 1
-  singleChannelComponent: 0
-  flipbookRows: 1
-  flipbookColumns: 1
-  maxTextureSizeSet: 0
-  compressionQualitySet: 0
-  textureFormatSet: 0
-  ignorePngGamma: 0
-  applyGammaDecoding: 0
-  swizzle: 50462976
-  cookieLightType: 0
-  platformSettings:
-  - serializedVersion: 4
-    buildTarget: DefaultTexturePlatform
-    maxTextureSize: 8192
-    resizeAlgorithm: 0
-    textureFormat: -1
-    textureCompression: 2
-    compressionQuality: 50
-    crunchedCompression: 0
-    allowsAlphaSplitting: 0
-    overridden: 0
-    ignorePlatformSupport: 0
-    androidETC2FallbackOverride: 0
-    forceMaximumCompressionQuality_BC6H_BC7: 1
-  spriteSheet:
-    serializedVersion: 2
-    sprites: []
-    outline: []
-    customData:
-    physicsShape: []
-    bones: []
-    spriteID:
-    internalID: 0
-    vertices: []
-    indices:
-    edges: []
-    weights: []
-    secondaryTextures: []
-    spriteCustomMetadata:
-      entries: []
-    nameFileIdTable: {{}}
-  mipmapLimitGroupName:
-  pSDRemoveMatte: 0
-  userData:
-  assetBundleName:
-  assetBundleVariant:
-";
-            return yaml;
         }
     }
 }

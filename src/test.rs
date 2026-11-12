@@ -123,6 +123,9 @@ mod tests {
             albedo_pixels.len() as u32,
             packed_emission_pixels.as_ptr(),
             packed_emission_pixels.len() as u32,
+            FfiString::new("0"),
+            FfiString::new("1"),
+            FfiString::new("2"),
         );
 
         load_gltf(
