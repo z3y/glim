@@ -1,5 +1,19 @@
 # [Glim](https://github.com/z3y/glim)
 
+# v0.12.5
+- Fixed errors caused by meshes without UV0
+  - This is required for sampling alpha, it will use UV1 instead
+- Added log errors for meshes without both UV0 and UV1 or normals
+- Clear button now deletes lightmap textures as well
+- Refactored how .meta files are created for lightmap textures
+  - This should fix issues caused by unity importing textures too early, for example when asset auto refresh is enabled
+  - If the lightmaps didn't have proper import settings before, (for example looked incorrect on different platforms like android) press Clear and bake again
+- Fixed incorrect directional lightmap encoding
+
+# v0.12.4
+
+- Handle some potential memory bugs with the new preview light updates
+
 # v0.12.2
 
 - Implemented sync for light properties
