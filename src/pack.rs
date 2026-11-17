@@ -671,15 +671,17 @@ fn find_placement(
     }
 
     loop {
-        if !target.overlaps(chart, x, y) {
-            return Some((x, y));
-        }
-        x += 1;
-        if x > max_x {
-            x = 0;
-            y += 1;
-            if y > max_y {
-                return None;
+        match target.overlap_skip(chart, x, y) {
+            None => return Some((x, y)),
+            Some(skip) => {
+                x += skip;
+                if x > max_x {
+                    x = 0;
+                    y += 1;
+                    if y > max_y {
+                        return None;
+                    }
+                }
             }
         }
     }
@@ -722,43 +724,6 @@ impl Bitmap {
 
         let wi = y as usize * self.row_stride + x as usize / 64;
         self.pixels[wi] |= 1u64 << (x % 64);
-    }
-
-    fn overlaps(&self, other: &Bitmap, ox: u32, oy: u32) -> bool {
-        let word_off = ox as usize / 64;
-        let shift = ox % 64;
-
-        for cy in 0..other.height {
-            let ty = oy + cy;
-            if ty >= self.height {
-                break;
-            }
-            let trow = ty as usize * self.row_stride;
-            let crow = cy as usize * other.row_stride;
-
-            for cw in 0..other.row_stride {
-                let word = other.pixels[crow + cw];
-
-                if word == 0 {
-                    continue;
-                }
-
-                let tw = trow + word_off + cw;
-
-                if tw < self.pixels.len() && self.pixels[tw] & (word << shift) != 0 {
-                    return true;
-                }
-
-                if shift > 0 {
-                    let hi = word >> (64 - shift);
-                    if hi != 0 && tw + 1 < self.pixels.len() && self.pixels[tw + 1] & hi != 0 {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        false
     }
 
     fn paint(&mut self, other: &Bitmap, ox: u32, oy: u32) {
@@ -835,6 +800,64 @@ impl Bitmap {
             Luma([if self.get_pixel(x, y) { 255u8 } else { 0u8 }])
         });
         img.save(path).expect("failed to save bitmap");
+    }
+
+    #[inline]
+    fn next_free(&self, y: u32, from: u32) -> u32 {
+        let row = y as usize * self.row_stride;
+        let mut wi = from as usize / 64;
+        let mut bit = from % 64;
+        while wi < self.row_stride {
+            let free = (!self.pixels[row + wi] >> bit) << bit;
+            if free != 0 {
+                return (wi * 64) as u32 + free.trailing_zeros();
+            }
+            wi += 1;
+            bit = 0;
+        }
+        (self.row_stride * 64) as u32
+    }
+
+    fn overlap_skip(&self, other: &Bitmap, ox: u32, oy: u32) -> Option<u32> {
+        let word_off = ox as usize / 64;
+        let shift = ox % 64;
+
+        for cy in 0..other.height {
+            let ty = oy + cy;
+            if ty >= self.height {
+                break;
+            }
+            let trow = ty as usize * self.row_stride;
+            let crow = cy as usize * other.row_stride;
+
+            for cw in 0..other.row_stride {
+                let word = other.pixels[crow + cw];
+                if word == 0 {
+                    continue;
+                }
+                let tw = trow + word_off + cw;
+                let col_in_row = (word_off + cw) * 64;
+
+                if tw < self.pixels.len() {
+                    let hit = self.pixels[tw] & (word << shift);
+                    if hit != 0 {
+                        let p = (col_in_row as u32) + hit.trailing_zeros();
+                        return Some(self.next_free(ty, p) - p);
+                    }
+                }
+                if shift > 0 {
+                    let hi = word >> (64 - shift);
+                    if hi != 0 && tw + 1 < self.pixels.len() {
+                        let hit = self.pixels[tw + 1] & hi;
+                        if hit != 0 {
+                            let p = (col_in_row as u32) + 64 + hit.trailing_zeros();
+                            return Some(self.next_free(ty, p) - p);
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 }
 
