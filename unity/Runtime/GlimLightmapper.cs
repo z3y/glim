@@ -118,11 +118,14 @@ Automatically applied to light volumes based on texel size."
         [Space]
         [Tooltip("Automatically bake reflection probes too after the bake is complete")]
         public bool bakeReflectionProbes = true;
+
         [Tooltip("Temporarly increases reflection probe resolution by 2x and downsamples on the imported cubemap")]
         public bool reflectionProbesSuperSampling = false;
         [Tooltip("Creates a mesh for each light visible in reflection probes, based on the shadow radius, area size or directional angle")]
         public bool reflectionProbesSpecular = false; // todo URP Shader
 
+        [Tooltip("Play a sound when bake finishes or fails.")]
+        public bool playBakeCompletionSound = false;
 
         [Space]
         public uint previewWidth = 1024;
