@@ -508,8 +508,28 @@ namespace Glim
             }
             finally
             {
+                bool playSound = _context.playBakeCompletionSound;
                 PrintBakeLogs();
                 ResetBake();
+                if (playSound)
+                    PlayCompletionSound();
+            }
+        }
+
+        public static void PlayCompletionSound()
+        {
+            try
+            {
+                // Using reflection to play a sound in audio preview API since EditorApplication.Beep can be unreliable
+                var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(
+                    "Packages/io.github.z3y.glim/Editor/BakeComplete.wav");
+                var playClip = typeof(AudioImporter).Assembly.GetType("UnityEditor.AudioUtil")
+                    .GetMethod("PlayPreviewClip", BindingFlags.Public | BindingFlags.Static);
+                playClip.Invoke(null, new object[] { clip, 0, false });
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"Glim could not play the bake sound: {exception.GetBaseException().Message}");
             }
         }
 

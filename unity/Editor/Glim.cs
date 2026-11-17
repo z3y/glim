@@ -123,6 +123,7 @@ namespace Glim
         public bool reflectionProbesSuperSampling;
         public bool reflectionProbesSpecular;
         public bool bakeReflectionProbes;
+        public bool playBakeCompletionSound;
         public string skyboxReflectionPath;
 
         public string outputDir;
@@ -146,6 +147,7 @@ namespace Glim
             this.reflectionProbesSpecular = lightmapper.reflectionProbesSpecular;
             this.isPreview = config.is_preview;
             this.bakeReflectionProbes = lightmapper.bakeReflectionProbes;
+            this.playBakeCompletionSound = lightmapper.playBakeCompletionSound;
 
             this.skyboxPixels = SkyboxCapture.Capture(SceneManager.GetActiveScene());
 
