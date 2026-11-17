@@ -19,7 +19,7 @@ use crate::bindings::*;
 use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
-use crate::math::{Vector2, Vector3, Vector4};
+use glam::{Vec2, Vec3, Vec4};
 use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
 use crate::meta::{MetaType, write_unity_texture_meta};
 use crate::raster::{
@@ -53,7 +53,6 @@ mod camera;
 mod compute_shader;
 mod cwbvh;
 mod lights;
-mod math;
 mod mesh;
 mod meta;
 mod oidn;
@@ -426,7 +425,7 @@ fn initialize_render(app: &mut Glim) {
     }
 
     if app.skybox.view().is_null() {
-        app.skybox = Skybox::solid(&app.vk, 4, 4, Vector3::new(0.0, 0.0, 0.0));
+        app.skybox = Skybox::solid(&app.vk, 4, 4, Vec3::new(0.0, 0.0, 0.0));
     }
 
     // create meta textures
@@ -1134,7 +1133,7 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
 fn extract_emissive_triangles(app: &mut Glim) {
     let mut emissive_triangles: Vec<u32> = Vec::new();
 
-    fn sample_emissive(uv: Vector2, w: u32, h: u32, pixels: &[u8]) -> bool {
+    fn sample_emissive(uv: Vec2, w: u32, h: u32, pixels: &[u8]) -> bool {
         let x = (uv.x * w as f32).clamp(0.0, (w - 1) as f32) as usize;
         let y = (uv.y * h as f32).clamp(0.0, (h - 1) as f32) as usize;
         let index = (y * w as usize + x) * 4;
@@ -1286,7 +1285,7 @@ impl Glim {
         }
 
         let mut pos = config.camera_position;
-        pos.transform_space(config.coordinate_system);
+        config.coordinate_system.transform(&mut pos);
         let mut camera = Camera {
             position: pos,
             yaw: 0.0,
@@ -1295,7 +1294,7 @@ impl Glim {
             last_cursor_pos: None,
         };
         let mut fwd = config.camera_forward;
-        fwd.transform_space(config.coordinate_system);
+        config.coordinate_system.transform(&mut fwd);
         camera.set_forward(fwd);
 
         let init_from_camera_shader = ComputeShader::null();
@@ -1504,7 +1503,7 @@ impl Glim {
     }
 }
 
-fn save_tga(path: &PathBuf, w: usize, h: usize, pixels: &[Vector4], alpha: bool) -> io::Result<()> {
+fn save_tga(path: &PathBuf, w: usize, h: usize, pixels: &[Vec4], alpha: bool) -> io::Result<()> {
     use std::fs::File;
     use std::io::BufWriter;
 
@@ -1579,7 +1578,7 @@ fn save_tga(path: &PathBuf, w: usize, h: usize, pixels: &[Vector4], alpha: bool)
     Ok(())
 }
 
-fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vector4>) {
+fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vec4>) {
     if is_cancelled() {
         return;
     }
@@ -2642,9 +2641,9 @@ fn render_lightmaps(app: &mut Glim) {
         }
     }
 
-    let mut buffer = vec![Vector4::ZERO; max_resolution * max_resolution];
+    let mut buffer = vec![Vec4::ZERO; max_resolution * max_resolution];
     let mut mask = vec![false; max_resolution * max_resolution];
-    let mut buffer_copy = vec![Vector4::ZERO; max_resolution * max_resolution];
+    let mut buffer_copy = vec![Vec4::ZERO; max_resolution * max_resolution];
 
     for group_index in 0..app.groups.len() {
         let group = &app.groups[group_index];

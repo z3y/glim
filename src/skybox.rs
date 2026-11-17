@@ -1,6 +1,8 @@
 use ash::vk;
 
-use crate::{buffer::Buffer, math::Vector3, vulkan_context::VulkanContext};
+use glam::Vec3;
+
+use crate::{buffer::Buffer, vulkan_context::VulkanContext};
 
 pub struct Skybox {
     width: u32,
@@ -193,7 +195,7 @@ impl Skybox {
         };
     }
 
-    pub fn solid(ctx: &VulkanContext, width: u32, height: u32, color: Vector3) -> Skybox {
+    pub fn solid(ctx: &VulkanContext, width: u32, height: u32, color: Vec3) -> Skybox {
         let texels_per_face = (width * height) as usize;
         let mut pixels = Vec::with_capacity(texels_per_face * 4 * 6);
         for _ in 0..(texels_per_face * 6) {

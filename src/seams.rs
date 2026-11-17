@@ -6,7 +6,7 @@
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use crate::bindings::Log;
-use crate::math::*;
+use glam::{Vec2, Vec3, Vec4};
 use crate::mesh::Mesh;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -48,17 +48,17 @@ impl Edge {
 
 #[derive(Debug, Clone)]
 pub struct Seam {
-    edge0_uv0: Vector2,
-    edge1_uv0: Vector2,
-    edge0_uv1: Vector2,
-    edge1_uv1: Vector2,
+    edge0_uv0: Vec2,
+    edge1_uv0: Vec2,
+    edge0_uv1: Vec2,
+    edge1_uv1: Vec2,
     group: u32,
 }
 
 #[derive(Debug, Clone)]
 struct SamplePoint {
-    uv_a: Vector2,
-    uv_b: Vector2,
+    uv_a: Vec2,
+    uv_b: Vec2,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -74,13 +74,13 @@ impl Vector2Int {
 }
 
 #[inline]
-fn vec3_eq_approx(a: Vector3, b: Vector3) -> bool {
+fn vec3_eq_approx(a: Vec3, b: Vec3) -> bool {
     const EPS: f32 = 0.001;
     (a - b).length_squared() < EPS * EPS
 }
 
 #[inline]
-fn vec2_eq_approx(a: Vector2, b: Vector2) -> bool {
+fn vec2_eq_approx(a: Vec2, b: Vec2) -> bool {
     const EPS: f32 = 0.001;
     (a - b).length_squared() < EPS * EPS
 }
@@ -180,7 +180,7 @@ pub fn find_seams(mesh: &Mesh, flip_uv_y: bool) -> Vec<Seam> {
         .map(|e| if e.a > e.b { Edge::new(e.b, e.a) } else { e })
         .collect();
 
-    let reference_dir = Vector2::new(1.0, 1.0).normalize();
+    let reference_dir = Vec2::new(1.0, 1.0).normalize_or_zero();
 
     // A seam requires both endpoints to be position-coincident within EPS, so only edges
     // with an endpoint near e0.a can ever match. Bucket edges by quantised endpoint
@@ -189,7 +189,7 @@ pub fn find_seams(mesh: &Mesh, flip_uv_y: bool) -> Vec<Seam> {
     // any axis and the 3x3x3 neighbourhood is an exact superset of the candidates.
     const CELL: f32 = 0.001;
 
-    let cell_of = |p: Vector3| -> (i32, i32, i32) {
+    let cell_of = |p: Vec3| -> (i32, i32, i32) {
         (
             (p.x / CELL).floor() as i32,
             (p.y / CELL).floor() as i32,
@@ -231,7 +231,7 @@ pub fn find_seams(mesh: &Mesh, flip_uv_y: bool) -> Vec<Seam> {
             edge1_uv1.y = 1.0 - edge1_uv1.y;
         }
 
-        let seam_dir = (edge0_uv0 - edge1_uv0).normalize();
+        let seam_dir = (edge0_uv0 - edge1_uv0).normalize_or_zero();
         if seam_dir.dot(reference_dir) < 0.0 {
             std::mem::swap(&mut edge0_uv0, &mut edge1_uv0);
             std::mem::swap(&mut edge0_uv1, &mut edge1_uv1);
@@ -314,7 +314,7 @@ struct PixelInfo {
 // todo
 // there seems to be a bug where the seam fixer makes high contrast seams look even worse
 pub fn fix_seams(
-    pixels: &mut [Vector4],
+    pixels: &mut [Vec4],
     width: u32,
     height: u32,
     seams: &[Seam],
@@ -337,14 +337,14 @@ pub fn fix_seams(
             continue;
         }
 
-        let length = Vector2::distance(seam.edge0_uv0, seam.edge0_uv1);
+        let length = seam.edge0_uv0.distance(seam.edge0_uv1);
         let samples = u32::max(3, (length * sample_scale).ceil() as u32);
 
         for i in 0..samples {
             let t = i as f32 / (samples - 1) as f32;
 
-            let uv_a = Vector2::lerp(seam.edge0_uv0, seam.edge0_uv1, t);
-            let uv_b = Vector2::lerp(seam.edge1_uv0, seam.edge1_uv1, t);
+            let uv_a = seam.edge0_uv0.lerp(seam.edge0_uv1, t);
+            let uv_b = seam.edge1_uv0.lerp(seam.edge1_uv1, t);
 
             sample_points.push(SamplePoint { uv_a, uv_b });
         }
@@ -357,12 +357,12 @@ pub fn fix_seams(
     let mut pixel_info: Vec<PixelInfo> = Vec::new();
     let mut pixel_map: HashMap<Vector2Int, usize> = HashMap::new();
 
-    let size = Vector2::new(width as f32, height as f32);
+    let size = Vec2::new(width as f32, height as f32);
     let (w, h) = (width as i32, height as i32);
 
     for point in &sample_points {
         for (side, uv) in [point.uv_a, point.uv_b].into_iter().enumerate() {
-            let (taps, _) = bilinear_taps(uv * size - Vector2::new(0.5, 0.5), w, h);
+            let (taps, _) = bilinear_taps(uv * size - Vec2::new(0.5, 0.5), w, h);
 
             for (x, y) in taps {
                 let key = Vector2Int::new(x, y);
@@ -439,7 +439,7 @@ pub fn fix_seams(
 }
 
 /// 4 bilinear taps (clamped to the image, never wrapped) plus their weights.
-fn bilinear_taps(sample: Vector2, width: i32, height: i32) -> ([(i32, i32); 4], [f32; 4]) {
+fn bilinear_taps(sample: Vec2, width: i32, height: i32) -> ([(i32, i32); 4], [f32; 4]) {
     let fx0 = sample.x.floor();
     let fy0 = sample.y.floor();
     let fx = sample.x - fx0;
@@ -460,7 +460,7 @@ fn bilinear_taps(sample: Vector2, width: i32, height: i32) -> ([(i32, i32); 4], 
 
 fn bilinear_sample(
     pixel_map: &HashMap<Vector2Int, usize>,
-    sample: Vector2,
+    sample: Vec2,
     width: u32,
     height: u32,
     weight: f32,
@@ -493,9 +493,9 @@ fn setup_least_squares(
 
     for point in sample_points {
         let scaled_uv_a =
-            point.uv_a * Vector2::new(width as f32, height as f32) - Vector2::new(0.5, 0.5);
+            point.uv_a * Vec2::new(width as f32, height as f32) - Vec2::new(0.5, 0.5);
         let scaled_uv_b =
-            point.uv_b * Vector2::new(width as f32, height as f32) - Vector2::new(0.5, 0.5);
+            point.uv_b * Vec2::new(width as f32, height as f32) - Vec2::new(0.5, 0.5);
 
         bilinear_sample(
             &pixel_map,

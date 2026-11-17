@@ -1,13 +1,13 @@
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
-use crate::math::{Vector2, Vector3};
+use glam::{Vec2, Vec3};
 use core::slice;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 pub struct Chart {
-    pub uvs: Vec<Vector2>,
-    base_uvs: Vec<Vector2>,
+    pub uvs: Vec<Vec2>,
+    base_uvs: Vec<Vec2>,
 
     pub indices: Vec<u32>,
     pub mesh_id: usize,
@@ -18,7 +18,7 @@ pub struct Chart {
     pub uv_bounds_area: f64,
     pub bitmap: Bitmap,
 
-    pub chart_uv_min: Vector2,
+    pub chart_uv_min: Vec2,
 
     pub placed_offset: (u32, u32),
     pub final_scale: f32,
@@ -27,7 +27,7 @@ pub struct Chart {
 }
 
 impl Chart {
-    fn calculate_area_multiplier(&self, positions: &[Vector3]) -> f32 {
+    fn calculate_area_multiplier(&self, positions: &[Vec3]) -> f32 {
         let mut uv_area = 0.0f64;
         let mut world_area = 0.0f64;
 
@@ -113,7 +113,7 @@ impl Chart {
             min_y = min_y.min(uv.y);
         }
 
-        let offset = Vector2::new(min_x, min_y);
+        let offset = Vec2::new(min_x, min_y);
         self.chart_uv_min = offset;
         self.uvs.iter_mut().for_each(|uv| *uv -= offset);
     }
@@ -131,7 +131,7 @@ impl Chart {
     }
 }
 
-fn determinant(c: Vector2, c2: Vector2, c3: Vector2) -> f32 {
+fn determinant(c: Vec2, c2: Vec2, c3: Vec2) -> f32 {
     let num = c2.y - c3.y;
     let num2 = c.y - c3.y;
     let num3 = c.y - c2.y;
@@ -183,7 +183,7 @@ fn float_key(v: f32) -> u32 {
 ///
 /// Returns one flat triangle-vertex-index list per island (original vertex indices),
 /// in order of first appearance.
-fn split_into_islands(positions: &[Vector3], uvs: &[Vector2], indices: &[u32]) -> Vec<Vec<u32>> {
+fn split_into_islands(positions: &[Vec3], uvs: &[Vec2], indices: &[u32]) -> Vec<Vec<u32>> {
     let n = positions.len();
     let mut parent: Vec<u32> = (0..n as u32).collect();
 
@@ -278,8 +278,8 @@ impl UVPacker {
     }
 
     fn build_chart(
-        positions: &[Vector3],
-        uvs: &[Vector2],
+        positions: &[Vec3],
+        uvs: &[Vec2],
         indices: Vec<u32>,
         vertex_map: Vec<u32>,
         user_scale_multiplier: f32,
@@ -299,7 +299,7 @@ impl UVPacker {
             final_scale: 1.0,
             world_scale_multiplier: 1.0,
             user_scale_multiplier: 1.0,
-            chart_uv_min: Vector2::ZERO,
+            chart_uv_min: Vec2::ZERO,
         };
 
         chart.offset_uvs();
@@ -320,8 +320,8 @@ impl UVPacker {
     // todo 2D world scale for meshes where thats possibe (for example a plane)
     pub fn add_mesh(
         &mut self,
-        positions: &[Vector3],
-        uvs: &[Vector2],
+        positions: &[Vec3],
+        uvs: &[Vec2],
         indices: &[u32],
         user_scale_multiplier: f32,
         mesh_id: usize,
@@ -374,9 +374,9 @@ impl UVPacker {
                 local_indices.push(*slot);
             }
 
-            let local_positions: Vec<Vector3> =
+            let local_positions: Vec<Vec3> =
                 vertex_map.iter().map(|&v| positions[v as usize]).collect();
-            let local_uvs: Vec<Vector2> = vertex_map.iter().map(|&v| uvs[v as usize]).collect();
+            let local_uvs: Vec<Vec2> = vertex_map.iter().map(|&v| uvs[v as usize]).collect();
 
             // reset scratch entries for the next island
             for &v in &vertex_map {
@@ -489,9 +489,9 @@ impl UVPacker {
     /// Single scale/offset for a whole mesh. Only meaningful when the mesh ended up as exactly
     /// one chart (always the case with `split_charts == false`). With chart splitting use
     /// `get_mesh_uvs` instead; for meshes with several charts this returns identity.
-    pub fn get_scale_offset(&self, mesh_id: usize) -> (Vector2, Vector2) {
+    pub fn get_scale_offset(&self, mesh_id: usize) -> (Vec2, Vec2) {
         let Some(lookup) = &self.charts_lookup else {
-            return (Vector2::ONE, Vector2::ZERO);
+            return (Vec2::ONE, Vec2::ZERO);
         };
 
         let chart = match lookup.get(&mesh_id) {
@@ -501,12 +501,12 @@ impl UVPacker {
 
         match chart {
             Some(chart) => {
-                let scale = Vector2::new(
+                let scale = Vec2::new(
                     chart.final_scale / self.width as f32,
                     chart.final_scale / self.height as f32,
                 );
 
-                let atlas_offset = Vector2::new(
+                let atlas_offset = Vec2::new(
                     (chart.placed_offset.0 as f32) / self.width as f32,
                     (chart.placed_offset.1 as f32) / self.height as f32,
                 );
@@ -515,7 +515,7 @@ impl UVPacker {
 
                 (scale, offset)
             }
-            None => (Vector2::ONE, Vector2::ZERO),
+            None => (Vec2::ONE, Vec2::ZERO),
         }
     }
 
@@ -533,7 +533,7 @@ impl UVPacker {
     ///
     /// Returns false if `pack` hasn't succeeded yet, the mesh is unknown, or the length
     /// doesn't match.
-    pub fn get_mesh_uvs(&self, mesh_id: usize, out: &mut [Vector2]) -> bool {
+    pub fn get_mesh_uvs(&self, mesh_id: usize, out: &mut [Vec2]) -> bool {
         let Some(lookup) = &self.charts_lookup else {
             return false;
         };
@@ -544,7 +544,7 @@ impl UVPacker {
             return false;
         }
 
-        out.fill(Vector2::ZERO);
+        out.fill(Vec2::ZERO);
 
         if let Some(chart_ids) = lookup.get(&mesh_id) {
             for &ci in chart_ids {
@@ -770,7 +770,7 @@ impl Bitmap {
         let width = ((max_x + 1.5).floor() as i32 + 1) as u32;
         let height = ((max_y + 1.5).floor() as i32 + 1) as u32;
 
-        let uv_offset = Vector2::new(1.0, 1.0);
+        let uv_offset = Vec2::new(1.0, 1.0);
 
         let mut bm = Self::new(width, height);
 
@@ -862,7 +862,7 @@ impl Bitmap {
 }
 
 #[inline(always)]
-fn rasterize_triangle_bilinear(a: Vector2, b: Vector2, c: Vector2, bm: &mut Bitmap) {
+fn rasterize_triangle_bilinear(a: Vec2, b: Vec2, c: Vec2, bm: &mut Bitmap) {
     let min_x = a.x.min(b.x).min(c.x);
     let max_x = a.x.max(b.x).max(c.x);
     let min_y = a.y.min(b.y).min(c.y);
@@ -878,23 +878,23 @@ fn rasterize_triangle_bilinear(a: Vector2, b: Vector2, c: Vector2, bm: &mut Bitm
 
     let edges = [b - a, c - b, a - c];
     let normals = [
-        Vector2 {
+        Vec2 {
             x: -edges[0].y,
             y: edges[0].x,
         },
-        Vector2 {
+        Vec2 {
             x: -edges[1].y,
             y: edges[1].x,
         },
-        Vector2 {
+        Vec2 {
             x: -edges[2].y,
             y: edges[2].x,
         },
     ];
 
     let axes = [
-        Vector2 { x: 1.0, y: 0.0 },
-        Vector2 { x: 0.0, y: 1.0 },
+        Vec2 { x: 1.0, y: 0.0 },
+        Vec2 { x: 0.0, y: 1.0 },
         normals[0],
         normals[1],
         normals[2],
@@ -902,21 +902,21 @@ fn rasterize_triangle_bilinear(a: Vector2, b: Vector2, c: Vector2, bm: &mut Bitm
 
     for py in tri_min_y..tri_max_y {
         for px in tri_min_x..tri_max_x {
-            let rect_min = Vector2 {
+            let rect_min = Vec2 {
                 x: px as f32 - 0.5,
                 y: py as f32 - 0.5,
             };
-            let rect_max = Vector2 {
+            let rect_max = Vec2 {
                 x: px as f32 + 1.5,
                 y: py as f32 + 1.5,
             };
             let rect_corners = [
                 rect_min,
-                Vector2 {
+                Vec2 {
                     x: rect_max.x,
                     y: rect_min.y,
                 },
-                Vector2 {
+                Vec2 {
                     x: rect_min.x,
                     y: rect_max.y,
                 },
@@ -985,9 +985,9 @@ pub unsafe extern "C" fn uvpacker_create(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn uvpacker_add_mesh(
     handle: *mut UVPacker,
-    positions: *const Vector3,
+    positions: *const Vec3,
     position_count: u32,
-    uvs: *const Vector2,
+    uvs: *const Vec2,
     uv_count: u32,
     indices: *const u32,
     index_count: u32,
@@ -995,8 +995,8 @@ pub unsafe extern "C" fn uvpacker_add_mesh(
     mesh_id: u32,
 ) {
     let positions =
-        unsafe { slice::from_raw_parts(positions as *const Vector3, position_count as usize) };
-    let uvs = unsafe { slice::from_raw_parts(uvs as *const Vector2, uv_count as usize) };
+        unsafe { slice::from_raw_parts(positions as *const Vec3, position_count as usize) };
+    let uvs = unsafe { slice::from_raw_parts(uvs as *const Vec2, uv_count as usize) };
     let indices = unsafe { slice::from_raw_parts(indices, index_count as usize) };
 
     let packer = unsafe { &mut *handle };
@@ -1012,8 +1012,8 @@ pub unsafe extern "C" fn uvpacker_pack(handle: *mut UVPacker) -> bool {
 
 #[repr(C)]
 pub struct ScaleOffset {
-    pub scale: Vector2,
-    pub offset: Vector2,
+    pub scale: Vec2,
+    pub offset: Vec2,
 }
 
 /// Only valid for meshes that were packed as a single chart (split_charts == false).
@@ -1050,7 +1050,7 @@ pub unsafe extern "C" fn uvpacker_get_mesh_vertex_count(
 pub unsafe extern "C" fn uvpacker_get_mesh_uvs(
     handle: *mut UVPacker,
     mesh_id: u32,
-    out_uvs: *mut Vector2,
+    out_uvs: *mut Vec2,
     out_count: u32,
 ) -> bool {
     if handle.is_null() || out_uvs.is_null() {

@@ -1,4 +1,4 @@
-use crate::math::{Vector2, Vector3};
+use glam::{Vec2, Vec3};
 use std::hash::{Hash, Hasher};
 
 #[repr(u8)]
@@ -14,23 +14,23 @@ pub enum LightType {
 #[repr(C)]
 #[derive(Debug)]
 pub struct Light {
-    pub position: Vector3,
+    pub position: Vec3,
     pub ty: LightType,
     pub cast_shadows: bool,
     pub mixed: bool,
     pub occlusion_channel: u8,
 
-    pub direction: Vector3,
+    pub direction: Vec3,
     pub range: f32,
 
-    pub color: Vector3,
+    pub color: Vec3,
     pub shadow_radius_or_angle: f32,
 
     pub spot_inner_percent: f32,
     pub spot_outer: f32,
-    pub area_or_cookie_size: Vector2,
+    pub area_or_cookie_size: Vec2,
 
-    pub up: Vector3,
+    pub up: Vec3,
     pub cookie: u32,
 }
 
@@ -68,25 +68,25 @@ impl Hash for Light {
 impl Default for Light {
     fn default() -> Self {
         Self {
-            position: Vector3::ZERO,
+            position: Vec3::ZERO,
             ty: LightType::Directional,
 
-            direction: Vector3::FORWARD,
+            direction: Vec3::NEG_Z,
             range: 0.0,
 
-            color: Vector3::ONE,
+            color: Vec3::ONE,
             shadow_radius_or_angle: 0.0,
 
             spot_inner_percent: 0.0,
             spot_outer: 0.0,
 
-            up: Vector3::UP,
+            up: Vec3::Y,
             mixed: false,
 
             cookie: u32::MAX,
             cast_shadows: true,
             occlusion_channel: u8::MAX,
-            area_or_cookie_size: Vector2::new(0.5, 0.5),
+            area_or_cookie_size: Vec2::new(0.5, 0.5),
         }
     }
 }

@@ -1,3 +1,4 @@
+use glam::Vec3;
 use std::{
     any::Any,
     panic::{AssertUnwindSafe, catch_unwind},
@@ -10,7 +11,6 @@ use std::{
 use crate::{
     Glim, LOG_CALLBACK, LightmapGroup, initialize_render,
     lights::Light,
-    math::Vector3,
     mesh::{FfiMesh, Mesh},
     sh::SHProbeL2,
     skybox::Skybox,
@@ -28,8 +28,8 @@ pub struct GlimConfig {
     pub throttle_preview_ms: u32,
     pub preview_settings: LightmapSettings,
 
-    pub camera_position: Vector3,
-    pub camera_forward: Vector3,
+    pub camera_position: Vec3,
+    pub camera_forward: Vec3,
 
     pub log_callback: LogCallback,
     pub lightprobes_read_callback: LightprobesReadCallback,
@@ -187,6 +187,16 @@ pub enum CoordinateSystem {
     Unity = 1,
 }
 
+impl CoordinateSystem {
+    #[inline]
+    pub fn transform(self, v: &mut Vec3) {
+        match self {
+            CoordinateSystem::Default => {}
+            CoordinateSystem::Unity => v.z = -v.z,
+        }
+    }
+}
+
 #[repr(u32)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum LightFalloffType {
@@ -301,11 +311,11 @@ pub extern "C" fn app_add_light(app: *mut Glim, mut light: Light) {
 
     let result = catch_unwind(AssertUnwindSafe(|| {
         let system = app.config.coordinate_system;
-        light.position.transform_space(system);
-        light.direction.transform_space(system);
-        light.up.transform_space(system);
+        system.transform(&mut light.position);
+        system.transform(&mut light.direction);
+        system.transform(&mut light.up);
 
-        light.direction = Vector3::ZERO - light.direction; // ??
+        light.direction = Vec3::ZERO - light.direction; // ??
         light.shadow_radius_or_angle = light.shadow_radius_or_angle.max(0.0);
         app.cpu_lights.push(light);
     }));
@@ -463,7 +473,7 @@ pub extern "C" fn app_run(app: *mut Glim) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_add_probe(app: *mut Glim, mut position: Vector3, radius: f32) {
+pub extern "C" fn app_add_probe(app: *mut Glim, mut position: Vec3, radius: f32) {
     if app.is_null() {
         return;
     }
@@ -472,28 +482,28 @@ pub extern "C" fn app_add_probe(app: *mut Glim, mut position: Vector3, radius: f
 
     let result = catch_unwind(AssertUnwindSafe(|| {
         let system = app.config.coordinate_system;
-        position.transform_space(system);
+        system.transform(&mut position);
 
         let probe = SHProbeL2 {
             position,
             radius,
-            l0: Vector3::ZERO,
+            l0: Vec3::ZERO,
             pad1: 0,
-            l1_1: Vector3::ZERO,
+            l1_1: Vec3::ZERO,
             pad2: 0,
-            l10: Vector3::ZERO,
+            l10: Vec3::ZERO,
             pad3: 0,
-            l11: Vector3::ZERO,
+            l11: Vec3::ZERO,
             pad4: 0,
-            l2_2: Vector3::ZERO,
+            l2_2: Vec3::ZERO,
             pad5: 0,
-            l2_1: Vector3::ZERO,
+            l2_1: Vec3::ZERO,
             pad6: 0,
-            l20: Vector3::ZERO,
+            l20: Vec3::ZERO,
             pad7: 0,
-            l21: Vector3::ZERO,
+            l21: Vec3::ZERO,
             pad8: 0,
-            l22: Vector3::ZERO,
+            l22: Vec3::ZERO,
             pad9: 0,
         };
 

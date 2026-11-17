@@ -1,12 +1,13 @@
+use glam::{Vec2, Vec3, Vec4, vec3, vec4};
+
 use crate::{
-    LightmapGroup, Mesh, Vector2,
-    math::{Vector3, Vector4, vec3, vec4, vec4_slice},
+    LightmapGroup, Mesh,
 };
 
 #[repr(C, align(16))]
 #[derive(Debug, Clone)]
 pub struct VisibilityTexel {
-    pub bary: Vector2,
+    pub bary: Vec2,
     pub primitive_id: u32,
     pub x: u16,
     pub y: u16,
@@ -113,7 +114,7 @@ fn area_centroid(poly: &[P; MAX_VERTS], n: usize, origin: P) -> (f64, P) {
 }
 
 pub fn render_normals(
-    buffer: &mut [Vector4],
+    buffer: &mut [Vec4],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     mesh: &Mesh,
@@ -126,7 +127,7 @@ pub fn render_normals(
     assert!(buffer.len() >= count);
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(Vector4::ZERO);
+    buffer.fill(Vec4::ZERO);
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -152,7 +153,7 @@ pub fn render_normals(
         let n1 = v1.decode_normal();
         let n2 = v2.decode_normal();
 
-        let normal = (n0 * w + n1 * u + n2 * v).normalize();
+        let normal = (n0 * w + n1 * u + n2 * v).normalize_or_zero();
 
         let cov = coverage[compacted_index];
 
@@ -166,8 +167,8 @@ pub fn render_normals(
         let w = px.w;
 
         if w > 0.0 {
-            let n = Vector3::new(px.x, px.y, px.z);
-            let n = n.normalize();
+            let n = Vec3::new(px.x, px.y, px.z);
+            let n = n.normalize_or_zero();
             px.x = n.x;
             px.y = n.y;
             px.z = n.z;
@@ -176,7 +177,7 @@ pub fn render_normals(
 }
 
 pub fn decompact_diffuse(
-    buffer: &mut [Vector4],
+    buffer: &mut [Vec4],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     lightmap_texels: &[f32],
@@ -190,7 +191,7 @@ pub fn decompact_diffuse(
     let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(Vector4::ZERO);
+    buffer.fill(Vec4::ZERO);
 
     let diffuse_offset = if l0 { texels.len() } else { 0 };
 
@@ -235,7 +236,7 @@ pub fn decompact_diffuse(
 }
 
 pub fn decompact_shadowmask(
-    buffer: &mut [Vector4],
+    buffer: &mut [Vec4],
     buffer_coverage: &mut [f32],
     texels: &[VisibilityTexel],
     coverage: &[f32],
@@ -249,7 +250,7 @@ pub fn decompact_shadowmask(
     let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(Vector4::ZERO);
+    buffer.fill(Vec4::ZERO);
 
     for compacted_index in 0..texels.len() {
         let texel = &texels[compacted_index];
@@ -286,13 +287,13 @@ pub fn decompact_shadowmask(
     }
 }
 
-pub fn encode_directional(pixels: &mut [Vector4], normals: &[Vector4], tangent_space: bool) {
+pub fn encode_directional(pixels: &mut [Vec4], normals: &[Vec4], tangent_space: bool) {
     for (i, px) in pixels.iter_mut().enumerate() {
-        let mut dir = Vector3::new(px.x, px.y, px.z);
+        let mut dir = Vec3::new(px.x, px.y, px.z);
 
         if dir.length() > 0.0 {
             dir = if dir.length() > 1.0 {
-                dir.normalize()
+                dir.normalize_or_zero()
             } else {
                 dir
             };
@@ -340,7 +341,7 @@ pub fn encode_directional(pixels: &mut [Vector4], normals: &[Vector4], tangent_s
 }
 
 pub fn decompact_directional(
-    buffer: &mut [Vector4],
+    buffer: &mut [Vec4],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     lightmap_texels: &[f32],
@@ -354,7 +355,7 @@ pub fn decompact_directional(
     let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(Vector4::ZERO);
+    buffer.fill(Vec4::ZERO);
 
     let directional_offset = texels.len();
 
@@ -376,7 +377,7 @@ pub fn decompact_directional(
         }
 
         let cov = coverage[compacted_index];
-        let diffuse = Vector3::new(
+        let diffuse = Vec3::new(
             lightmap_texels[compacted_index * 3 + 0],
             lightmap_texels[compacted_index * 3 + 1],
             lightmap_texels[compacted_index * 3 + 2],
@@ -386,7 +387,7 @@ pub fn decompact_directional(
             continue;
         }
 
-        let directional = Vector3::new(
+        let directional = Vec3::new(
             lightmap_texels[(compacted_index + directional_offset) * 3 + 0],
             lightmap_texels[(compacted_index + directional_offset) * 3 + 1],
             lightmap_texels[(compacted_index + directional_offset) * 3 + 2],
@@ -396,12 +397,12 @@ pub fn decompact_directional(
             continue;
         }
 
-        let luminance = diffuse.luminance();
+        let luminance = luminance(diffuse);
         if luminance > 0.0 {
             let mut dir = directional / luminance;
 
             if dir.length() > 1.0 {
-                dir = dir.normalize();
+                dir = dir.normalize_or_zero();
             }
 
             if tangent_space {
@@ -415,15 +416,15 @@ pub fn decompact_directional(
 
                 dir.z = -dir.z; //unity
 
-                let normal = (n0 * w + n1 * u + n2 * v).normalize();
+                let normal = (n0 * w + n1 * u + n2 * v).normalize_or_zero();
 
-                let t0 = vec4_slice(mesh.tangents[i0]);
-                let t1 = vec4_slice(mesh.tangents[i1]);
-                let t2 = vec4_slice(mesh.tangents[i2]);
+                let t0 = Vec4::from_array(mesh.tangents[i0]);
+                let t1 = Vec4::from_array(mesh.tangents[i1]);
+                let t2 = Vec4::from_array(mesh.tangents[i2]);
 
                 let tangent4 = t0 * w + t1 * u + t2 * v;
                 let tangent = vec3(tangent4.x, tangent4.y, tangent4.z);
-                let tangent = (tangent - normal * normal.dot(tangent)).normalize();
+                let tangent = (tangent - normal * normal.dot(tangent)).normalize_or_zero();
 
                 let handedness = if tangent4.w < 0.0 { -1.0 } else { 1.0 };
                 let bitangent = normal.cross(tangent) * handedness;
@@ -453,11 +454,16 @@ pub fn decompact_directional(
 }
 
 #[inline]
-fn encode_combined_sh(l0: Vector3, l1: Vector3) -> Vector3 {
-    let safe_f0 = l0.luminance().max(1e-4);
+fn luminance(c: Vec3) -> f32 {
+    c.dot(Vec3::new(0.2126, 0.7152, 0.0722))
+}
+
+#[inline]
+fn encode_combined_sh(l0: Vec3, l1: Vec3) -> Vec3 {
+    let safe_f0 = luminance(l0).max(1e-4);
     let l1 = l1 / (safe_f0 * 2.0).clamp(-1.0, 1.0);
 
-    Vector3 {
+    Vec3 {
         x: (l1.x * 0.5 + 0.5).clamp(0.0, 1.0),
         y: (l1.y * 0.5 + 0.5).clamp(0.0, 1.0),
         z: (l1.z * 0.5 + 0.5).clamp(0.0, 1.0),
@@ -465,7 +471,7 @@ fn encode_combined_sh(l0: Vector3, l1: Vector3) -> Vector3 {
 }
 
 pub fn decompact_combined_sh(
-    buffer: &mut [Vector4],
+    buffer: &mut [Vec4],
     texels: &[VisibilityTexel],
     coverage: &[f32],
     lightmap_texels: &[f32],
@@ -478,7 +484,7 @@ pub fn decompact_combined_sh(
     let count = resolution * resolution;
 
     let buffer = &mut buffer[0..count];
-    buffer.fill(Vector4::ZERO);
+    buffer.fill(Vec4::ZERO);
 
     let l0_offset = texels.len();
     let l1_offset = texels.len() * 2;
@@ -499,13 +505,13 @@ pub fn decompact_combined_sh(
 
         let cov = coverage[compacted_index];
 
-        let l0 = Vector3::new(
+        let l0 = Vec3::new(
             lightmap_texels[(compacted_index + l0_offset) * 3 + 0],
             lightmap_texels[(compacted_index + l0_offset) * 3 + 1],
             lightmap_texels[(compacted_index + l0_offset) * 3 + 2],
         );
 
-        let l1 = Vector3::new(
+        let l1 = Vec3::new(
             lightmap_texels[(compacted_index + l1_offset) * 3 + 0],
             lightmap_texels[(compacted_index + l1_offset) * 3 + 1],
             lightmap_texels[(compacted_index + l1_offset) * 3 + 2],
@@ -538,7 +544,7 @@ pub fn decompact_combined_sh(
     }
 }
 
-pub fn dilate_texture(pixels: &mut [Vector4], mask: &mut [bool], resolution: usize, radius: usize) {
+pub fn dilate_texture(pixels: &mut [Vec4], mask: &mut [bool], resolution: usize, radius: usize) {
     let mask = &mut mask[0..(resolution * resolution)];
 
     for y in 0..resolution {
@@ -610,7 +616,7 @@ pub fn dilate_texture(pixels: &mut [Vector4], mask: &mut [bool], resolution: usi
 }
 
 pub fn dilate_shadowmask(
-    color: &mut [Vector4],
+    color: &mut [Vec4],
     coverage: &[f32],
     resolution: usize,
     radius: usize,
@@ -670,15 +676,15 @@ pub fn dilate_shadowmask(
             if let Some(si) = best_index {
                 color[index] = color[si];
             } else {
-                color[index] = Vector4::ZERO;
+                color[index] = Vec4::ZERO;
             }
         }
     }
 }
 
 pub fn block_average_fill(
-    pixels: &mut [Vector4],
-    copy: &mut [Vector4],
+    pixels: &mut [Vec4],
+    copy: &mut [Vec4],
     mask: &[bool],
     resolution: usize,
 ) {
@@ -710,7 +716,7 @@ pub fn block_average_fill(
 
         for y in 0..size {
             for x in 0..size {
-                let mut sum = Vector4::ZERO;
+                let mut sum = Vec4::ZERO;
                 let mut weight = 0.0f32;
 
                 for cy in (y * BLOCK)..((y + 1) * BLOCK).min(child) {
@@ -736,7 +742,7 @@ pub fn block_average_fill(
                 let t = color_base[l] + y * size + x;
                 let scale = if weight > 0.0 { 1.0 / weight } else { 0.0 };
                 copy[t] = sum * scale;
-                copy[weight_base + t] = Vector4::new(weight, 0.0, 0.0, 0.0);
+                copy[weight_base + t] = Vec4::new(weight, 0.0, 0.0, 0.0);
             }
         }
     }
@@ -902,7 +908,7 @@ pub fn rasterize_texels(
                 }
 
                 let texel = VisibilityTexel {
-                    bary: Vector2 {
+                    bary: Vec2 {
                         x: u as f32,
                         y: v as f32,
                     },

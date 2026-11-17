@@ -9,7 +9,7 @@ mod tests {
 
     use crate::bindings::*;
     use crate::lights::LightType;
-    use crate::math::*;
+    use glam::{Vec2, Vec3};
     use crate::mesh::FfiMesh;
     use crate::pack::UVPacker;
     use crate::texture2d::encode_r11g11b10;
@@ -62,8 +62,8 @@ mod tests {
             hardware_rt: HARDWARE_RT,
             throttle_preview_ms: 0,
             preview_settings,
-            camera_position: Vector3::new(0.0, 0.0, 5.0),
-            camera_forward: Vector3::FORWARD,
+            camera_position: Vec3::new(0.0, 0.0, 5.0),
+            camera_forward: Vec3::NEG_Z,
             log_callback: default_logger,
             lightprobes_read_callback: test_probes_callback,
             probe_samples: LIGHT_PROBE_SAMPLES,
@@ -134,7 +134,7 @@ mod tests {
             false,
             false,
             false,
-            Vector3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
             0,
             false,
         )
@@ -142,10 +142,10 @@ mod tests {
 
         {
             let app = unsafe { &mut *app };
-            app.skybox = Skybox::solid(&app.vk, 8, 8, Vector3::new(0.00, 0.00, 0.00));
+            app.skybox = Skybox::solid(&app.vk, 8, 8, Vec3::new(0.00, 0.00, 0.00));
         }
 
-        app_add_probe(app, Vector3::new(0.0, 1.0, 0.0), 0.0);
+        app_add_probe(app, Vec3::new(0.0, 1.0, 0.0), 0.0);
 
         app_run(app);
 
@@ -225,7 +225,7 @@ mod tests {
         flip_uv: bool,
         transparent: bool,
         no_shadows: bool,
-        position_offset: Vector3,
+        position_offset: Vec3,
         group: u32,
         backface_gi: bool,
     ) -> std::io::Result<()> {
@@ -235,7 +235,7 @@ mod tests {
         for node in document.nodes() {
             let (t, r, _s) = node.transform().decomposed();
 
-            let position = Vector3::new(t[0], t[1], t[2]);
+            let position = Vec3::new(t[0], t[1], t[2]);
             let fwd = quaternion_rotate(r, [0.0, 0.0, -1.0]);
             let up = quaternion_rotate(r, [0.0, 1.0, 0.0]);
 
@@ -247,10 +247,10 @@ mod tests {
 
                 let mut light = Light {
                     position: position,
-                    direction: Vector3::new(-fwd[0], -fwd[1], -fwd[2]),
-                    up: Vector3::new(up[0], up[1], up[2]),
+                    direction: Vec3::new(-fwd[0], -fwd[1], -fwd[2]),
+                    up: Vec3::new(up[0], up[1], up[2]),
                     range: gltf_light.range().unwrap_or(25.0),
-                    color: Vector3::new(c[0] * intensity, c[1] * intensity, c[2] * intensity),
+                    color: Vec3::new(c[0] * intensity, c[1] * intensity, c[2] * intensity),
                     shadow_radius_or_angle: 0.0,
                     ..Default::default()
                 };
@@ -284,7 +284,7 @@ mod tests {
             if let Some(_camera) = node.camera() {
                 {
                     let app = unsafe { &mut *app };
-                    app.camera.set_forward(Vector3::new(fwd[0], fwd[1], fwd[2]));
+                    app.camera.set_forward(Vec3::new(fwd[0], fwd[1], fwd[2]));
                     app.camera.position = position;
                 }
             }
@@ -292,24 +292,24 @@ mod tests {
 
         for mesh in document.meshes() {
             for primitive in mesh.primitives() {
-                let mut vertices = Vec::<Vector3>::new();
-                let mut normals = Vec::<Vector3>::new();
+                let mut vertices = Vec::<Vec3>::new();
+                let mut normals = Vec::<Vec3>::new();
                 let mut tangents = Vec::<[f32; 4]>::new();
-                let mut uvs = Vec::<Vector2>::new();
+                let mut uvs = Vec::<Vec2>::new();
                 let mut indices = Vec::<u32>::new();
 
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()].0));
 
                 if let Some(iter) = reader.read_positions() {
                     for p in iter {
-                        let v = Vector3::new(p[0], p[1], p[2]) + position_offset;
+                        let v = Vec3::new(p[0], p[1], p[2]) + position_offset;
                         vertices.push(v);
                     }
                 }
 
                 if let Some(iter) = reader.read_normals() {
                     for n in iter {
-                        let v = Vector3::new(n[0], n[1], n[2]);
+                        let v = Vec3::new(n[0], n[1], n[2]);
                         normals.push(v);
                     }
                 }
@@ -323,18 +323,18 @@ mod tests {
                 if let Some(iter) = reader.read_tex_coords(1) {
                     for uv in iter.into_f32() {
                         if flip_uv {
-                            uvs.push(Vector2::new(uv[0], 1.0 - uv[1]));
+                            uvs.push(Vec2::new(uv[0], 1.0 - uv[1]));
                         } else {
-                            uvs.push(Vector2::new(uv[0], uv[1]));
+                            uvs.push(Vec2::new(uv[0], uv[1]));
                         }
                     }
                 } else {
                     if let Some(iter) = reader.read_tex_coords(0) {
                         for uv in iter.into_f32() {
                             if flip_uv {
-                                uvs.push(Vector2::new(uv[0], 1.0 - uv[1]));
+                                uvs.push(Vec2::new(uv[0], 1.0 - uv[1]));
                             } else {
-                                uvs.push(Vector2::new(uv[0], uv[1]));
+                                uvs.push(Vec2::new(uv[0], uv[1]));
                             }
                         }
                     }
@@ -379,9 +379,9 @@ mod tests {
     }
 
     fn generate_tangents(
-        positions: &[Vector3],
-        normals: &[Vector3],
-        uvs: &[Vector2],
+        positions: &[Vec3],
+        normals: &[Vec3],
+        uvs: &[Vec2],
         indices: &[u32],
     ) -> Vec<[f32; 4]> {
         let n = positions.len();
@@ -496,15 +496,15 @@ mod tests {
         let mut mesh_id = 0;
         for mesh in document.meshes() {
             for primitive in mesh.primitives() {
-                let mut positions = Vec::<Vector3>::new();
-                let mut uvs = Vec::<Vector2>::new();
+                let mut positions = Vec::<Vec3>::new();
+                let mut uvs = Vec::<Vec2>::new();
                 let mut indices = Vec::<u32>::new();
 
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()].0));
 
                 if let Some(iter) = reader.read_positions() {
                     for p in iter {
-                        let v = Vector3::new(p[0], p[1], p[2]);
+                        let v = Vec3::new(p[0], p[1], p[2]);
                         positions.push(v);
                     }
                 }
@@ -512,18 +512,18 @@ mod tests {
                 if let Some(iter) = reader.read_tex_coords(1) {
                     for uv in iter.into_f32() {
                         if flip_uv {
-                            uvs.push(Vector2::new(uv[0], 1.0 - uv[1]));
+                            uvs.push(Vec2::new(uv[0], 1.0 - uv[1]));
                         } else {
-                            uvs.push(Vector2::new(uv[0], uv[1]));
+                            uvs.push(Vec2::new(uv[0], uv[1]));
                         }
                     }
                 } else {
                     if let Some(iter) = reader.read_tex_coords(0) {
                         for uv in iter.into_f32() {
                             if flip_uv {
-                                uvs.push(Vector2::new(uv[0], 1.0 - uv[1]));
+                                uvs.push(Vec2::new(uv[0], 1.0 - uv[1]));
                             } else {
-                                uvs.push(Vector2::new(uv[0], uv[1]));
+                                uvs.push(Vec2::new(uv[0], uv[1]));
                             }
                         }
                     }

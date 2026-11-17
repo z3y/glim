@@ -5,7 +5,9 @@ use std::{
 
 use glfw_sys::*;
 
-use crate::{Glim, GlimConfig, math::Vector3, vulkan_context::VulkanConfig};
+use glam::Vec3;
+
+use crate::{Glim, GlimConfig, vulkan_context::VulkanConfig};
 
 pub fn create_window(width: u32, height: u32, title: &String) -> *mut GLFWwindow {
     let width = width as c_int;
@@ -107,17 +109,17 @@ pub fn update_camera(app: &mut Glim, delta_time: f32) {
         let yaw_rad = camera.yaw;
         let pitch_rad = camera.pitch;
 
-        let forward = Vector3::new(
+        let forward = Vec3::new(
             yaw_rad.sin() * pitch_rad.cos(),
             pitch_rad.sin(),
             yaw_rad.cos() * pitch_rad.cos(),
         )
-        .normalize();
+        .normalize_or_zero();
 
-        let world_up = Vector3::new(0.0, 1.0, 0.0);
-        let right = forward.cross(world_up).normalize();
+        let world_up = Vec3::new(0.0, 1.0, 0.0);
+        let right = forward.cross(world_up).normalize_or_zero();
 
-        let mut direction = Vector3::ZERO;
+        let mut direction = Vec3::ZERO;
         if glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS {
             direction = direction + forward;
             camera_moved = true;
@@ -135,16 +137,16 @@ pub fn update_camera(app: &mut Glim, delta_time: f32) {
             camera_moved = true;
         }
         if glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS {
-            direction = direction + Vector3::UP;
+            direction = direction + Vec3::Y;
             camera_moved = true;
         }
         if glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS {
-            direction = direction - Vector3::UP;
+            direction = direction - Vec3::Y;
             camera_moved = true;
         }
 
         if camera_moved {
-            camera.position = camera.position + direction.normalize() * move_speed;
+            camera.position = camera.position + direction.normalize_or_zero() * move_speed;
         }
 
         if glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS {

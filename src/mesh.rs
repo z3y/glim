@@ -1,3 +1,4 @@
+use glam::{Vec2, Vec3};
 use ash::vk::{self, Handle};
 
 use crate::{
@@ -5,7 +6,6 @@ use crate::{
     bindings::{GlimConfig, Log},
     buffer::Buffer,
     cwbvh::Cwbvh,
-    math::*,
     seams::{Seam, find_seams},
     vulkan_context::VulkanContext,
 };
@@ -16,10 +16,10 @@ pub const GEOMETRIES_VARIANTS: usize = 4;
 
 #[repr(C)]
 pub struct FfiMesh {
-    pub vertices: *const Vector3,
-    pub normals: *const Vector3,
-    pub lightmap_uvs: *const Vector2,
-    pub main_uvs: *const Vector2,
+    pub vertices: *const Vec3,
+    pub normals: *const Vec3,
+    pub lightmap_uvs: *const Vec2,
+    pub main_uvs: *const Vec2,
     pub tangents: *const [f32; 4],
     pub indices: *const u32,
 
@@ -43,14 +43,14 @@ pub struct FfiMesh {
 #[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
-    pub position: Vector3,
+    pub position: Vec3,
     lightmap_group: u8,
     resolution: u8,
     flags: u8,
     pad: u8,
 
-    pub normal_octahedron: Vector2,
-    pub uv: Vector2,
+    pub normal_octahedron: Vec2,
+    pub uv: Vec2,
 }
 
 impl Vertex {
@@ -59,7 +59,7 @@ impl Vertex {
     pub const FIX_SEAMS_BIT: u8 = 1 << 2;
 
     #[inline]
-    pub fn decode_normal(&self) -> Vector3 {
+    pub fn decode_normal(&self) -> Vec3 {
         decode_normal_octahedron(self.normal_octahedron)
     }
 
@@ -99,7 +99,7 @@ impl Vertex {
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub tangents: Vec<[f32; 4]>,
-    pub original_normals: Vec<Vector3>,
+    pub original_normals: Vec<Vec3>,
     pub indices: Vec<u32>,
     pub main_uvs: Vec<[f32; 4]>,
 
@@ -112,23 +112,23 @@ fn sign_not_zero(v: f32) -> f32 {
     if v >= 0.0 { 1.0 } else { -1.0 }
 }
 
-pub fn encode_normal_octahedron(n: Vector3) -> Vector2 {
+pub fn encode_normal_octahedron(n: Vec3) -> Vec2 {
     let inv_l1 = 1.0 / (n.x.abs() + n.y.abs() + n.z.abs());
 
-    let mut p = Vector2::new(n.x * inv_l1, n.y * inv_l1);
+    let mut p = Vec2::new(n.x * inv_l1, n.y * inv_l1);
 
     if n.z < 0.0 {
         let x = (1.0 - p.y.abs()) * sign_not_zero(p.x);
         let y = (1.0 - p.x.abs()) * sign_not_zero(p.y);
 
-        p = Vector2::new(x, y);
+        p = Vec2::new(x, y);
     }
 
     p
 }
 
-pub fn decode_normal_octahedron(p: Vector2) -> Vector3 {
-    let mut n = Vector3::new(p.x, p.y, 1.0 - p.x.abs() - p.y.abs());
+pub fn decode_normal_octahedron(p: Vec2) -> Vec3 {
+    let mut n = Vec3::new(p.x, p.y, 1.0 - p.x.abs() - p.y.abs());
 
     if n.z < 0.0 {
         let x = (1.0 - n.y.abs()) * sign_not_zero(n.x);
@@ -138,13 +138,13 @@ pub fn decode_normal_octahedron(p: Vector2) -> Vector3 {
         n.y = y;
     }
 
-    n.normalize()
+    n.normalize_or_zero()
 }
 
 #[allow(dead_code)]
-pub fn encode_hemi_octahedron(n: Vector3) -> Vector2 {
+pub fn encode_hemi_octahedron(n: Vec3) -> Vec2 {
     let inv_l1 = 1.0 / (n.x.abs() + n.y.abs() + n.z.abs());
-    Vector2::new(n.x * inv_l1, n.y * inv_l1)
+    Vec2::new(n.x * inv_l1, n.y * inv_l1)
 }
 
 use std::collections::HashMap;
@@ -257,7 +257,7 @@ impl Mesh {
 
         for i in 0..vertex_count {
             let mut normal = normals[i];
-            normal.transform_space(system);
+            system.transform(&mut normal);
 
             let mut flags: u8 = 0;
             if backface_gi {
@@ -285,7 +285,7 @@ impl Mesh {
                 uv: uv,
             };
             vertex.set_resolution(resolution);
-            vertex.position.transform_space(system);
+            system.transform(&mut vertex.position);
 
             self.vertices.push(vertex);
 
