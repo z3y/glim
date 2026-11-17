@@ -1,6 +1,7 @@
 # [Glim](https://github.com/z3y/glim)
 
 # v0.12.5
+
 - Fixed errors caused by meshes without UV0
   - This is required for sampling alpha, it will use UV1 instead
 - Added log errors for meshes without both UV0 and UV1 or normals

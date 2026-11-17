@@ -520,15 +520,23 @@ float3 EncodeCombinedSHL1(SHProbeL2 probe)
     return combined;
 }
 
-float MISWeight(float pdf1, float pdf2)
+float MISWeight(float a, float b)
 {
-    if (pdf1 <= 0.0)
+    if (a <= 0.0)
     {
         return 0.0;
     }
-    float ratio = pdf2 / pdf1;
-    float denom = 1.0 + ratio * ratio;
-    return 1.0 / denom;
+    if (isinf(a))
+    {
+        return 1.0;
+    }
+    if (isinf(b))
+    {
+        return 0.0;
+    }
+
+    float r = b / a;
+    return 1.0 / (1.0 + r * r);
 }
 
 float Luminance(float3 rgb)
@@ -574,7 +582,8 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     shadowRay.tMax = max(sqrt(distanceSquare) - 0.001, 0.0001);
     shadowRay.D = L;
 
-    float visible = any(color > 0.0) ? 1 : 0;
+    const float SHADOW_THRESHOLD = 0.001;
+    float visible = any(color > SHADOW_THRESHOLD) ? 1 : 0;
 
     if (!isLightProbe)
     {

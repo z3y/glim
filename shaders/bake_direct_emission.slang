@@ -51,22 +51,23 @@ void main(uint3 threadID: SV_DispatchThreadID)
     ray.tMax = RAY_MAX;
 
     float randomEmissiveTrianglePdf = 1.0 / float(EMISSIVE_TRIANGLES_COUNT);
-    float bsdfPdf = 1.0 / float.getPi();
 
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
         uint *emissiveTriangles = Push.emissiveTriangles;
 
-        float2 xi = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
-        uint triIndex = min(uint(xi.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
+        float2 xiPick = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
+        float2 xiLight = SobolBurleySample2D(indexing.x, 3, indexing.y, indexing.z);
+        uint triIndex = min(uint(xiPick.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
         uint emissivePrimitiveID = emissiveTriangles[triIndex];
 
         float3 L;
         float pdf = 0.0;
-        float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xi.y, throughput, randomEmissiveTrianglePdf, pdf, L, false);
+        float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, randomEmissiveTrianglePdf, pdf, L, false);
         float NoL = saturate(dot(L, normalWS));
 
-        current *= MISWeight(pdf, bsdfPdf);
+        float bsdfPdfL = saturate(dot(normalWS, L)) / float.getPi();
+        current *= MISWeight(pdf, bsdfPdfL);
         color.rgb += current * NoL;
         dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
@@ -102,7 +103,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
                     if (cosThetaLight > 0.0)
                     {
                         float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
-                        emission *= MISWeight(bsdfPdf, lightPdf);
+                        float bsdfPdfH = saturate(dot(normalWS, ray.D)) / float.getPi();
+                        emission *= MISWeight(bsdfPdfH, lightPdf);
                         color.rgb += emission;
                         dominantDirection.xyz += ray.D * Luminance(emission * sampleScale);
                         AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
