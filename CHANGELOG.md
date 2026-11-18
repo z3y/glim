@@ -69,6 +69,15 @@
   - Only LOD0 is baked, lower LODs use the same lightmap and scale offset as LOD0, so their lightmap UVs need to match LOD0
   - LOD0 renderers with lower LODs always use ScaleOffset packing
   - Fixed lower LODs getting baked when assigned to a lightmap group with a Lightmap Group Selector
+- The preview now opens in a Unity editor window instead of a separate GLFW window
+  - Frames are read back to the CPU and uploaded to a texture, so it works with any editor graphics API (DirectX 11, DirectX 12, OpenGL Core and Vulkan)
+  - Render resolution follows the window size, with a resolution scale option (100%, 75%, 50%, 25%) that is remembered
+  - Samples and bounces moved from the Glim Lightmapper component to the preview window top bar, changing them restarts the preview
+  - Frame throttling follows the editor Interaction Mode preference instead of its own setting
+  - Same controls as before: hold right mouse to look, WASD to move, Q/E down/up, Shift faster, Ctrl slower, R restart, Esc to close
+  - Removed the preview width, height, throttle, samples and bounces settings from the Glim Lightmapper component
+- GLFW is no longer included in the plugin, it's only used for the standalone preview in tests or with the `glfw` cargo feature
+- Fixed preview throttling alternating between long and short frames
 
 # v0.12.5
 
