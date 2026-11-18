@@ -487,24 +487,7 @@ pub extern "C" fn app_add_probe(app: *mut Glim, mut position: Vec3, radius: f32)
         let probe = SHProbeL2 {
             position,
             radius,
-            l0: Vec3::ZERO,
-            occlusion0: 0.0,
-            l1_1: Vec3::ZERO,
-            occlusion1: 0.0,
-            l10: Vec3::ZERO,
-            occlusion2: 0.0,
-            l11: Vec3::ZERO,
-            occlusion3: 0.0,
-            l2_2: Vec3::ZERO,
-            occlusion_light0: -1,
-            l2_1: Vec3::ZERO,
-            occlusion_light1: -1,
-            l20: Vec3::ZERO,
-            occlusion_light2: -1,
-            l21: Vec3::ZERO,
-            occlusion_light3: -1,
-            l22: Vec3::ZERO,
-            pad9: 0,
+            ..Default::default()
         };
 
         app.probes.push(probe);
