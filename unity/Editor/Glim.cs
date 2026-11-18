@@ -976,6 +976,9 @@ namespace Glim
             if (mode == GlimUVPackingOverride.SplitCharts) return true;
             if (!groupSplit) return false;
 
+            // the uv mesh only gets applied through static batching
+            if (!GameObjectUtility.GetStaticEditorFlags(renderer.gameObject).HasFlag(StaticEditorFlags.BatchingStatic)) return false;
+
             // instanced renderers can't use the per renderer uv mesh
             foreach (var mat in renderer.sharedMaterials)
             {

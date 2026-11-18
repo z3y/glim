@@ -13,7 +13,7 @@ namespace Glim
 
     public enum GlimUVPackingOverride
     {
-        [Tooltip("Use the lightmap group packing type. In SplitCharts groups, renderers with a GPU instanced material fall back to ScaleOffset.")]
+        [Tooltip("Use the lightmap group packing type. In SplitCharts groups, renderers that aren't Batching Static or have a GPU instanced material fall back to ScaleOffset.")]
         Group = 0,
         ScaleOffset = 1,
         SplitCharts = 2,
@@ -43,7 +43,7 @@ Alpha tested (Cutout) and opaque materials are not affected.")]
 
         [Tooltip(
 @"Overrides the lightmap group packing type for this renderer, so ScaleOffset and SplitCharts renderers can share one lightmap.
-Group: use the group packing type. In SplitCharts groups, renderers with a GPU instanced material automatically use ScaleOffset.
+Group: use the group packing type. In SplitCharts groups, renderers that aren't Batching Static or have a GPU instanced material automatically use ScaleOffset.
 ScaleOffset: pack the whole mesh as one chart. Required when the renderer can't use the generated UV mesh (e.g. GPU instancing).
 SplitCharts: split the mesh into UV islands. Only works with static batching.
 Ignored when the group packing type is None.")]

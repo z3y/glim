@@ -64,7 +64,7 @@
   - Transmission
   - UV packing override (Group, ScaleOffset, SplitCharts)
 - ScaleOffset and SplitCharts UV packing can now be mixed in one lightmap group
-  - Renderers with a GPU instanced material automatically use ScaleOffset in SplitCharts groups
+  - Renderers that aren't Batching Static or have a GPU instanced material automatically use ScaleOffset in SplitCharts groups
 
 # v0.12.5
 
