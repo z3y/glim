@@ -38,10 +38,14 @@ namespace Glim
             using var metaAlbedo = new MetaTexture((int)settings.width, MetaTexture.AtlasType.Albedo);
             using var metaEmission = new MetaTexture((int)settings.width, MetaTexture.AtlasType.Emission);
 
+            // Conservative (expanded) meshes are shared by both atlases so each is built once.
+            // Disposed after the readbacks below complete, so the GPU is done with them.
+            using var conservativeMeshes = new MetaTexture.ConservativeMeshCache((int)settings.width);
+
             // The two atlases are independent, so issue both readbacks before blocking on
             // either and let them overlap rather than stalling on each in turn.
-            var albedoRequest = metaAlbedo.CreateAtlas(renderers, MetaTexture.AtlasType.Albedo);
-            var emissionRequest = metaEmission.CreateAtlas(renderers, MetaTexture.AtlasType.Emission);
+            var albedoRequest = metaAlbedo.CreateAtlas(renderers, MetaTexture.AtlasType.Albedo, conservativeMeshes);
+            var emissionRequest = metaEmission.CreateAtlas(renderers, MetaTexture.AtlasType.Emission, conservativeMeshes);
 
             albedoRequest.WaitForCompletion();
             emissionRequest.WaitForCompletion();
