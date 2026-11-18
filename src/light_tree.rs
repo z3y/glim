@@ -99,31 +99,24 @@ impl LightTriangle {
     pub fn new(
         primitive_id: u32,
         p: [Vec3; 3],
-        normals: [Vec3; 3],
         radiance_luminance: f32,
         two_sided: bool,
     ) -> Option<LightTriangle> {
-        let area = 0.5 * (p[1] - p[0]).cross(p[2] - p[0]).length();
+        // same winding as Surface::Ng, which ShadeTriangleLight uses to decide the emitting side
+        let n = (p[1] - p[0]).cross(p[2] - p[0]);
+        let len = n.length();
+        let area = 0.5 * len;
         let power = area * radiance_luminance;
         if !(area > 0.0) || !(power > 0.0) || !power.is_finite() {
             return None;
         }
 
-        // interpolated normals only stay inside the cone while it is at most 90 degrees
-        let (axis, cos_theta_o) = match (normals[0] + normals[1] + normals[2]).try_normalize() {
-            Some(axis) if !two_sided => {
-                let cos_o = normals.iter().map(|n| axis.dot(*n)).fold(1.0f32, f32::min);
-                (axis, if cos_o > 0.0 { cos_o } else { -1.0 })
-            }
-            axis => (axis.unwrap_or(Vec3::Z), -1.0),
-        };
-
         Some(LightTriangle {
             primitive_id,
             bounds: Bounds::EMPTY.extend(p[0]).extend(p[1]).extend(p[2]),
             centroid: (p[0] + p[1] + p[2]) / 3.0,
-            axis,
-            cos_theta_o,
+            axis: n / len,
+            cos_theta_o: if two_sided { -1.0 } else { 1.0 },
             power,
         })
     }

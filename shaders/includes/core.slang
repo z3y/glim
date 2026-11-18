@@ -544,37 +544,284 @@ float Luminance(float3 rgb)
     return dot(rgb, float3(0.2126, 0.7152, 0.0722));
 }
 
-float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, float randomEmissiveTrianglePdf, out float pdf, out float3 L, bool isLightProbe)
+// Spherical triangle sampling (Arvo 1995, as in pbrt-v4). Outside this solid angle range it is
+// numerically unreliable, so those triangles are area sampled instead.
+static const float MIN_SPHERICAL_SAMPLE_AREA = 3e-4;
+static const float MAX_SPHERICAL_SAMPLE_AREA = 6.22;
+
+float AngleBetween(float3 a, float3 b)
 {
-    float r0 = sqrt(xi.x);
-    float r1 = xi.y;
-    float2 bary = float2(r0 * (1.0 - r1), r0 * r1);
+    if (dot(a, b) < 0.0)
+    {
+        return float.getPi() - 2.0 * asin(saturate(length(a + b) * 0.5));
+    }
+    return 2.0 * asin(saturate(length(b - a) * 0.5));
+}
+
+float SampleLinear(float u, float a, float b)
+{
+    if (u == 0.0 && a == 0.0)
+    {
+        return 0.0;
+    }
+    float x = u * (a + b) / (a + sqrt(lerp(a * a, b * b, u)));
+    return min(x, 0.99999994);
+}
+
+// w: corner weights (0,0), (1,0), (0,1), (1,1)
+float2 SampleBilinear(float2 u, float4 w)
+{
+    float y = SampleLinear(u.y, w.x + w.y, w.z + w.w);
+    float x = SampleLinear(u.x, lerp(w.x, w.z, y), lerp(w.y, w.w, y));
+    return float2(x, y);
+}
+
+float BilinearPdf(float2 p, float4 w)
+{
+    if (any(p < 0.0) || any(p > 1.0))
+    {
+        return 0.0;
+    }
+    float sum = w.x + w.y + w.z + w.w;
+    if (sum == 0.0)
+    {
+        return 1.0;
+    }
+    return 4.0 * ((1.0 - p.x) * (1.0 - p.y) * w.x + p.x * (1.0 - p.y) * w.y +
+                  (1.0 - p.x) * p.y * w.z + p.x * p.y * w.w) / sum;
+}
+
+struct SphericalTriangle
+{
+    float3 a;
+    float3 b;
+    float3 c;
+    float3 nab;
+    float alpha;
+    float solidAngle;
+
+    // solidAngle = 0 if degenerate
+    static SphericalTriangle Create(float3 p0, float3 p1, float3 p2, float3 p)
+    {
+        SphericalTriangle t;
+        t.a = normalize(p0 - p);
+        t.b = normalize(p1 - p);
+        t.c = normalize(p2 - p);
+        t.nab = 0.0;
+        t.alpha = 0.0;
+        t.solidAngle = 0.0;
+
+        float3 nab = cross(t.a, t.b);
+        float3 nbc = cross(t.b, t.c);
+        float3 nca = cross(t.c, t.a);
+        if (dot(nab, nab) == 0.0 || dot(nbc, nbc) == 0.0 || dot(nca, nca) == 0.0)
+        {
+            return t;
+        }
+        nab = normalize(nab);
+        nbc = normalize(nbc);
+        nca = normalize(nca);
+
+        t.nab = nab;
+        t.alpha = AngleBetween(nab, -nca);
+        float beta = AngleBetween(nbc, -nab);
+        float gamma = AngleBetween(nca, -nbc);
+        t.solidAngle = max(t.alpha + beta + gamma - float.getPi(), 0.0);
+        return t;
+    }
+
+    // Bilinear warp weights that approximate the receiver cosine over the sample domain.
+    float4 CosineWeights(float3 n)
+    {
+        float wa = max(0.01, abs(dot(n, a)));
+        float wb = max(0.01, abs(dot(n, b)));
+        float wc = max(0.01, abs(dot(n, c)));
+        return float4(wb, wb, wa, wc);
+    }
+
+    // Sample() input that produces direction w.
+    float2 Invert(float3 w)
+    {
+        float3 cp = normalize(cross(cross(b, w), cross(c, a)));
+        if (dot(cp, a + c) < 0.0)
+        {
+            cp = -cp;
+        }
+
+        float u0 = 0.0;
+        if (dot(a, cp) <= 0.99999847691)
+        {
+            float3 ncpb = cross(cp, b);
+            float3 nacp = cross(a, cp);
+            if (dot(ncpb, ncpb) == 0.0 || dot(nacp, nacp) == 0.0)
+            {
+                return 0.5;
+            }
+            ncpb = normalize(ncpb);
+            nacp = normalize(nacp);
+            float subArea = alpha + AngleBetween(nab, ncpb) + AngleBetween(nacp, -ncpb) - float.getPi();
+            u0 = subArea / solidAngle;
+        }
+
+        float u1 = (1.0 - dot(w, b)) / (1.0 - dot(cp, b));
+        return saturate(float2(u0, u1));
+    }
+
+    bool UseForSampling()
+    {
+        return solidAngle >= MIN_SPHERICAL_SAMPLE_AREA && solidAngle <= MAX_SPHERICAL_SAMPLE_AREA;
+    }
+
+    // Returns the direction, uniform in solid angle.
+    float3 Sample(float2 xi)
+    {
+        float areaPi = lerp(float.getPi(), solidAngle + float.getPi(), xi.x);
+
+        float cosAlpha = cos(alpha);
+        float sinAlpha = sin(alpha);
+        float sinPhi = sin(areaPi) * cosAlpha - cos(areaPi) * sinAlpha;
+        float cosPhi = cos(areaPi) * cosAlpha + sin(areaPi) * sinAlpha;
+        float k1 = cosPhi + cosAlpha;
+        float k2 = sinPhi - sinAlpha * dot(a, b);
+        float cosBp = (k2 + (k2 * cosPhi - k1 * sinPhi) * cosAlpha) / ((k2 * sinPhi + k1 * cosPhi) * sinAlpha);
+        cosBp = clamp(cosBp, -1.0, 1.0);
+        float sinBp = sqrt(saturate(1.0 - cosBp * cosBp));
+        float3 cp = cosBp * a + sinBp * normalize(c - dot(c, a) * a);
+
+        float cosTheta = 1.0 - xi.y * (1.0 - dot(cp, b));
+        float sinTheta = sqrt(saturate(1.0 - cosTheta * cosTheta));
+        return cosTheta * b + sinTheta * normalize(cp - dot(cp, b) * b);
+    }
+};
+
+// Barycentrics (Surface::Get convention) of where the ray p + t * w crosses the triangle plane.
+float2 TriangleBarycentrics(float3 p0, float3 p1, float3 p2, float3 p, float3 w)
+{
+    float3 e1 = p1 - p0;
+    float3 e2 = p2 - p0;
+    float3 s1 = cross(w, e2);
+    float divisor = dot(s1, e1);
+    if (divisor == 0.0)
+    {
+        return 0.0;
+    }
+    float3 s = p - p0;
+    float b1 = saturate(dot(s, s1) / divisor);
+    float b2 = saturate(dot(w, cross(s, e1)) / divisor);
+    float sum = b1 + b2;
+    if (sum > 1.0)
+    {
+        b1 /= sum;
+        b2 /= sum;
+    }
+    return float2(b1, b2);
+}
+
+// Solid angle pdf of ShadeTriangleLight picking lightPosition on this triangle, without the
+// triangle selection probability.
+float TriangleLightPdf(uint primitiveID, float3 positionWS, float3 normalWS, float3 lightPosition, bool isLightProbe)
+{
+    Vertex v[3] = TriangleVertices(primitiveID);
+    float3 p0 = v[0].position;
+    float3 p1 = v[1].position;
+    float3 p2 = v[2].position;
+
+    float3 toLight = lightPosition - positionWS;
+    float distSq = dot(toLight, toLight);
+    if (!(distSq > 0.0))
+    {
+        return 0.0;
+    }
+    float3 w = toLight * rsqrt(distSq);
+
+    SphericalTriangle st = SphericalTriangle::Create(p0, p1, p2, positionWS);
+    if (st.UseForSampling())
+    {
+        float pdf = 1.0 / st.solidAngle;
+        if (!isLightProbe)
+        {
+            pdf *= BilinearPdf(st.Invert(w), st.CosineWeights(normalWS));
+        }
+        return pdf;
+    }
+
+    float3 n = cross(p1 - p0, p2 - p0);
+    float area = 0.5 * length(n);
+    float cosLight = abs(dot(w, normalize(n)));
+    if (!(area > 0.0) || cosLight < 1e-6)
+    {
+        return 0.0;
+    }
+    return distSq / (area * cosLight);
+}
+
+float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, float selectionPmf, out float pdf, out float3 L, bool isLightProbe)
+{
+    pdf = 0.0;
+    L = 0.0;
+
+    Vertex v[3] = TriangleVertices(primitiveID);
+    float3 p0 = v[0].position;
+    float3 p1 = v[1].position;
+    float3 p2 = v[2].position;
+
+    SphericalTriangle st = SphericalTriangle::Create(p0, p1, p2, positionWS);
+    bool spherical = st.UseForSampling();
+
+    float2 bary;
+    float warpPdf = 1.0;
+    if (spherical)
+    {
+        float2 u = xi;
+        if (!isLightProbe)
+        {
+            float4 weights = st.CosineWeights(normalWS);
+            u = SampleBilinear(xi, weights);
+            warpPdf = BilinearPdf(u, weights);
+        }
+        bary = TriangleBarycentrics(p0, p1, p2, positionWS, st.Sample(u));
+    }
+    else
+    {
+        float r0 = sqrt(xi.x);
+        bary = float2(r0 * (1.0 - xi.y), r0 * xi.y);
+    }
 
     Surface emissiveSurface = Surface::Get(primitiveID, bary);
 
-    float3 lightColor = SampleEmission(emissiveSurface.coords, emissiveSurface.lightmapGroup).rgb / float.getPi();
-
-    float triangleArea = CalculateTriangleArea(primitiveID);
-
-    float pdfArea = randomEmissiveTrianglePdf / triangleArea;
-
-    L = emissiveSurface.P;
-    float3 positionToLight = L - positionWS;
-    L = normalize(positionToLight);
-    float distanceSquare = max(dot(positionToLight, positionToLight), 0.0001);
-
-    float cosThetaLight = dot(-L, emissiveSurface.N);
-    cosThetaLight = emissiveSurface.backfaceGI ? abs(cosThetaLight) : saturate(cosThetaLight);
-
-    if (cosThetaLight <= 0.001)
+    float3 positionToLight = emissiveSurface.P - positionWS;
+    float distanceSquare = dot(positionToLight, positionToLight);
+    if (!(distanceSquare > 0.0))
     {
-        pdf = 0.0;
+        return 0.0;
+    }
+    L = positionToLight * rsqrt(distanceSquare);
+
+    float cosLight = dot(-L, emissiveSurface.Ng);
+    if (!emissiveSurface.backfaceGI && cosLight <= 0.0)
+    {
         return 0.0;
     }
 
-    float solidAngleWeight = cosThetaLight / (distanceSquare * pdfArea);
+    float directionPdf;
+    if (spherical)
+    {
+        directionPdf = warpPdf / st.solidAngle;
+    }
+    else
+    {
+        float area = CalculateTriangleArea(primitiveID);
+        if (abs(cosLight) < 1e-6)
+        {
+            return 0.0;
+        }
+        directionPdf = distanceSquare / (area * abs(cosLight));
+    }
 
-    float3 color = solidAngleWeight * lightColor * throughput;
+    pdf = selectionPmf * directionPdf;
+
+    float3 lightColor = SampleEmission(emissiveSurface.coords, emissiveSurface.lightmapGroup).rgb / float.getPi();
+    float3 color = lightColor * throughput / pdf;
 
     Ray shadowRay;
     shadowRay.P = positionWS;
@@ -599,8 +846,6 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
             color = 0.0;
         }
     }
-
-    pdf = pdfArea * distanceSquare / cosThetaLight;
 
     return color;
 }

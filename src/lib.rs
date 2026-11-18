@@ -1205,7 +1205,6 @@ fn extract_emissive_triangles(app: &mut Glim) {
                 light_triangles.extend(LightTriangle::new(
                     primitive_base + local_id as u32,
                     [v0.position, v1.position, v2.position],
-                    [v0.decode_normal(), v1.decode_normal(), v2.decode_normal()],
                     luminance(average),
                     v0.backface_gi(),
                 ));

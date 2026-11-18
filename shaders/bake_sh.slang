@@ -221,19 +221,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
                     if (selectionPmf > 0.0)
                     {
-                        float3 positionToLight = surface.P - probePosition;
-                        float distSq = max(dot(positionToLight, positionToLight), 0.0001);
-
-                        // matches ShadeTriangleLight
-                        float cosThetaLight = dot(-ray.D, surface.N);
-                        cosThetaLight = surface.backfaceGI ? abs(cosThetaLight) : saturate(cosThetaLight);
-
-                        if (cosThetaLight > 0.001)
-                        {
-                            float triangleArea = CalculateTriangleArea(hit.primitiveID);
-                            float lightPdf = (selectionPmf / triangleArea) * distSq / cosThetaLight;
-                            weight = MISWeight(bsdfPdf, lightPdf);
-                        }
+                        float lightPdf = selectionPmf * TriangleLightPdf(hit.primitiveID, probePosition, 0.0, surface.P, true);
+                        weight = MISWeight(bsdfPdf, lightPdf);
                     }
                 }
 
