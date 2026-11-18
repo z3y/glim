@@ -42,6 +42,15 @@ Bakes an additional directional lightmap that stores the dominant incoming light
 Bakes two textures (L0 and Monochromatic luminance of L1). Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it."
 )]
         public LightmapMode lightmapMode = LightmapMode.NonDirectional;
+
+        [Tooltip(
+@"How Mixed lights are baked.
+
+- Baked Indirect
+Only indirect light from Mixed lights is baked, direct light and shadows stay real time.
+
+- Shadowmask
+Also bakes the shadows of Mixed lights into a shadowmask texture and light probe occlusion.")]
         public MixedLightMode mixedMode = MixedLightMode.BakedIndirect;
 
         [Tooltip(
@@ -60,18 +69,7 @@ The Built-In pipeline's older falloff: a hyperbolic curve of (distance / Range)Â
 )]
         public LightFalloffType lightFalloff = LightFalloffType.Auto;
 
-        [Tooltip(
-@"Use fast hardware accelerated ray tracing if the GPU supports it (Vulkan RayQueries).
-Automatically fallbacks to software CWBVH ray tracing when not avaliable.")]
-        public bool hardwareRayTracing = true;
-
-        [Tooltip(
-@"Builds a light tree over emissive mesh triangles and samples them directly (next event estimation),
-combined with BSDF sampling through multiple importance sampling.
-Greatly reduces noise from emissive meshes, especially small or bright ones, in scenes with many emissive triangles.
-Affects lightmaps, light probes and light volumes.")]
-        public bool lightTree = true;
-
+        [Space]
         [Tooltip("Number of direct samples, affects direct light from point, spot and directional lights")]
         public uint directLightSamples = 64;
 
@@ -80,7 +78,29 @@ Affects lightmaps, light probes and light volumes.")]
 
         [Tooltip("Only affects bounced light")]
         public uint indirectSamples = 512;
+
+        [Tooltip("Number of indirect light bounces. Each bounce after the first uses half the samples of the previous one")]
         public uint bounces = 5;
+
+        [Tooltip(
+@"Builds a light tree over emissive mesh triangles and samples them directly (next event estimation),
+combined with BSDF sampling through multiple importance sampling.
+Greatly reduces noise from emissive meshes, especially small or bright ones, in scenes with many emissive triangles.
+Affects lightmaps, light probes and light volumes.")]
+        public bool lightTree = true;
+
+        [Space]
+        [Tooltip("Scales bounced light")]
+        [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;
+
+        [Tooltip("Scales the baked light of all emissive materials. Can also be set per renderer with the Glim Renderer Settings component")]
+        public float emissiveMultiplier = 1.0f;
+
+        [Tooltip("Applies Ambient Occlusion to indirect lighting. Direct light and emissive materials are unaffected.")]
+        [Range(0.0f, 1.0f)] public float ambientOcclusion = 0.0f;
+
+        [Tooltip("Maximum distance at which geometry contributes to Ambient Occlusion")]
+        public float ambientOcclusionRange = 1.0f;
 
         [Space]
         [Tooltip("Minimum texel coverage of a triangle. Texels covered by only one triangle are always kept. Lower threshold uses more memory and slows down baking.")]
@@ -96,24 +116,20 @@ Affects lightmaps, light probes and light volumes.")]
         public bool leakDetection = true;
 
         [Space]
-        [Range(0.0f, 5.0f)] public float indirectMultiplier = 1.0f;
-        public float emissiveMultiplier = 1.0f;
-
-        [Space]
-        [Tooltip("Applies Ambient Occlusion to indirect lighting. Direct light and emissive materials are unaffected.")]
-        [Range(0.0f, 1.0f)] public float ambientOcclusion = 0.0f;
-        public float ambientOcclusionRange = 1.0f;
-
-        [Space]
+        [Tooltip("Number of samples per light probe")]
         public uint lightProbeSamples = 4096;
+
         [Tooltip(
 @"Jitter light probe samples by defined radius in meters.
 Probe positions are also moved outside of geometry defined by this radius.
 Automatically applied to light volumes based on texel size."
 )]
         public float lightProbeRadius = 0.0f;
+
         [Tooltip("Applies Lanczos windowing function to light probes to reduce ringing")]
         public bool lightProbeDeringing = false;
+
+        [Tooltip("Strength of the deringing, only used when Light Probe Deringing is enabled")]
         [Range(0.0f, 1.0f)] public float deringingIntensity = 0.5f;
 
         [Space]
@@ -122,8 +138,15 @@ Automatically applied to light volumes based on texel size."
 
         [Tooltip("Temporarly increases reflection probe resolution by 2x and downsamples on the imported cubemap")]
         public bool reflectionProbesSuperSampling = false;
+
         [Tooltip("Creates a mesh for each light visible in reflection probes, based on the shadow radius, area size or directional angle")]
         public bool reflectionProbesSpecular = false; // todo URP Shader
+
+        [Space]
+        [Tooltip(
+@"Use fast hardware accelerated ray tracing if the GPU supports it (Vulkan RayQueries).
+Automatically fallbacks to software CWBVH ray tracing when not avaliable.")]
+        public bool hardwareRayTracing = true;
 
         [Tooltip("Play a sound when bake finishes or fails.")]
         public bool playBakeCompletionSound = false;
