@@ -1,5 +1,53 @@
 # [Glim](https://github.com/z3y/glim)
 
+# v0.13.0
+
+- Implemented a light tree for emissive meshes
+  - Replaces the Multiple Importance Sampling option, it's now called Light Tree and is on by default
+  - Emissive triangles are picked based on their importance (distance, orientation and brightness) instead of uniformly at random, similar to pbrt and Cycles
+  - Greatly reduces noise from emissive meshes, especially in scenes with a lot of emissive triangles or small and bright ones
+  - Brightness of each emissive triangle is now estimated from multiple points on the triangle, instead of only checking if it's emissive or not
+  - Affects lightmaps, light probes and light volumes
+- Implemented solid angle sampling for emissive triangles
+  - Reduces noise from large emissive triangles close to the surface
+  - Falls back to area sampling for very small or very large triangles where it's numerically unreliable
+- Fixed incorrect MIS weights for emissive meshes
+  - BSDF pdf was a constant instead of using the cosine
+- Improved Rectangle and Disc lights
+  - Now sampled uniformly by solid angle instead of by area, which reduces noise when they are close to surfaces
+  - Light cookies still work the same
+- Implemented Double Sided Global Illumination
+  - Uses the Double Sided Global Illumination option on materials, same as Unity
+  - Back faces now get their own texels, so bounce rays hitting the back side of these meshes pick up lighting instead of being black
+  - Works in the preview window too
+- Implemented a shadow terminator fix
+  - Based on "Hacking the Shadow Terminator" (Hanika 2021), adapted from Cycles
+  - Shadow rays near the terminator start from a point lifted towards the smooth surface the vertex normals describe
+  - Fixes blocky shadow artifacts on low poly meshes with smooth normals, this replaces the workaround removed in v0.12.0
+  - Applies to direct lights, emissive meshes and shadowmasks
+- Implemented light probe occlusion for shadowmask mode
+  - Light probes now store occlusion for mixed lights, so dynamic objects get shadowmask shadows too
+  - Written directly into the Lighting Data Asset
+- Implemented Adaptive Probe Volumes support
+  - Glim plugs into Unity's APV bake as the lighting backend, Unity still handles probe placement and serialization
+  - APV probes get baked together with the rest of the light probes, including probe occlusion
+  - Requires Unity 6 (render pipelines core 17)
+- Shadowmasks now support soft shadows
+  - Uses the light shadow radius or angle, same as direct lights
+  - Sample count is raised to the direct light sample count when there are soft shadows, since shadowmasks are not denoised
+- Seam fixer now skips seams with high contrast
+  - High contrast is usually real lighting, for example a shadow edge lying on the seam, so it fades out the constraint instead of forcing both sides to match
+  - Results are also clamped to the original range which removes the dark blotches it could create before
+  - Uses the longer side of the seam to decide the sample count, so a side with higher texel density isn't undersampled
+- Each indirect bounce after the first now uses half the samples of the previous one, with a minimum of 64
+  - Later bounces carry less energy and are lower frequency, so this speeds up baking with more bounces without much visible difference
+- Increased default indirect samples to 512
+- Texels are now sorted in Morton order for better ray coherence
+- Fixed some correlation between random samples of different baking stages
+- UV packing is now ~2x faster
+- Added an option to play a sound when the bake finishes or fails (thanks [Pesky12](https://github.com/pesky12))
+- Benchmark timings are now logged in one line
+
 # v0.12.5
 
 - Fixed errors caused by meshes without UV0
