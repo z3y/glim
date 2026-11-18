@@ -40,7 +40,7 @@ namespace Glim
 
             // Conservative (expanded) meshes are shared by both atlases so each is built once.
             // Disposed after the readbacks below complete, so the GPU is done with them.
-            using var conservativeMeshes = new MetaTexture.ConservativeMeshCache((int)settings.width);
+            using var conservativeMeshes = new ConservativeMeshCache((int)settings.width);
 
             // The two atlases are independent, so issue both readbacks before blocking on
             // either and let them overlap rather than stalling on each in turn.

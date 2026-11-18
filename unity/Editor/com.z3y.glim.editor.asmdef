@@ -9,7 +9,9 @@
         "GUID:a7ff01b0ae211b5439bf8d957d1583a8",
         "GUID:99835874ee819da44948776e0df4ff1d",
         "GUID:df380645f10b7bc4b97d4f5eb6303d95",
-        "GUID:3eae0364be2026648bf74846acb8a731"
+        "GUID:3eae0364be2026648bf74846acb8a731",
+        "Unity.Burst",
+        "Unity.Mathematics"
     ],
     "includePlatforms": [
         "Editor"
@@ -30,6 +32,11 @@
             "name": "red.sim.lightvolumes",
             "expression": "3.0.0-dev.20",
             "define": "LIGHT_VOLUMES_3"
+        },
+        {
+            "name": "com.unity.burst",
+            "expression": "1.6.0",
+            "define": "GLIM_BURST"
         },
         {
             "name": "com.unity.render-pipelines.core",
