@@ -859,12 +859,94 @@ void ValidateSampleColor(inout float4 color)
     color = max(0.0, color);
 }
 
+// Spherical rectangle sampling (Urena et al. 2013). x and y are the unit edge directions.
+struct SphericalRectangle
+{
+    float3 o;
+    float3 x;
+    float3 y;
+    float3 z;
+    float x0;
+    float x1;
+    float y0;
+    float y1;
+    float z0;
+    float b0;
+    float b1;
+    float k;
+    float solidAngle;
+
+    static SphericalRectangle Create(float3 p, float3 corner, float3 x, float3 y, float2 size)
+    {
+        SphericalRectangle r;
+        r.o = p;
+        r.x = x;
+        r.y = y;
+        r.z = cross(x, y);
+
+        float3 d = corner - p;
+        r.z0 = dot(d, r.z);
+        if (r.z0 > 0.0)
+        {
+            r.z = -r.z;
+            r.z0 = -r.z0;
+        }
+        r.x0 = dot(d, x);
+        r.y0 = dot(d, y);
+        r.x1 = r.x0 + size.x;
+        r.y1 = r.y0 + size.y;
+
+        float4 diff = float4(r.x0, r.y1, r.x1, r.y0) - float4(r.x1, r.y0, r.x0, r.y1);
+        float4 nz = float4(r.y0, r.x1, r.y1, r.x0) * diff;
+        nz = nz / sqrt(r.z0 * r.z0 * diff * diff + nz * nz);
+        float g0 = acos(clamp(-nz.x * nz.y, -1.0, 1.0));
+        float g1 = acos(clamp(-nz.y * nz.z, -1.0, 1.0));
+        float g2 = acos(clamp(-nz.z * nz.w, -1.0, 1.0));
+        float g3 = acos(clamp(-nz.w * nz.x, -1.0, 1.0));
+
+        r.b0 = nz.x;
+        r.b1 = nz.z;
+        r.k = 2.0 * float.getPi() - g2 - g3;
+        r.solidAngle = g0 + g1 - r.k;
+        if (!isfinite(r.solidAngle))
+        {
+            r.solidAngle = 0.0;
+        }
+        return r;
+    }
+
+    // Small solid angles lose too much precision, area sampling is fine there anyway.
+    bool UseForSampling()
+    {
+        return solidAngle >= 3e-4;
+    }
+
+    // Returns the sampled point on the rectangle, uniform in solid angle.
+    float3 Sample(float2 xi)
+    {
+        float au = xi.x * solidAngle + k;
+        float fu = (cos(au) * b0 - b1) / sin(au);
+        float cu = clamp((fu > 0.0 ? 1.0 : -1.0) * rsqrt(fu * fu + b0 * b0), -1.0, 1.0);
+        float xu = clamp(-(cu * z0) / max(sqrt(1.0 - cu * cu), 1e-7), x0, x1);
+
+        float d = sqrt(xu * xu + z0 * z0);
+        float h0 = y0 / sqrt(d * d + y0 * y0);
+        float h1 = y1 / sqrt(d * d + y1 * y1);
+        float hv = lerp(h0, h1, xi.y);
+        float hv2 = hv * hv;
+        float yv = (hv2 < 1.0 - 1e-6) ? (hv * d) / sqrt(1.0 - hv2) : y1;
+
+        return o + xu * x + yv * y + z0 * z;
+    }
+};
+
 float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, out float3 L, bool isLightProbe)
 {
     Ray shadowRay;
     shadowRay.P = positionWS;
     shadowRay.tMin = 0;
 
+    float rectSolidAngle = 0.0;
     float3 cookieColor = 1.0;
     bool hasCookie = light.cookie != uint::maxValue;
 
@@ -897,20 +979,48 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     {
         if (ty == LightType::Area)
         {
-            float2 offset = xi - 0.5;
-            L = light.position + right * offset.x * light.AreaOrCookieSize.x + light.up * offset.y * light.AreaOrCookieSize.y;
+            float2 size = light.AreaOrCookieSize;
+            float3 corner = light.position - right * (0.5 * size.x) - up * (0.5 * size.y);
+            float2 rectUV = xi;
+
+            SphericalRectangle rect = SphericalRectangle::Create(positionWS, corner, right, up, size);
+            if (rect.UseForSampling())
+            {
+                L = rect.Sample(xi);
+                rectSolidAngle = rect.solidAngle;
+                rectUV = saturate(float2(dot(L - corner, right), dot(L - corner, up)) / max(size, 1e-6));
+            }
+            else
+            {
+                L = corner + right * (xi.x * size.x) + up * (xi.y * size.y);
+            }
 
             if (hasCookie)
             {
-                float2 cookieUV = float2(1.0 - xi.x, xi.y);
+                float2 cookieUV = float2(1.0 - rectUV.x, rectUV.y);
                 cookieColor = SampleCookie(cookieUV, light.cookie).rgb;
             }
         }
         else if (ty == LightType::Disc)
         {
             float radius = light.AreaOrCookieSize.x;
-            float2 d = SampleDiskConcentric(xi);
-            L = light.position + (right * d.x + up * d.y) * radius;
+            float2 d;
+
+            // Solid angle sample the bounding square. Points outside the disc contribute
+            // nothing, which keeps the estimate unbiased with a bounded weight.
+            float3 corner = light.position - (right + up) * radius;
+            SphericalRectangle rect = SphericalRectangle::Create(positionWS, corner, right, up, 2.0 * radius);
+            if (rect.UseForSampling())
+            {
+                L = rect.Sample(xi);
+                d = float2(dot(L - light.position, right), dot(L - light.position, up)) / max(radius, 1e-6);
+                rectSolidAngle = dot(d, d) <= 1.0 ? rect.solidAngle : -1.0;
+            }
+            else
+            {
+                d = SampleDiskConcentric(xi);
+                L = light.position + (right * d.x + up * d.y) * radius;
+            }
 
             if (hasCookie)
             {
@@ -975,16 +1085,30 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
 
         if (ty == LightType::Area)
         {
-            float area = light.AreaOrCookieSize.x * light.AreaOrCookieSize.y;
             float cosLight = saturate(dot(-L, light.direction));
-            falloff = (cosLight * area) / (float ::getPi() * distanceSquare);
+            if (rectSolidAngle > 0.0)
+            {
+                falloff = cosLight > 0.0 ? rectSolidAngle / float::getPi() : 0.0;
+            }
+            else
+            {
+                float area = light.AreaOrCookieSize.x * light.AreaOrCookieSize.y;
+                falloff = (cosLight * area) / (float ::getPi() * distanceSquare);
+            }
         }
         else if (ty == LightType::Disc)
         {
-            float radius = light.AreaOrCookieSize.x;
-            float area = float ::getPi() * radius * radius;
             float cosLight = saturate(dot(-L, light.direction));
-            falloff = (cosLight * area) / (float ::getPi() * distanceSquare);
+            if (rectSolidAngle != 0.0)
+            {
+                falloff = (cosLight > 0.0 && rectSolidAngle > 0.0) ? rectSolidAngle / float::getPi() : 0.0;
+            }
+            else
+            {
+                float radius = light.AreaOrCookieSize.x;
+                float area = float ::getPi() * radius * radius;
+                falloff = (cosLight * area) / (float ::getPi() * distanceSquare);
+            }
         }
 
         shadowRay.tMax = sqrt(distanceSquare);
