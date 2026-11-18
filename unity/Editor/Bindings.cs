@@ -313,6 +313,8 @@ namespace Glim
             public float transmission;
 
             public float emission_multiplier;
+
+            [MarshalAs(UnmanagedType.I1)] public bool shadow_terminator;
         }
 
         public enum LightType : byte

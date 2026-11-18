@@ -49,6 +49,12 @@ SplitCharts: split the mesh into UV islands. Only works with static batching.
 Ignored when the group packing type is None.")]
         public GlimUVPackingOverride uvPacking = GlimUVPackingOverride.Group;
 
+        [Tooltip(
+@"Fixes jagged shadows near the shadow terminator on low poly meshes with smooth normals,
+by starting shadow rays from the smooth surface described by the vertex normals instead of the flat triangle.
+Disable for meshes with bad normals (e.g. smooth normals across hard corners) if they look worse.")]
+        public bool shadowTerminatorFix = true;
+
         void Start() { }
     }
 }

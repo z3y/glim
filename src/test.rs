@@ -459,6 +459,7 @@ mod tests {
                     alpha_intensity: 1.0,
                     transmission: 0.0,
                     emission_multiplier: 0.0,
+                    shadow_terminator: true,
                 };
                 app_add_mesh(app, mesh);
             }

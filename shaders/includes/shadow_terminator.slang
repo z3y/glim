@@ -23,7 +23,11 @@ struct ShadowTerminator
     float2 bary;
     float3 Ng; // already flipped for back faces
     bool frontFace;
-    bool enabled;
+    // Cycles object shadow_terminator_geometry_offset, 0 disables the offset
+    float offsetCutoff;
+
+    // Cycles default geometry offset
+    static const float DEFAULT_OFFSET_CUTOFF = 0.1;
 
     static ShadowTerminator None()
     {
@@ -32,39 +36,37 @@ struct ShadowTerminator
         t.bary = 0.0;
         t.Ng = 0.0;
         t.frontFace = true;
-        t.enabled = false;
+        t.offsetCutoff = 0.0;
         return t;
     }
 
-    // primitiveID, bary and frontFace as passed to Surface::Get, Ng from that surface
-    static ShadowTerminator Create(uint primitiveID, float2 bary, float3 Ng, bool frontFace)
+    // primitiveID, bary and frontFace as passed to Surface::Get, Ng and shadowTerminator from that surface
+    static ShadowTerminator Create(uint primitiveID, float2 bary, float3 Ng, bool frontFace, bool shadowTerminator)
     {
         ShadowTerminator t;
         t.primitiveID = primitiveID;
         t.bary = bary;
         t.Ng = Ng;
         t.frontFace = frontFace;
-        t.enabled = true;
+        t.offsetCutoff = shadowTerminator ? DEFAULT_OFFSET_CUTOFF : 0.0;
         return t;
     }
 
     // Origin of a shadow ray toward L. Only rays close to the terminator are lifted,
-    // with a smooth transition at the cutoff (Cycles default object setting).
+    // with a smooth transition at the cutoff.
     // Call it only for rays that are actually traced.
     float3 Origin(float3 positionWS, float3 N, float3 L)
     {
-        if (!enabled)
+        if (!(offsetCutoff > 0.0))
         {
             return positionWS;
         }
 
-        const float OFFSET_CUTOFF = 0.1;
-
         float NL = abs(dot(N, L));
         float NgL = dot(Ng, L);
 
-        float amount = (NL < OFFSET_CUTOFF) ? saturate(2.0 - (NgL + NL) / OFFSET_CUTOFF)
-                                            : saturate(1.0 - NgL / OFFSET_CUTOFF);
+        float amount = (NL < offsetCutoff) ? saturate(2.0 - (NgL + NL) / offsetCutoff)
+                                           : saturate(1.0 - NgL / offsetCutoff);
 
         [branch]
         if (amount > 0.0)

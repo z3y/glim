@@ -75,6 +75,7 @@ struct Vertex
     static const uint BACKFACE_GI_BIT = 1 << 0;
     static const uint EMISSIVE_BIT = 1 << 1;
     static const uint FIX_SEAMS_BIT = 1 << 2;
+    static const uint SHADOW_TERMINATOR_BIT = 1 << 3;
 
     float3 DecodeNormal()
     {
@@ -115,6 +116,11 @@ struct Vertex
     {
         return (GetFlags() & FIX_SEAMS_BIT) != 0u;
     }
+
+    bool ShadowTerminator()
+    {
+        return (GetFlags() & SHADOW_TERMINATOR_BIT) != 0u;
+    }
 };
 
 Vertex[3] TriangleVertices(uint primitiveID)
@@ -139,6 +145,7 @@ struct Surface
     uint lightmapGroup;
     bool backfaceGI;
     bool emissive;
+    bool shadowTerminator;
     // per renderer emission scale, use SampleSurfaceEmission
     float emissionMultiplier;
     uint resolution;
@@ -194,6 +201,7 @@ struct Surface
         surface.lightmapGroup = v0.LightmapGroup();
         surface.backfaceGI = v0.BackfaceGI();
         surface.emissive = v0.Emissive();
+        surface.shadowTerminator = v0.ShadowTerminator();
         // stored in the free z of the third main uv entry, see mesh.rs
         surface.emissionMultiplier = surface.emissive ? Push.rt.mainUVs[primitiveID * 3 + 2].z : 0.0;
         surface.resolution = v0.Resolution();

@@ -50,6 +50,9 @@ pub struct FfiMesh {
 
     /// scales the emission of this mesh, on top of the global emissive multiplier
     pub emission_multiplier: f32,
+
+    /// smooth surface shadow ray offset (Cycles shadow terminator geometry offset 0.1), off is 0
+    pub shadow_terminator: bool,
 }
 
 // must match core.slang
@@ -74,6 +77,7 @@ impl Vertex {
     pub const BACKFACE_GI_BIT: u8 = 1 << 0;
     pub const EMISSIVE_BIT: u8 = 1 << 1;
     pub const FIX_SEAMS_BIT: u8 = 1 << 2;
+    pub const SHADOW_TERMINATOR_BIT: u8 = 1 << 3;
 
     #[inline]
     pub fn decode_normal(&self) -> Vec3 {
@@ -267,6 +271,7 @@ impl Mesh {
 
         let lightmap_group = mesh.lightmap_group as u8;
         let backface_gi = mesh.backface_gi;
+        let shadow_terminator = mesh.shadow_terminator;
 
         self.vertices.reserve(vertex_count);
         self.tangents.reserve(vertex_count);
@@ -285,6 +290,9 @@ impl Mesh {
             }
             if fix_seams {
                 flags |= Vertex::FIX_SEAMS_BIT;
+            }
+            if shadow_terminator {
+                flags |= Vertex::SHADOW_TERMINATOR_BIT;
             }
 
             let mut uv = lightmap_uvs[i];

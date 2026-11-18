@@ -1342,7 +1342,7 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     Surface surface = Surface::Get(primitiveID, bary, frontFace);
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
-    terminator = ShadowTerminator::Create(primitiveID, bary, surface.Ng, frontFace);
+    terminator = ShadowTerminator::Create(primitiveID, bary, surface.Ng, frontFace, surface.shadowTerminator);
 }
 
 // Builds the shadowmask shadow ray, false if the position is outside the light range or spot cone.

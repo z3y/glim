@@ -1134,6 +1134,8 @@ namespace Glim
             // only with alphaBlend, from GlimRendererSettings
             public float transmission;
             public float emissionMultiplier = 1.0f;
+            // from GlimRendererSettings
+            public bool shadowTerminator = true;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -1175,6 +1177,7 @@ namespace Glim
                 float transmission = rendererSettings ? Mathf.Clamp01(rendererSettings.transmission) : 0.0f;
                 float emissionMultiplier = rendererSettings ? Mathf.Max(0.0f, rendererSettings.emissionMultiplier) : 1.0f;
                 var doubleSidedGI = rendererSettings ? rendererSettings.doubleSidedGI : GlimDoubleSidedGI.Material;
+                bool shadowTerminator = rendererSettings ? rendererSettings.shadowTerminatorFix : true;
 
                 Mesh mesh = filter.sharedMesh;
                 if (!mesh)
@@ -1414,6 +1417,7 @@ namespace Glim
                         alphaIntensity = alphaIntensity,
                         transmission = alphaBlend ? transmission : 0.0f,
                         emissionMultiplier = emissionMultiplier,
+                        shadowTerminator = shadowTerminator,
                     };
 
                     datas.Add(data);

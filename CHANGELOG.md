@@ -78,6 +78,12 @@
   - Removed the preview width, height, throttle, samples and bounces settings from the Glim Lightmapper component
 - GLFW is no longer included in the plugin, it's only used for the standalone preview in tests or with the `glfw` cargo feature
 - Fixed preview throttling alternating between long and short frames
+- Albedo and emission atlases are now rendered conservatively
+  - Fixes holes from thin or tiny triangles that didn't cover any texel center, without modifying material shaders
+  - Each triangle is expanded on the CPU to cover every texel it touches (at most half a texel), with vertex attributes extrapolated so textures keep lining up
+  - Drawn once before the regular jittered meta passes, so it only fills texels they miss
+  - Built in parallel with Burst and shared between the albedo and emission atlases
+  - Requires the Burst package, without it the conservative pass is skipped and an error is logged
 
 # v0.12.5
 
