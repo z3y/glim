@@ -72,20 +72,20 @@ pub struct SpecializationConstants {
     pub jitter_barycentrics: u32,      // 2
     pub emissive_triangles_count: u32, // 3
 
-    pub multiple_importance_sampling: u32, // 4
-    pub lightmap_group_count: u32,         // 5
-    pub lightmap_mode: u32,                // 6
-    pub coordinate_system: u32,            // 7
+    pub pad0: u32,                 // 4
+    pub lightmap_group_count: u32, // 5
+    pub lightmap_mode: u32,        // 6
+    pub coordinate_system: u32,    // 7
 
     pub skybox_intensity: f32,     // 8
     pub indirect_intensity: f32,   // 9
     pub lightprobe_deringing: f32, // 10
     pub emissive_multiplier: f32,  // 11
 
-    pub ao_intensity: f32, // 12
-    pub ao_range: f32,     // 13
+    pub ao_intensity: f32,         // 12
+    pub ao_range: f32,             // 13
     pub backface_texel_start: u32, // 14
-    pub pad1: u32,         // 15
+    pub pad1: u32,                 // 15
 
     pub geometries_0_offset: u32, // 16
     pub geometries_1_offset: u32, // 17

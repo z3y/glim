@@ -578,7 +578,7 @@ fn initialize_render(app: &mut Glim) {
         light_falloff_type: config.light_falloff as u32,
         jitter_barycentrics: app.config.antialiasing as u32,
         emissive_triangles_count: app.emissive_triangles_count,
-        multiple_importance_sampling: config.mis as u32,
+        pad0: 0,
         lightmap_group_count: app.groups.len() as u32,
         lightmap_mode: config.lightmap_mode as u32,
         coordinate_system: app.config.coordinate_system as u32,
@@ -1169,7 +1169,7 @@ fn extract_emissive_triangles(app: &mut Glim) {
     let mut light_triangles: Vec<LightTriangle> = Vec::new();
     let mut primitive_base: u32 = 0;
 
-    if app.config.mis {
+    if app.config.light_tree {
         for mesh in &app.meshes {
             let triangle_count = mesh.indices.len() / 3;
 
@@ -1216,7 +1216,7 @@ fn extract_emissive_triangles(app: &mut Glim) {
 
     let tree = light_tree::build(&light_triangles, primitive_base as usize);
 
-    if app.config.mis {
+    if app.config.light_tree {
         Log::msg(&format!(
             "Light tree: {} emissive triangles, {} nodes",
             light_triangles.len(),
@@ -2823,12 +2823,7 @@ fn render_lightmaps(app: &mut Glim) {
                 }
             }
 
-            render_normals(
-                &mut buffer_copy,
-                &texels,
-                &app.gpu_mesh.merged_mesh,
-                &group,
-            );
+            render_normals(&mut buffer_copy, &texels, &app.gpu_mesh.merged_mesh, &group);
 
             if settings.dilate {
                 dilate_texture(&mut buffer, &mut mask, resolution, DILATE_FINAL);

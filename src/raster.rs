@@ -1021,7 +1021,11 @@ pub fn build_compaction(texels: &Texels, mesh: &Mesh, groups: &[LightmapGroup]) 
         let (part, part_offsets, table_base) = build_compaction_part(slice, base, mesh, groups);
         words.extend_from_slice(&part);
         for o in part_offsets {
-            offsets.push(if o == u32::MAX { u32::MAX } else { o + words_base });
+            offsets.push(if o == u32::MAX {
+                u32::MAX
+            } else {
+                o + words_base
+            });
             table_bases.push(table_base + words_base);
         }
     }

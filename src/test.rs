@@ -27,7 +27,7 @@ mod tests {
     const DILATE: bool = true;
     const FIX_SEAMS: bool = false;
 
-    const MIS: bool = true;
+    const LIGHT_TREE: bool = true;
     const HARDWARE_RT: bool = true;
 
     #[test]
@@ -68,7 +68,7 @@ mod tests {
             lightprobes_read_callback: test_probes_callback,
             probe_samples: LIGHT_PROBE_SAMPLES,
             light_falloff: LightFalloffType::InverseSquare,
-            mis: MIS,
+            light_tree: LIGHT_TREE,
             direct_light_samples: DIRECT_LIGHT_SAMPLES,
             direct_emission_samples: DIRECT_EMISSION_SAMPLES,
             indirect_samples: INDIRECT_SAMPLES,

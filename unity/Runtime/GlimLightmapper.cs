@@ -66,15 +66,16 @@ Automatically fallbacks to software CWBVH ray tracing when not avaliable.")]
         public bool hardwareRayTracing = true;
 
         [Tooltip(
-@"Enables multiple importance sampling (MIS) for emissive meshes,
-reducing direct light noise by combining light sampling and BSDF sampling, at the cost of slightly longer bake times.
+@"Builds a light tree over emissive mesh triangles and samples them directly (next event estimation),
+combined with BSDF sampling through multiple importance sampling.
+Greatly reduces noise from emissive meshes, especially small or bright ones, in scenes with many emissive triangles.
 Affects lightmaps, light probes and light volumes.")]
-        public bool multipleImportanceSampling = false;
+        public bool lightTree = true;
 
         [Tooltip("Number of direct samples, affects direct light from point, spot and directional lights")]
         public uint directLightSamples = 64;
 
-        [Tooltip("Number of direct samples, affects emissive materials, area lights, multiple importance sampling and skybox")]
+        [Tooltip("Number of direct samples, affects emissive materials, area lights, the light tree and skybox")]
         public uint directEmissionSamples = 512;
 
         [Tooltip("Only affects bounced light")]

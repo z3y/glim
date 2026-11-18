@@ -36,7 +36,7 @@ namespace Glim
             public readonly uint probe_samples;
             public readonly uint light_falloff;
 
-            [MarshalAs(UnmanagedType.I1)] public readonly bool mis;
+            [MarshalAs(UnmanagedType.I1)] public readonly bool light_tree;
 
             public readonly uint direct_light_samples;
             public readonly uint direct_emission_samples;
@@ -70,7 +70,7 @@ namespace Glim
                                Vector3 camera_forward,
                                uint probe_samples,
                                LightFalloffType falloff,
-                               bool mis,
+                               bool light_tree,
                                LightmapMode lightmap_mode,
                                float skybox_intensity,
                                float indirect_intensity,
@@ -104,7 +104,7 @@ namespace Glim
                 this.vulkan_validation_layers = false;
 #endif
                 this.seams_debug = false;
-                this.mis = mis;
+                this.light_tree = light_tree;
                 this.lightmap_mode = lightmap_mode;
                 this.lightprobe_deringing = lightprobe_deringing;
 

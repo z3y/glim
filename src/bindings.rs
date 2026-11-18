@@ -37,7 +37,7 @@ pub struct GlimConfig {
     pub probe_samples: u32,
     pub light_falloff: LightFalloffType,
 
-    pub mis: bool,
+    pub light_tree: bool,
 
     pub direct_light_samples: u32,
     pub direct_emission_samples: u32,

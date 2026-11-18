@@ -13,7 +13,7 @@ const uint JITTER_BARYCENTRICS;
 const uint EMISSIVE_TRIANGLES_COUNT;
 
 [vk::constant_id(4)]
-const uint MULTIPLE_IMPORTANCE_SAMPLING;
+const uint CONSTANT_PAD0;
 
 [vk::constant_id(5)]
 const uint LIGHTMAP_GROUP_COUNT;
