@@ -20,16 +20,17 @@ use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use glam::{Vec2, Vec3, Vec4};
-use crate::mesh::{GEOMETRIES_VARIANTS, Vertex};
+use crate::mesh::GEOMETRIES_VARIANTS;
 use crate::meta::{MetaType, write_unity_texture_meta};
 use crate::raster::{
     Texels, block_average_fill, build_compaction, decompact_combined_sh, decompact_diffuse,
     decompact_directional, decompact_shadowmask, dilate_shadowmask, dilate_texture,
-    encode_directional, rasterize_texels, render_normals,
+    encode_directional, luminance, rasterize_texels, render_normals,
 };
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
 
+use crate::light_tree::LightTriangle;
 use crate::shader::{
     PreviewPushConstants, RayTracingData, ShaderBindings, ShaderName, SpecializationConstants,
     load_compute_shader, update_compute_shader,
@@ -52,6 +53,7 @@ mod buffer;
 mod camera;
 mod compute_shader;
 mod cwbvh;
+mod light_tree;
 mod lights;
 mod mesh;
 mod meta;
@@ -96,14 +98,13 @@ pub struct Glim {
     pub cpu_lights_hash: u64,
     pub light_cookies: Vec<TexturePixelsData>,
     pub alphas: Vec<TexturePixelsData>,
-    pub emissive_triangles: Vec<u32>,
+    pub emissive_triangles_count: u32,
     pub groups: Vec<LightmapGroup>,
     pub seams: Vec<Seam>,
 
     pub gpu_mesh: GpuMesh,
     pub gpu_lights: Buffer,
     pub gpu_lights_staging: Buffer,
-    pub emissive_triangles_buffer: Buffer,
 
     pub tlas: VulkanAs,
     pub bvh_nodes: Buffer,
@@ -135,6 +136,9 @@ pub struct Glim {
     pub window_title: String,
 
     pub benchmarks: Vec<(&'static str, f32)>,
+
+    pub light_tree_nodes: Buffer,
+    pub primitive_to_leaf: Buffer,
 }
 
 impl Drop for Glim {
@@ -183,8 +187,11 @@ impl Drop for Glim {
             self.gpu_lights_staging.destroy(&self.vk);
         }
 
-        if !self.emissive_triangles_buffer.buffer.is_null() {
-            self.emissive_triangles_buffer.destroy(&self.vk);
+        if !self.light_tree_nodes.buffer.is_null() {
+            self.light_tree_nodes.destroy(&self.vk);
+        }
+        if !self.primitive_to_leaf.buffer.is_null() {
+            self.primitive_to_leaf.destroy(&self.vk);
         }
 
         if !self.skybox.view().is_null() {
@@ -570,7 +577,7 @@ fn initialize_render(app: &mut Glim) {
         hardware_rt: use_ray_query as u32,
         light_falloff_type: config.light_falloff as u32,
         jitter_barycentrics: app.config.antialiasing as u32,
-        emissive_triangles_count: app.emissive_triangles.len() as u32,
+        emissive_triangles_count: app.emissive_triangles_count,
         multiple_importance_sampling: config.mis as u32,
         lightmap_group_count: app.groups.len() as u32,
         lightmap_mode: config.lightmap_mode as u32,
@@ -1130,10 +1137,21 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
     app.preview_initialized = false;
 }
 
-fn extract_emissive_triangles(app: &mut Glim) {
-    let mut emissive_triangles: Vec<u32> = Vec::new();
+fn decode_r11g11b10(packed: u32) -> Vec3 {
+    use half::f16;
+    let decode = |bits: u32| {
+        let v = f16::from_bits(bits as u16).to_f32();
+        if v.is_finite() { v } else { 0.0 }
+    };
+    Vec3::new(
+        decode((packed & 0x7ff) << 4),
+        decode(((packed >> 11) & 0x7ff) << 4),
+        decode(((packed >> 22) & 0x3ff) << 5),
+    )
+}
 
-    fn sample_emissive(uv: Vec2, w: u32, h: u32, pixels: &[u8]) -> bool {
+fn extract_emissive_triangles(app: &mut Glim) {
+    fn sample_emission(uv: Vec2, w: u32, h: u32, pixels: &[u8]) -> Vec3 {
         let x = (uv.x * w as f32).clamp(0.0, (w - 1) as f32) as usize;
         let y = (uv.y * h as f32).clamp(0.0, (h - 1) as f32) as usize;
         let index = (y * w as usize + x) * 4;
@@ -1145,91 +1163,94 @@ fn extract_emissive_triangles(app: &mut Glim) {
             pixels[index + 3],
         ]);
 
-        let r = packed & 0x7ff;
-        let g = (packed >> 11) & 0x7ff;
-        let b = (packed >> 22) & 0x3ff;
-
-        r != 0 || g != 0 || b != 0
+        decode_r11g11b10(packed)
     }
 
-    if app.config.mis {
-        let mut extract = |vertices: &[Vertex], indices: &[u32]| {
-            for primitive_id in 0..(indices.len() / 3) {
-                let i0 = indices[primitive_id * 3 + 0] as usize;
-                let i1 = indices[primitive_id * 3 + 1] as usize;
-                let i2 = indices[primitive_id * 3 + 2] as usize;
+    let mut light_triangles: Vec<LightTriangle> = Vec::new();
+    let mut primitive_base: u32 = 0;
 
-                let v0 = &vertices[i0];
-                let v1 = &vertices[i1];
-                let v2 = &vertices[i2];
+    if app.config.mis {
+        for mesh in &app.meshes {
+            let triangle_count = mesh.indices.len() / 3;
+
+            for (local_id, tri) in mesh.indices.chunks_exact(3).enumerate() {
+                let v0 = &mesh.vertices[tri[0] as usize];
+                let v1 = &mesh.vertices[tri[1] as usize];
+                let v2 = &mesh.vertices[tri[2] as usize];
 
                 if !v0.emissive() {
                     continue;
                 }
 
-                let uv0 = v0.uv;
-                let uv1 = v1.uv;
-                let uv2 = v2.uv;
-
                 let group = &app.groups[v0.group() as usize];
+                let (w, h) = (group.settings.width, group.settings.height);
                 let pixels = &group.emission_pixels;
 
-                let w = group.settings.width;
-                let h = group.settings.height;
+                let (uv0, uv1, uv2) = (v0.uv, v1.uv, v2.uv);
+                let uvs = [
+                    (uv0 + uv1 + uv2) / 3.0,
+                    uv0,
+                    uv1,
+                    uv2,
+                    (uv0 + uv1) * 0.5,
+                    (uv1 + uv2) * 0.5,
+                    (uv2 + uv0) * 0.5,
+                ];
+                let average: Vec3 = uvs
+                    .iter()
+                    .map(|&uv| sample_emission(uv, w, h, pixels))
+                    .sum::<Vec3>()
+                    / uvs.len() as f32;
 
-                let center_uv = (uv0 + uv1 + uv2) / 3.0;
-
-                if sample_emissive(center_uv, w, h, pixels) {
-                    emissive_triangles.push(primitive_id as u32);
-                    continue;
-                }
-                if sample_emissive(uv0, w, h, pixels) {
-                    emissive_triangles.push(primitive_id as u32);
-                    continue;
-                }
-                if sample_emissive(uv1, w, h, pixels) {
-                    emissive_triangles.push(primitive_id as u32);
-                    continue;
-                }
-                if sample_emissive(uv2, w, h, pixels) {
-                    emissive_triangles.push(primitive_id as u32);
-                    continue;
-                }
+                light_triangles.extend(LightTriangle::new(
+                    primitive_base + local_id as u32,
+                    [v0.position, v1.position, v2.position],
+                    [v0.decode_normal(), v1.decode_normal(), v2.decode_normal()],
+                    luminance(average),
+                    v0.backface_gi(),
+                ));
             }
-        };
 
-        for mesh in &app.meshes {
-            extract(&mesh.vertices, &mesh.indices);
+            primitive_base += triangle_count as u32;
         }
     }
 
+    let tree = light_tree::build(&light_triangles, primitive_base as usize);
+
     if app.config.mis {
-        let message = format!(
-            "Found {} emissive triangles for MIS",
-            emissive_triangles.len()
-        );
-        Log::msg(&message);
+        Log::msg(&format!(
+            "Light tree: {} emissive triangles, {} nodes",
+            light_triangles.len(),
+            tree.nodes.len()
+        ));
     }
 
-    if emissive_triangles.len() > 0 {
-        app.emissive_triangles_buffer = Buffer::new(
-            &app.vk,
-            String::from("Emissive Triangles"),
-            &emissive_triangles,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        );
+    let light_tree_nodes = upload_buffer_or_empty(&app.vk, "Light Tree Nodes", &tree.nodes, 64);
+    let primitive_to_leaf = upload_buffer_or_empty(
+        &app.vk,
+        "Light Tree Primitive To Leaf",
+        &tree.primitive_to_leaf,
+        32,
+    );
+
+    app.light_tree_nodes = light_tree_nodes;
+    app.primitive_to_leaf = primitive_to_leaf;
+    app.emissive_triangles_count = light_triangles.len() as u32;
+}
+
+fn upload_buffer_or_empty<T>(
+    vk: &VulkanContext,
+    name: &str,
+    data: &[T],
+    empty_size: vk::DeviceSize,
+) -> Buffer {
+    let usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS;
+    let local = vk::MemoryPropertyFlags::DEVICE_LOCAL;
+    if data.is_empty() {
+        Buffer::empty(vk, name.to_string(), empty_size, usage, local)
     } else {
-        app.emissive_triangles_buffer = Buffer::empty(
-            &app.vk,
-            String::from("Emissive Triangles"),
-            32,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        );
+        Buffer::new(vk, name.to_string(), data, usage, local)
     }
-
-    app.emissive_triangles = emissive_triangles;
 }
 
 impl LightmapGroup {
@@ -1382,8 +1403,7 @@ impl Glim {
             render_target,
             probes: Vec::new(),
             seams: Vec::new(),
-            emissive_triangles: Vec::new(),
-            emissive_triangles_buffer: Buffer::null(),
+            emissive_triangles_count: 0,
             constants,
             output_dir,
             skybox: Skybox::null(),
@@ -1401,6 +1421,8 @@ impl Glim {
             benchmarks: Vec::with_capacity(32),
             gpu_lights_staging: Buffer::null(),
             cpu_lights_hash: 0,
+            light_tree_nodes: Buffer::null(),
+            primitive_to_leaf: Buffer::null(),
         }
     }
 
@@ -1896,7 +1918,8 @@ fn bake_direct_emission(app: &mut Glim, visibility_texels_count: usize, lightmap
         pub pad0: u32,
 
         pub lightmap: vk::DeviceAddress,
-        pub emissive_triangles: vk::DeviceAddress,
+        pub light_tree: vk::DeviceAddress,
+        pub primitive_to_leaf: vk::DeviceAddress,
     }
 
     let shader_bindings = ShaderBindings {
@@ -1928,7 +1951,8 @@ fn bake_direct_emission(app: &mut Glim, visibility_texels_count: usize, lightmap
         max_samples: app.config.direct_emission_samples,
         pad0: 0,
         lightmap: lightmap.gpu_address,
-        emissive_triangles: app.emissive_triangles_buffer.gpu_address,
+        light_tree: app.light_tree_nodes.gpu_address,
+        primitive_to_leaf: app.primitive_to_leaf.gpu_address,
     };
 
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
@@ -2306,11 +2330,10 @@ fn bake_light_probes(
         pub lightmap_info: vk::DeviceAddress,
 
         pub lights: vk::DeviceAddress,
-        pub emissive_triangles: vk::DeviceAddress,
-
         pub lightmap: vk::DeviceAddress,
-        pub pad0: u32,
-        pub pad1: u32,
+
+        pub light_tree: vk::DeviceAddress,
+        pub primitive_to_leaf: vk::DeviceAddress,
     }
 
     assert!(size_of::<PushConstants>() <= 128);
@@ -2349,10 +2372,9 @@ fn bake_light_probes(
         compaction: compaction.gpu_address,
         lightmap_info: lightmap_info.gpu_address,
         lights: app.gpu_lights.gpu_address,
-        emissive_triangles: app.emissive_triangles_buffer.gpu_address,
         lightmap: lightmap.gpu_address,
-        pad0: 0,
-        pad1: 0,
+        light_tree: app.light_tree_nodes.gpu_address,
+        primitive_to_leaf: app.primitive_to_leaf.gpu_address,
     };
 
     let probes_count = app.probes.len() as u32;

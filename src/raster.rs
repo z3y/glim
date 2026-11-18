@@ -454,7 +454,7 @@ pub fn decompact_directional(
 }
 
 #[inline]
-fn luminance(c: Vec3) -> f32 {
+pub fn luminance(c: Vec3) -> f32 {
     c.dot(Vec3::new(0.2126, 0.7152, 0.0722))
 }
 

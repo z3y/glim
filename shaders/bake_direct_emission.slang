@@ -1,5 +1,6 @@
 #include "includes/core.slang"
 #include "includes/sobol_burley.slang"
+#include "includes/light_tree.slang"
 
 [[vk::push_constant]]
 PushConstants Push;
@@ -14,7 +15,8 @@ struct PushConstants
     uint pad0;
 
     float *lightmap;
-    uint *emissiveTriangles;
+    float4 *lightTree;
+    uint *primitiveToLeaf;
 };
 
 [shader("compute")]
@@ -31,6 +33,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.maxSamples;
     float sampleScale = 1.0 / float(sampleCount);
+    float invPi = 1.0 / float.getPi();
 
     float3 positionWS;
     float3 normalWS;
@@ -50,27 +53,28 @@ void main(uint3 threadID: SV_DispatchThreadID)
     ray.tMin = 0;
     ray.tMax = RAY_MAX;
 
-    float randomEmissiveTrianglePdf = 1.0 / float(EMISSIVE_TRIANGLES_COUNT);
-
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
-        uint *emissiveTriangles = Push.emissiveTriangles;
-
         float2 xiPick = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
         float2 xiLight = SobolBurleySample2D(indexing.x, 3, indexing.y, indexing.z);
-        uint triIndex = min(uint(xiPick.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
-        uint emissivePrimitiveID = emissiveTriangles[triIndex];
 
-        float3 L;
-        float pdf = 0.0;
-        float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, randomEmissiveTrianglePdf, pdf, L, false);
-        float NoL = saturate(dot(L, normalWS));
+        uint emissivePrimitiveID;
+        float selectionPmf;
 
-        float bsdfPdfL = saturate(dot(normalWS, L)) / float.getPi();
-        current *= MISWeight(pdf, bsdfPdfL);
-        color.rgb += current * NoL;
-        dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
-        AccumulateL1LightmapDirect(sh, current, L, normalWS);
+        if (LightTreeSample(Push.lightTree, positionWS, normalWS, true, xiPick.x, emissivePrimitiveID, selectionPmf))
+        {
+            float3 L;
+            float pdf = 0.0;
+            float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, selectionPmf, pdf, L, false);
+            float NoL = saturate(dot(L, normalWS));
+
+            float bsdfPdfL = NoL * invPi;
+
+            current *= MISWeight(pdf, bsdfPdfL);
+            color.rgb += current * NoL;
+            dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
+            AccumulateL1LightmapDirect(sh, current, L, normalWS);
+        }
     }
 
     Hit hit;
@@ -88,34 +92,39 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
         if (surface.emissive)
         {
-            float3 bounceEmission = SampleEmission(surface.coords, surface.lightmapGroup).rgb;
-            float3 emission = bounceEmission * color.a;
+            float3 emission = SampleEmission(surface.coords, surface.lightmapGroup).rgb * color.a;
 
             if (any(emission > 0.0))
             {
+                float weight = 1.0;
+
                 if (EMISSIVE_TRIANGLES_COUNT > 0)
                 {
-                    float triangleArea = CalculateTriangleArea(hit.primitiveID);
-                    float3 positionToLight = surface.P - positionWS;
-                    float distSq = max(dot(positionToLight, positionToLight), 0.0001);
-                    float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
+                    float selectionPmf = LightTreePmf(Push.lightTree, Push.primitiveToLeaf, hit.primitiveID, positionWS, normalWS, true);
 
-                    if (cosThetaLight > 0.0)
+                    if (selectionPmf > 0.0)
                     {
-                        float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
-                        float bsdfPdfH = saturate(dot(normalWS, ray.D)) / float.getPi();
-                        emission *= MISWeight(bsdfPdfH, lightPdf);
-                        color.rgb += emission;
-                        dominantDirection.xyz += ray.D * Luminance(emission * sampleScale);
-                        AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
+                        float3 positionToLight = surface.P - positionWS;
+                        float distSq = max(dot(positionToLight, positionToLight), 0.0001);
+
+                        // matches ShadeTriangleLight
+                        float cosThetaLight = dot(-ray.D, surface.N);
+                        cosThetaLight = surface.backfaceGI ? abs(cosThetaLight) : saturate(cosThetaLight);
+
+                        if (cosThetaLight > 0.001)
+                        {
+                            float triangleArea = CalculateTriangleArea(hit.primitiveID);
+                            float lightPdf = (selectionPmf / triangleArea) * distSq / cosThetaLight;
+                            float bsdfPdfH = saturate(dot(normalWS, ray.D)) * invPi;
+                            weight = MISWeight(bsdfPdfH, lightPdf);
+                        }
                     }
                 }
-                else
-                {
-                    color.rgb += emission;
-                    dominantDirection.xyz += ray.D * Luminance(emission * sampleScale);
-                    AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
-                }
+
+                emission *= weight;
+                color.rgb += emission;
+                dominantDirection.xyz += ray.D * Luminance(emission * sampleScale);
+                AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
             }
         }
     }
@@ -154,9 +163,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
     }
     else if (LIGHTMAP_MODE == LightmapMode::DominantDirection)
     {
-        uint index = index + Push.compactedCount;
-        lightmap[index * 3 + 0] += dominantDirection.x;
-        lightmap[index * 3 + 1] += dominantDirection.y;
-        lightmap[index * 3 + 2] += dominantDirection.z;
+        uint indexDir = index + Push.compactedCount;
+        lightmap[indexDir * 3 + 0] += dominantDirection.x;
+        lightmap[indexDir * 3 + 1] += dominantDirection.y;
+        lightmap[indexDir * 3 + 2] += dominantDirection.z;
     }
 }

@@ -3,6 +3,7 @@
 #include "includes/compaction.slang"
 #include "includes/core.slang"
 #include "includes/sobol_burley.slang"
+#include "includes/light_tree.slang"
 
 [[vk::push_constant]]
 PushConstants Push;
@@ -24,11 +25,10 @@ struct PushConstants
     LightmapInfo *lightmapsInfo;
 
     Light *lights;
-    uint *emissiveTriangles;
-
     float *lightmap;
-    uint pad0;
-    uint pad1;
+
+    float4 *lightTree;
+    uint *primitiveToLeaf;
 };
 
 const static float3 ProbeRayDirections[26] = {
@@ -173,21 +173,23 @@ void main(uint3 threadID: SV_DispatchThreadID)
         AccumulateL2(probe, sampleIndex, color * sampleScale, L);
     }
 
-    float randomEmissiveTrianglePdf = 1.0 / float(EMISSIVE_TRIANGLES_COUNT);
     float bsdfPdf = 1.0 / (4.0 * float.getPi());
 
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
-        uint *emissiveTriangles = Push.emissiveTriangles;
-        float2 xiTriangle = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
-        uint triIndex = min(uint(xiTriangle.x * float(EMISSIVE_TRIANGLES_COUNT)), EMISSIVE_TRIANGLES_COUNT - 1);
-        uint emissivePrimitiveID = emissiveTriangles[triIndex];
+        float2 xiPick = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
 
-        float3 L;
-        float pdf = 0.0;
-        float3 current = ShadeTriangleLight(emissivePrimitiveID, probePosition, 0.0, xiLight, throughput, randomEmissiveTrianglePdf, pdf, L, true);
-        current *= MISWeight(pdf, bsdfPdf);
-        AccumulateL2(probe, sampleIndex, current * sampleScale, L);
+        uint emissivePrimitiveID;
+        float selectionPmf;
+
+        if (LightTreeSample(Push.lightTree, probePosition, 0.0, false, xiPick.x, emissivePrimitiveID, selectionPmf))
+        {
+            float3 L;
+            float pdf = 0.0;
+            float3 current = ShadeTriangleLight(emissivePrimitiveID, probePosition, 0.0, xiLight, throughput, selectionPmf, pdf, L, true);
+            current *= MISWeight(pdf, bsdfPdf);
+            AccumulateL2(probe, sampleIndex, current * sampleScale, L);
+        }
     }
 
     float *lightmap = Push.lightmap;
@@ -211,25 +213,31 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
             if (surface.emissive && any(emission > 0.0))
             {
-                bool isEmissiveTriange = surface.emissive;
-                if (EMISSIVE_TRIANGLES_COUNT > 0 && isEmissiveTriange)
-                {
-                    float triangleArea = CalculateTriangleArea(hit.primitiveID);
-                    float3 positionToLight = surface.P - probePosition;
-                    float distSq = max(dot(positionToLight, positionToLight), 0.0001);
-                    float cosThetaLight = saturate(dot(-normalize(positionToLight), surface.N));
+                float weight = 1.0;
 
-                    if (cosThetaLight > 0.0)
+                if (EMISSIVE_TRIANGLES_COUNT > 0)
+                {
+                    float selectionPmf = LightTreePmf(Push.lightTree, Push.primitiveToLeaf, hit.primitiveID, probePosition, 0.0, false);
+
+                    if (selectionPmf > 0.0)
                     {
-                        float lightPdf = (randomEmissiveTrianglePdf / triangleArea) * distSq / cosThetaLight;
-                        emission *= MISWeight(bsdfPdf, lightPdf);
-                        AccumulateL2(probe, sampleIndex, emission.rgb * 4 * sampleScale, ray.D);
+                        float3 positionToLight = surface.P - probePosition;
+                        float distSq = max(dot(positionToLight, positionToLight), 0.0001);
+
+                        // matches ShadeTriangleLight
+                        float cosThetaLight = dot(-ray.D, surface.N);
+                        cosThetaLight = surface.backfaceGI ? abs(cosThetaLight) : saturate(cosThetaLight);
+
+                        if (cosThetaLight > 0.001)
+                        {
+                            float triangleArea = CalculateTriangleArea(hit.primitiveID);
+                            float lightPdf = (selectionPmf / triangleArea) * distSq / cosThetaLight;
+                            weight = MISWeight(bsdfPdf, lightPdf);
+                        }
                     }
                 }
-                else
-                {
-                    AccumulateL2(probe, sampleIndex, emission.rgb * 4 * sampleScale, ray.D);
-                }
+
+                AccumulateL2(probe, sampleIndex, emission.rgb * weight * 4 * sampleScale, ray.D);
             }
 
             float3 bounceAlbedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
