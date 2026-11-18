@@ -10,6 +10,7 @@ pub enum ShaderName {
     BakeDirectEmission,
     Preview,
     AdjustSamples,
+    AdjustProbes,
     ShadowMask,
 }
 
@@ -18,6 +19,7 @@ pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
     let bytes: &'static [u8] = match name {
         ShaderName::InitializePreview => include_bytes!(concat!(env!("OUT_DIR"), "/initialize_preview.spv")),
         ShaderName::AdjustSamples => include_bytes!(concat!(env!("OUT_DIR"), "/adjust_samples.spv")),
+        ShaderName::AdjustProbes => include_bytes!(concat!(env!("OUT_DIR"), "/adjust_probes.spv")),
         ShaderName::BakeLightProbes => include_bytes!(concat!(env!("OUT_DIR"), "/bake_sh.spv")),
         ShaderName::BakeIndirect => include_bytes!(concat!(env!("OUT_DIR"), "/bake_indirect.spv")),
         ShaderName::Preview => include_bytes!(concat!(env!("OUT_DIR"), "/preview.spv")),

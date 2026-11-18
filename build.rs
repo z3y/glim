@@ -46,6 +46,11 @@ fn main() {
     });
 
     shaders.push(Shader {
+        src: "adjust_probes.slang".into(),
+        dst: "adjust_probes.spv".into(),
+    });
+
+    shaders.push(Shader {
         src: "bake_sh.slang".into(),
         dst: "bake_sh.spv".into(),
     });

@@ -2335,6 +2335,66 @@ fn remap_light_index(source_index: &[u32], index: i32) -> i32 {
     source_index[index as usize] as i32
 }
 
+// moves probes out of geometry and disables jitter near surfaces, runs once before baking
+fn adjust_light_probes(
+    app: &Glim,
+    shader_bindings: &ShaderBindings,
+    probes_buffer: &Buffer,
+    probes_count: u32,
+    groups_x: u32,
+) {
+    #[repr(C, align(16))]
+    pub struct PushConstants {
+        pub rt: RayTracingData,
+
+        pub sh_probes: vk::DeviceAddress,
+        pub probes_count: u32,
+    }
+
+    let mut shader = load_compute_shader(
+        &app.vk,
+        ShaderName::AdjustProbes,
+        &app.constants,
+        shader_bindings,
+        size_of::<PushConstants>(),
+    );
+    update_compute_shader(&app.vk, &shader, shader_bindings);
+
+    let push = PushConstants {
+        rt: app.rt_data(),
+        sh_probes: probes_buffer.gpu_address,
+        probes_count,
+    };
+
+    let vk = &app.vk.device;
+    let push_bytes = as_bytes(&push);
+
+    let cmd = app.vk.begin_single_use_cmd();
+    unsafe {
+        vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+        vk.cmd_bind_descriptor_sets(
+            cmd,
+            vk::PipelineBindPoint::COMPUTE,
+            shader.pipeline_layout,
+            0,
+            &[shader.descriptor_set],
+            &[],
+        );
+        vk.cmd_push_constants(
+            cmd,
+            shader.pipeline_layout,
+            vk::ShaderStageFlags::COMPUTE,
+            0,
+            &push_bytes,
+        );
+
+        vk.cmd_dispatch(cmd, groups_x, 1, 1);
+    };
+    app.vk.end_single_use_cmd(cmd);
+
+    shader.destroy(&app.vk);
+}
+
 fn bake_light_probes(
     app: &mut Glim,
     mixed_start: usize,
@@ -2433,6 +2493,11 @@ fn bake_light_probes(
 
     let probes_count = app.probes.len() as u32;
     let groups_x = (probes_count + 63) / 64;
+
+    if app.config.leak_detection {
+        adjust_light_probes(app, &shader_bindings, &probes_buffer, probes_count, groups_x);
+    }
+
     let vk = &app.vk.device;
 
     let start = Instant::now();
