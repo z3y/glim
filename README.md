@@ -17,6 +17,8 @@ Easy to use, lightweight (only ~1MB) and fast.
 - RGB Light Cookies
 - Emissive Materials with Multiple Importance Sampling
 - Light Tree
+- Semi-transparent shadows and colored transmission for alpha blended materials
+- Alpha tested (cutout) materials
 - UV Packing with hole filling and split charts mode
 - Open Image Denoise 2.0
 - Seam stitching with a least squares solver
@@ -100,6 +102,21 @@ For additional settings for baking you can add a `GlimAdditionalLightSettings` c
 
 - Exposes the inner angle for spot lights and draws a gizmo for the Built-In render pipeline
 - Adds an Area (Rectangle) Light option for a cookie texture
+
+### Renderer Settings
+
+For per object bake settings you can add a `GlimRendererSettings` component to a `MeshRenderer`.
+It's editor only and doesn't change the materials, it only affects the bake.
+
+- **Double Sided GI**: override the material Double Sided Global Illumination option (Material, On, Off)
+- **Emission Multiplier**: scale the baked emission of this renderer, 0 removes it as a light source
+- **Transmission**: how much light passes through the opaque part of alpha blended (Transparent) materials, tinted by their albedo. 0 only reduces shadows by the alpha, 1 gives colored shadows like tinted glass
+
+### Transparency
+
+- Alpha blended (Transparent) materials cast partial shadows based on their alpha, instead of fully blocking or not blocking light
+- Alpha tested (Cutout) materials use the material cutoff
+- The alpha is read from the albedo texture alpha channel multiplied with the material color alpha
 
 ## Screenshots
 

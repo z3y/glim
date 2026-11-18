@@ -47,6 +47,21 @@
 - UV packing is now ~2x faster
 - Added an option to play a sound when the bake finishes or fails (thanks [Pesky12](https://github.com/pesky12))
 - Benchmark timings are now logged in one line
+- Implemented semi-transparent shadows for alpha blended (Transparent) materials
+  - Shadows are no longer only fully blocked or not, light is reduced by the alpha of every transparent surface it passes through
+  - Works with both Hardware and Software Ray-Tracing
+  - Alpha tested (Cutout) materials still use the cutoff, grass and tree leaf materials are treated as cutout
+  - Material color alpha is now multiplied with the alpha texture for both blended and cutout materials
+  - Bounce rays pass through blended materials based on their alpha
+  - Light probe occlusion and shadowmasks get partial occlusion too
+- Implemented transmission for alpha blended materials
+  - The covered part of the material can let light through tinted by its albedo, for colored shadows like tinted glass
+  - Off by default, set per renderer with the new `GlimRendererSettings` component
+- Added a `GlimRendererSettings` component for per renderer bake settings
+  - Editor only, only affects the bake and doesn't change the materials
+  - Double Sided GI override (Material, On, Off)
+  - Emission multiplier, scales the baked emission of a renderer without using any extra memory, 0 removes it as a light source
+  - Transmission
 
 # v0.12.5
 
