@@ -16,6 +16,7 @@ Easy to use, lightweight (only ~1MB) and fast.
 - Directional, Point, Spot, Rectangle and Disc Lights
 - RGB Light Cookies
 - Emissive Materials with Multiple Importance Sampling
+- Light Tree
 - UV Packing with hole filling and split charts mode
 - Open Image Denoise 2.0
 - Seam stitching with a least squares solver
