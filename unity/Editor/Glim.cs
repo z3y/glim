@@ -1064,6 +1064,8 @@ namespace Glim
             // only with transparent, alpha blended (partial shadows) instead of alpha tested against the cutoff
             public bool alphaBlend;
             public float alphaIntensity = 1.0f;
+            // only with alphaBlend, from GlimRendererSettings
+            public float transmission;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -1100,6 +1102,9 @@ namespace Glim
                 }
 
                 var transform = mr.transform;
+
+                var rendererSettings = mr.GetComponent<GlimRendererSettings>();
+                float transmission = rendererSettings ? Mathf.Clamp01(rendererSettings.transmission) : 0.0f;
 
                 Mesh mesh = filter.sharedMesh;
                 if (!mesh)
@@ -1332,6 +1337,7 @@ namespace Glim
                         cutoff = cutoff,
                         alphaBlend = alphaBlend,
                         alphaIntensity = alphaIntensity,
+                        transmission = alphaBlend ? transmission : 0.0f,
                     };
 
                     datas.Add(data);

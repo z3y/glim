@@ -72,13 +72,6 @@ Greatly reduces noise from emissive meshes, especially small or bright ones, in 
 Affects lightmaps, light probes and light volumes.")]
         public bool lightTree = true;
 
-        [Tooltip(
-@"How much light passes through the opaque part of alpha blended (Transparent) materials, tinted by their albedo.
-0: shadows are only reduced by the material alpha (1 - alpha).
-1: the covered part transmits the full albedo color, giving colored shadows like tinted glass.
-Alpha tested (Cutout) materials are not affected.")]
-        [Range(0.0f, 1.0f)] public float transparentTransmission = 1.0f;
-
         [Tooltip("Number of direct samples, affects direct light from point, spot and directional lights")]
         public uint directLightSamples = 64;
 
