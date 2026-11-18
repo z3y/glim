@@ -56,10 +56,16 @@ void main(uint3 threadID: SV_DispatchThreadID)
     Hit hit;
     if (TraceRay(ray, hit))
     {
-        if (hit.frontFace)
+        bool backfaceGI = !hit.frontFace && Surface::Get(hit.primitiveID, hit.bary, false).backfaceGI;
+        if (hit.frontFace || backfaceGI)
         {
+            uint primitiveID = hit.primitiveID;
+            if (!hit.frontFace)
+            {
+                primitiveID |= PREVIEW_BACKFACE_BIT;
+            }
             visibility.xy = hit.bary;
-            visibility.z = asfloat(hit.primitiveID);
+            visibility.z = asfloat(primitiveID);
             uint pixelSeed = RNGPixelInit(coords, SamplingPattern::BlueNoiseFirst);
             visibility.w = asfloat(pixelSeed);
         }

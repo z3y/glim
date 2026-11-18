@@ -35,8 +35,11 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
+    bool frontFace = (primitiveID & PREVIEW_BACKFACE_BIT) == 0;
+    primitiveID &= ~PREVIEW_BACKFACE_BIT;
+
     float2 bary = visibility.xy;
-    Surface surface = Surface::Get(primitiveID, bary);
+    Surface surface = Surface::Get(primitiveID, bary, frontFace);
 
     uint sampleIndex = Push.sampleIndex;
     uint sampleCount = Push.sampleCount;

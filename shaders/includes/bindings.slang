@@ -96,3 +96,5 @@ float3 SampleSkybox(float3 dir)
 
     return clamp(Skybox.SampleLevel(SkyboxSampler, dir, 0.0).rgb * SKYBOX_INTENSITY, 0.0, SKYBOX_MAX);
 }
+
+static const uint PREVIEW_BACKFACE_BIT = 1u << 31;
