@@ -285,6 +285,14 @@ namespace Glim
                 return;
             }
 
+#if GLIM_APV
+            // before ResetBake clears the results, cancels the APV bake if glim was canceled
+            if (!_cancelRequested)
+            {
+                AdaptiveProbeVolumeBake.Complete(_bakeProbesResults);
+            }
+#endif
+
             if (_cancelRequested)
             {
                 if (_progressID != -1)
@@ -650,6 +658,10 @@ namespace Glim
         static void ResetBake()
         {
             EditorApplication.update -= PollBakeComplete;
+#if GLIM_APV
+            // no-op if the results were already handed to unity
+            AdaptiveProbeVolumeBake.Cancel();
+#endif
             _app = IntPtr.Zero;
             _bakeProbesResults = new();
             _isComplete = false;
@@ -851,6 +863,14 @@ namespace Glim
 
 #if VRC_LIGHT_VOLUMES
             AddLightProbeVolumes(baker, ctx);
+#endif
+
+#if GLIM_APV
+            if (!config.is_preview)
+            {
+                // after the BakeContext, the lighting data asset is created with a regular unity bake in a temp scene
+                AdaptiveProbeVolumeBake.AddProbes(ctx, ctx.lightProbeRadius);
+            }
 #endif
 
             _context = ctx;

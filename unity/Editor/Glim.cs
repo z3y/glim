@@ -114,6 +114,7 @@ namespace Glim
         public List<BakeContextGroup> groups = new();
 
         public List<Vector4> probePositions = new();
+        public float lightProbeRadius;
 
         public List<LightProbeVolumeData> probeVolumes = new();
 
@@ -817,6 +818,7 @@ namespace Glim
             }
 
             float defaultProbeRadius = lightmapper.lightProbeRadius;
+            this.lightProbeRadius = defaultProbeRadius;
 
             if (!config.is_preview)
             {

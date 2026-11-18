@@ -7,7 +7,9 @@
         "GUID:d8a84397f42e52047b4aa117d7c10706",
         "GUID:69bd1d289cfc06c44ab3abee9d792e60",
         "GUID:a7ff01b0ae211b5439bf8d957d1583a8",
-        "GUID:99835874ee819da44948776e0df4ff1d"
+        "GUID:99835874ee819da44948776e0df4ff1d",
+        "GUID:df380645f10b7bc4b97d4f5eb6303d95",
+        "GUID:3eae0364be2026648bf74846acb8a731"
     ],
     "includePlatforms": [
         "Editor"
@@ -28,6 +30,11 @@
             "name": "red.sim.lightvolumes",
             "expression": "3.0.0-dev.20",
             "define": "LIGHT_VOLUMES_3"
+        },
+        {
+            "name": "com.unity.render-pipelines.core",
+            "expression": "17.0.0",
+            "define": "GLIM_APV"
         }
     ],
     "noEngineReferences": false
