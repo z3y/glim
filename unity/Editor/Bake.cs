@@ -961,6 +961,7 @@ namespace Glim
                                     alpha_blend = data.alphaBlend,
                                     alpha_intensity = data.alphaIntensity,
                                     transmission = data.alphaBlend ? data.transmission : 0.0f,
+                                    emission_multiplier = data.emissionMultiplier,
                                 };
 
                                 Bindings.app_add_mesh(app, exportedMesh);

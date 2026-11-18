@@ -47,6 +47,9 @@ pub struct FfiMesh {
     pub alpha_intensity: f32,
     /// [0, 1] blend only, fraction of the covered part that transmits light tinted by the albedo
     pub transmission: f32,
+
+    /// scales the emission of this mesh, on top of the global emissive multiplier
+    pub emission_multiplier: f32,
 }
 
 // must match core.slang
@@ -329,11 +332,18 @@ impl Mesh {
             0.0
         };
 
-        // per triangle alpha data in the free zw of the 3 entries, see TriangleAlpha in core.slang
+        let emission_multiplier = if mesh.emission_multiplier.is_finite() {
+            mesh.emission_multiplier.max(0.0)
+        } else {
+            1.0
+        };
+
+        // per triangle data in the free zw of the 3 entries
+        // see TriangleAlpha in core.slang and Surface::Get in mesh.slang
         let alpha_data = [
             [packed, cutoff],
             [alpha_intensity, transmission],
-            [0.0, 0.0],
+            [emission_multiplier, 0.0],
         ];
 
         match system {
@@ -363,6 +373,12 @@ impl Mesh {
         }
 
         assert!(self.main_uvs.len() == self.indices.len());
+    }
+
+    /// per triangle emission multiplier, stored in the main uvs
+    #[inline]
+    pub fn emission_multiplier(&self, triangle: usize) -> f32 {
+        self.main_uvs[triangle * 3 + 2][2]
     }
 
     pub fn merge_mesh(&mut self, mesh: &Mesh) {

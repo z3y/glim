@@ -1066,6 +1066,7 @@ namespace Glim
             public float alphaIntensity = 1.0f;
             // only with alphaBlend, from GlimRendererSettings
             public float transmission;
+            public float emissionMultiplier = 1.0f;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -1105,6 +1106,8 @@ namespace Glim
 
                 var rendererSettings = mr.GetComponent<GlimRendererSettings>();
                 float transmission = rendererSettings ? Mathf.Clamp01(rendererSettings.transmission) : 0.0f;
+                float emissionMultiplier = rendererSettings ? Mathf.Max(0.0f, rendererSettings.emissionMultiplier) : 1.0f;
+                var doubleSidedGI = rendererSettings ? rendererSettings.doubleSidedGI : GlimDoubleSidedGI.Material;
 
                 Mesh mesh = filter.sharedMesh;
                 if (!mesh)
@@ -1210,7 +1213,12 @@ namespace Glim
                         // todo Quads
                     }
 
-                    bool backfaceGI = material.doubleSidedGI;
+                    bool backfaceGI = doubleSidedGI switch
+                    {
+                        GlimDoubleSidedGI.On => true,
+                        GlimDoubleSidedGI.Off => false,
+                        _ => material.doubleSidedGI,
+                    };
                     bool transparent = MetaTexture.IsMaterialTransparent(material);
                     bool emissive = MetaTexture.IsMaterialEmissive(material);
 
@@ -1338,6 +1346,7 @@ namespace Glim
                         alphaBlend = alphaBlend,
                         alphaIntensity = alphaIntensity,
                         transmission = alphaBlend ? transmission : 0.0f,
+                        emissionMultiplier = emissionMultiplier,
                     };
 
                     datas.Add(data);

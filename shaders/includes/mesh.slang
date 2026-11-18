@@ -139,6 +139,8 @@ struct Surface
     uint lightmapGroup;
     bool backfaceGI;
     bool emissive;
+    // per renderer emission scale, use SampleSurfaceEmission
+    float emissionMultiplier;
     uint resolution;
 
     uint2 coords;
@@ -192,6 +194,8 @@ struct Surface
         surface.lightmapGroup = v0.LightmapGroup();
         surface.backfaceGI = v0.BackfaceGI();
         surface.emissive = v0.Emissive();
+        // stored in the free z of the third main uv entry, see mesh.rs
+        surface.emissionMultiplier = surface.emissive ? Push.rt.mainUVs[primitiveID * 3 + 2].z : 0.0;
         surface.resolution = v0.Resolution();
         surface.coords = clamp(int2(floor(uv * surface.resolution)), 0, int2(surface.resolution) - 1);
         return surface;

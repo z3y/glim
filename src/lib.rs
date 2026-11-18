@@ -1211,7 +1211,8 @@ fn extract_emissive_triangles(app: &mut Glim) {
                     .iter()
                     .map(|&uv| sample_emission(uv, w, h, pixels))
                     .sum::<Vec3>()
-                    / uvs.len() as f32;
+                    / uvs.len() as f32
+                    * mesh.emission_multiplier(local_id);
 
                 light_triangles.extend(LightTriangle::new(
                     primitive_base + local_id as u32,

@@ -237,6 +237,8 @@ namespace Glim
             [MarshalAs(UnmanagedType.I1)] public bool alpha_blend;
             public float alpha_intensity;
             public float transmission;
+
+            public float emission_multiplier;
         }
 
         public enum LightType : byte

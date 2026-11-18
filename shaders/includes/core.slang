@@ -955,7 +955,7 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
 
     pdf = selectionPmf * directionPdf;
 
-    float3 lightColor = SampleEmission(emissiveSurface.coords, emissiveSurface.lightmapGroup).rgb / float.getPi();
+    float3 lightColor = SampleSurfaceEmission(emissiveSurface) / float.getPi();
     float3 color = lightColor * throughput / pdf;
 
     Ray shadowRay;

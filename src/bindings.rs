@@ -278,7 +278,8 @@ pub extern "C" fn app_add_mesh(app: *mut Glim, mesh: FfiMesh) {
 
         let target_mesh = &mut app.meshes[index];
 
-        let emissive = mesh.emissive;
+        // a zero multiplier removes the mesh from the light tree and emission lookups entirely
+        let emissive = mesh.emissive && mesh.emission_multiplier > 0.0;
 
         let mut fix_seams = mesh.fix_seams;
 

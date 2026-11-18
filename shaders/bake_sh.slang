@@ -161,7 +161,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
         if (!backface)
         {
-            float3 emission = SampleEmission(surface.coords, surface.lightmapGroup).rgb;
+            float3 emission = SampleSurfaceEmission(surface);
 
             if (surface.emissive && any(emission > 0.0))
             {

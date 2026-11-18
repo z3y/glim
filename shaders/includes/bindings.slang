@@ -80,6 +80,16 @@ float4 SampleEmission(uint2 coords, uint lightmapGroup)
     return max(0.0, tex[coords] * EMISSIVE_MULTIPLIER);
 }
 
+// emission of a surface, 0 for non emissive surfaces
+float3 SampleSurfaceEmission(Surface surface)
+{
+    if (!surface.emissive)
+    {
+        return 0.0;
+    }
+    return SampleEmission(surface.coords, surface.lightmapGroup).rgb * surface.emissionMultiplier;
+}
+
 float4 SampleCookie(float2 uv, uint index)
 {
     Texture2D tex = Cookies[NonUniformResourceIndex(index)];
