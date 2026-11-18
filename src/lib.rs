@@ -787,11 +787,12 @@ fn render_preview(app: &mut Glim) {
             hardware_rt,
         });
 
+        // sleep for whatever is left of this iteration's frame time, measured from its own start
         if app.config.throttle_preview_ms > 0 {
-            let target_duration_secs = app.config.throttle_preview_ms as f32 / 1000.0;
-            let sleep_duration = target_duration_secs - delta_time;
-            if sleep_duration > 0.0 {
-                std::thread::sleep(Duration::from_secs_f32(sleep_duration));
+            let deadline = now + Duration::from_millis(app.config.throttle_preview_ms as u64);
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if !remaining.is_zero() {
+                std::thread::sleep(remaining);
             }
         }
 

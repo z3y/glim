@@ -285,7 +285,8 @@ namespace Glim
                 if (Bake.IsPreviewing)
                 {
                     GUILayout.Label(
-                        $"Sample {_stats.sample_index}/{_stats.sample_count}  |  {_stats.width}x{_stats.height}  |  Lights {_stats.light_count}  |  Hardware RT: {_stats.hardware_rt}",
+                        // sample last so changing digits don't shift the other stats
+                        $"{_stats.width}x{_stats.height}  |  Lights {_stats.light_count}  |  Hardware RT: {_stats.hardware_rt}  |  Sample {_stats.sample_index}/{_stats.sample_count}",
                         HeaderLabel);
                 }
                 else

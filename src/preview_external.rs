@@ -14,8 +14,10 @@ use crate::texture2d::Texture2D;
 use crate::vulkan_context::VulkanContext;
 
 const FRAMES_IN_FLIGHT: usize = 2;
-// latest published + locked by the consumer + one being written
-const READBACK_SLOTS: usize = 3;
+// one published (or locked by the consumer) + one being written.
+// if the consumer still holds an older frame while a newer one is published, both are taken and
+// that iteration's readback is skipped, rare since the consumer copy takes ~1ms
+const READBACK_SLOTS: usize = 2;
 const MAX_SIZE: u32 = 8192;
 
 #[derive(Clone, Copy)]
@@ -248,6 +250,31 @@ impl ExternalHost {
         })
     }
 
+    /// Publishes readbacks whose frame finished on the GPU, doesn't block
+    fn publish_finished(&mut self, vk: &VulkanContext) {
+        for frame in &mut self.frames {
+            let Some(index) = frame.readback else {
+                continue;
+            };
+
+            let done = unsafe { vk.device.get_fence_status(frame.fence) }.unwrap_or(false);
+            if !done {
+                continue;
+            }
+
+            frame.readback = None;
+
+            let slot = &self.slots[index];
+            shared().latest = Some(Published {
+                slot: index,
+                ptr: slot.buffer.ptr as usize,
+                width: slot.width,
+                height: slot.height,
+                id: slot.id,
+            });
+        }
+    }
+
     fn ensure_resources(&mut self, vk: &VulkanContext, slot: usize, width: u32, height: u32) {
         if self.image.width != width || self.image.height != height || self.image.image.is_null() {
             if !self.image.image.is_null() {
@@ -316,26 +343,17 @@ impl PreviewHost for ExternalHost {
         _width: u32,
         _height: u32,
     ) -> Option<vk::CommandBuffer> {
-        let frame = &mut self.frames[self.frame_index];
-
+        let fence = self.frames[self.frame_index].fence;
         unsafe {
-            vk.device
-                .wait_for_fences(&[frame.fence], true, u64::MAX)
-                .unwrap();
-            vk.device.reset_fences(&[frame.fence]).unwrap();
+            vk.device.wait_for_fences(&[fence], true, u64::MAX).unwrap();
         }
 
-        if let Some(index) = frame.readback.take() {
-            let slot = &self.slots[index];
-            let mut s = shared();
-            s.latest = Some(Published {
-                slot: index,
-                ptr: slot.buffer.ptr as usize,
-                width: slot.width,
-                height: slot.height,
-                id: slot.id,
-            });
-        }
+        // publish as soon as the GPU is done instead of when the frame slot comes around again,
+        // otherwise every readback reaches the consumer one iteration late
+        self.publish_finished(vk);
+
+        let frame = &mut self.frames[self.frame_index];
+        unsafe { vk.device.reset_fences(&[frame.fence]).unwrap() };
 
         Some(frame.cmd)
     }
@@ -354,19 +372,14 @@ impl PreviewHost for ExternalHost {
             return;
         }
 
-        // one readback at a time, and only once the consumer took the previous one,
-        // so the copy rate follows how fast the consumer displays frames
+        // one readback in flight at a time, every changed frame is read back so the consumer
+        // always gets the newest one, frames it didn't pick up are simply replaced
         if self.frames.iter().any(|f| f.readback.is_some()) {
             return;
         }
 
         let slot = {
             let s = shared();
-            if let Some(latest) = s.latest {
-                if latest.id != s.consumed_id {
-                    return;
-                }
-            }
             match self.find_free_slot(&s) {
                 Some(slot) => slot,
                 None => return,
