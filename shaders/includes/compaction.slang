@@ -7,9 +7,14 @@ struct LightmapInfo
     uint cellTableBase;
 };
 
-uint GetCompactedIndex(uint2 coords, uint lightmapGroup, uint primitiveID, bool flipY = true)
+uint GetCompactedIndex(uint2 coords, uint lightmapGroup, uint primitiveID, bool frontFace, bool flipY = true)
 {
-    LightmapInfo info = Push.lightmapsInfo[lightmapGroup];
+    LightmapInfo info = Push.lightmapsInfo[lightmapGroup + (frontFace ? 0 : LIGHTMAP_GROUP_COUNT)];
+
+    if (info.compactionOffset == uint::maxValue)
+    {
+        return uint::maxValue;
+    }
 
     if (flipY)
     {

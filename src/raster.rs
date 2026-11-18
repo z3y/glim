@@ -111,13 +111,9 @@ fn area_centroid(poly: &[P; MAX_VERTS], n: usize, origin: P) -> (f64, P) {
     (a2 * 0.5, (origin.0 + cx * inv, origin.1 + cy * inv))
 }
 
-pub fn render_normals(
-    buffer: &mut [Vec4],
-    texels: &[VisibilityTexel],
-    coverage: &[f32],
-    mesh: &Mesh,
-    group: &LightmapGroup,
-) {
+pub fn render_normals(buffer: &mut [Vec4], all: &Texels, mesh: &Mesh, group: &LightmapGroup) {
+    let texels = &all.visibility;
+    let coverage = &all.coverage;
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
@@ -127,7 +123,7 @@ pub fn render_normals(
     let buffer = &mut buffer[0..count];
     buffer.fill(Vec4::ZERO);
 
-    for compacted_index in 0..texels.len() {
+    for compacted_index in 0..all.front_count {
         let texel = &texels[compacted_index];
         let primitive_id = texel.primitive_id as usize;
         let i0 = mesh.indices[primitive_id * 3 + 0] as usize;
@@ -176,13 +172,14 @@ pub fn render_normals(
 
 pub fn decompact_diffuse(
     buffer: &mut [Vec4],
-    texels: &[VisibilityTexel],
-    coverage: &[f32],
+    all: &Texels,
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
     l0: bool,
 ) {
+    let texels = &all.visibility;
+    let coverage = &all.coverage;
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
@@ -191,9 +188,10 @@ pub fn decompact_diffuse(
     let buffer = &mut buffer[0..count];
     buffer.fill(Vec4::ZERO);
 
+    // offsets are in units of all texels, back faces included
     let diffuse_offset = if l0 { texels.len() } else { 0 };
 
-    for compacted_index in 0..texels.len() {
+    for compacted_index in 0..all.front_count {
         let texel = &texels[compacted_index];
 
         let primitive_id = texel.primitive_id;
@@ -236,12 +234,13 @@ pub fn decompact_diffuse(
 pub fn decompact_shadowmask(
     buffer: &mut [Vec4],
     buffer_coverage: &mut [f32],
-    texels: &[VisibilityTexel],
-    coverage: &[f32],
+    all: &Texels,
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
 ) {
+    let texels = &all.visibility;
+    let coverage = &all.coverage;
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
@@ -250,7 +249,8 @@ pub fn decompact_shadowmask(
     let buffer = &mut buffer[0..count];
     buffer.fill(Vec4::ZERO);
 
-    for compacted_index in 0..texels.len() {
+    // shadowmask is only baked for front faces
+    for compacted_index in 0..all.front_count {
         let texel = &texels[compacted_index];
 
         let primitive_id = texel.primitive_id;
@@ -340,13 +340,14 @@ pub fn encode_directional(pixels: &mut [Vec4], normals: &[Vec4], tangent_space: 
 
 pub fn decompact_directional(
     buffer: &mut [Vec4],
-    texels: &[VisibilityTexel],
-    coverage: &[f32],
+    all: &Texels,
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
     tangent_space: bool,
 ) {
+    let texels = &all.visibility;
+    let coverage = &all.coverage;
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
@@ -357,7 +358,7 @@ pub fn decompact_directional(
 
     let directional_offset = texels.len();
 
-    for compacted_index in 0..texels.len() {
+    for compacted_index in 0..all.front_count {
         let texel = &texels[compacted_index];
 
         let primitive_id = texel.primitive_id;
@@ -470,12 +471,13 @@ fn encode_combined_sh(l0: Vec3, l1: Vec3) -> Vec3 {
 
 pub fn decompact_combined_sh(
     buffer: &mut [Vec4],
-    texels: &[VisibilityTexel],
-    coverage: &[f32],
+    all: &Texels,
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
 ) {
+    let texels = &all.visibility;
+    let coverage = &all.coverage;
     let resolution = group.settings.width as usize;
     let group_id = group.id;
 
@@ -487,7 +489,7 @@ pub fn decompact_combined_sh(
     let l0_offset = texels.len();
     let l1_offset = texels.len() * 2;
 
-    for compacted_index in 0..texels.len() {
+    for compacted_index in 0..all.front_count {
         let texel = &texels[compacted_index];
 
         let primitive_id = texel.primitive_id;
@@ -765,8 +767,10 @@ pub fn block_average_fill(
 
 pub struct Texels {
     // vecs with equal len
+    // [0, front_count) front faces, [front_count, len) back faces of double sided GI triangles
     pub visibility: Vec<VisibilityTexel>,
     pub coverage: Vec<f32>,
+    pub front_count: usize,
     // corresponds to each lightmap group
     // pub coverage_counts: Vec<Vec<u8>>,
 }
@@ -935,29 +939,50 @@ pub fn rasterize_texels(
     let mut visibility = Vec::with_capacity(visibility_and_coverage.len());
     let mut coverage = Vec::with_capacity(visibility_and_coverage.len());
 
-    let mut prev_key = (u32::MAX, usize::MAX);
-    let mut current_coverage = 0;
-    for (texel, cov) in visibility_and_coverage {
-        let primitive_id = texel.primitive_id;
-        let vertex_index = mesh.indices[primitive_id as usize * 3];
-        let group_index = mesh.vertices[vertex_index as usize].group();
-        let resolution = resolution_lookups[group_index as usize];
-        let texel_index = texel.index(resolution);
-        let key = (group_index, texel_index);
+    // Keeps up to max_coverage texels per (group, cell), best coverage first.
+    // `include` selects which triangles take part, so the back-face pass picks
+    // its texels independently of single-sided triangles sharing the cell.
+    let select = |visibility: &mut Vec<VisibilityTexel>,
+                  coverage: &mut Vec<f32>,
+                  include: &dyn Fn(&VisibilityTexel) -> bool| {
+        let mut prev_key = (u32::MAX, usize::MAX);
+        let mut current_coverage = 0;
+        for (texel, cov) in &visibility_and_coverage {
+            if !include(texel) {
+                continue;
+            }
+            let primitive_id = texel.primitive_id;
+            let vertex_index = mesh.indices[primitive_id as usize * 3];
+            let group_index = mesh.vertices[vertex_index as usize].group();
+            let resolution = resolution_lookups[group_index as usize];
+            let texel_index = texel.index(resolution);
+            let key = (group_index, texel_index);
 
-        if key != prev_key {
-            current_coverage = 0;
-            prev_key = key;
-        }
+            if key != prev_key {
+                current_coverage = 0;
+                prev_key = key;
+            }
 
-        if (cov >= coverage_min_threshold && current_coverage < max_coverage)
-            || current_coverage == 0
-        {
-            visibility.push(texel);
-            coverage.push(cov);
-            current_coverage += 1;
+            if (*cov >= coverage_min_threshold && current_coverage < max_coverage)
+                || current_coverage == 0
+            {
+                visibility.push(texel.clone());
+                coverage.push(*cov);
+                current_coverage += 1;
+            }
         }
-    }
+    };
+
+    // front faces of every triangle
+    select(&mut visibility, &mut coverage, &|_| true);
+    let front_count = visibility.len();
+
+    // back faces of double sided GI triangles, appended after the front texels
+    // so the bounces can cache their lighting too
+    select(&mut visibility, &mut coverage, &|t| {
+        let vertex_index = mesh.indices[t.primitive_id as usize * 3];
+        mesh.vertices[vertex_index as usize].backface_gi()
+    });
 
     // todo set coverage to 1.0 for texels with only one triangle
     // for higher precision when decompacting
@@ -967,24 +992,55 @@ pub fn rasterize_texels(
     Texels {
         visibility,
         coverage,
+        front_count,
         // coverage_counts,
     }
 }
 
-pub fn build_compaction(
-    texels: &Texels,
+pub struct Compaction {
+    pub words: Vec<[u32; 2]>,
+    // per group: front faces first, then back faces (index + group count)
+    pub offsets: Vec<u32>,
+    pub table_bases: Vec<u32>,
+}
+
+/// Builds the front face lookup from texels[..front_count] and the back face
+/// lookup from texels[front_count..]. Back face entries are stored after the
+/// front ones, at `group + groups.len()`.
+pub fn build_compaction(texels: &Texels, mesh: &Mesh, groups: &[LightmapGroup]) -> Compaction {
+    let front_count = texels.front_count;
+    let mut words = Vec::new();
+    let mut offsets = Vec::with_capacity(groups.len() * 2);
+    let mut table_bases = Vec::with_capacity(groups.len() * 2);
+
+    for (base, slice) in [
+        (0, &texels.visibility[..front_count]),
+        (front_count, &texels.visibility[front_count..]),
+    ] {
+        let words_base = words.len() as u32;
+        let (part, part_offsets, table_base) = build_compaction_part(slice, base, mesh, groups);
+        words.extend_from_slice(&part);
+        for o in part_offsets {
+            offsets.push(if o == u32::MAX { u32::MAX } else { o + words_base });
+            table_bases.push(table_base + words_base);
+        }
+    }
+
+    Compaction {
+        words,
+        offsets,
+        table_bases,
+    }
+}
+
+/// Groups without any texel get offset u32::MAX and no bitmask.
+fn build_compaction_part(
+    visibility: &[VisibilityTexel],
+    base: usize,
     mesh: &Mesh,
     groups: &[LightmapGroup],
 ) -> (Vec<[u32; 2]>, Vec<u32>, u32) {
-    let visibility = &texels.visibility;
-
-    let mut per_group: Vec<Vec<[u32; 2]>> = groups
-        .iter()
-        .map(|g| {
-            let res = g.settings.width as usize;
-            vec![[0u32; 2]; (res * res).div_ceil(32)]
-        })
-        .collect();
+    let mut per_group: Vec<Vec<[u32; 2]>> = vec![Vec::new(); groups.len()];
 
     // One entry per occupied cell: [start, count].
     // Relies on rasterize_texels output being sorted by (group, cell),
@@ -997,11 +1053,16 @@ pub fn build_compaction(
         let g = v0.group() as usize;
         let res = groups[g].settings.width as usize;
         let cell = t.index(res);
-        per_group[g][cell >> 5][0] |= 1u32 << (cell & 31);
+
+        let g_words = &mut per_group[g];
+        if g_words.is_empty() {
+            *g_words = vec![[0u32; 2]; (res * res).div_ceil(32)];
+        }
+        g_words[cell >> 5][0] |= 1u32 << (cell & 31);
 
         if run != Some((g, cell)) {
             run = Some((g, cell));
-            table.push([i as u32, 1]);
+            table.push([(base + i) as u32, 1]);
         } else {
             table.last_mut().unwrap()[1] += 1;
         }
@@ -1011,6 +1072,10 @@ pub fn build_compaction(
     let mut offsets = Vec::with_capacity(groups.len());
     let mut cells = 0u32;
     for g_words in per_group.iter_mut() {
+        if g_words.is_empty() {
+            offsets.push(u32::MAX);
+            continue;
+        }
         offsets.push(words.len() as u32);
         for w in g_words.iter_mut() {
             w[1] = cells; // global cell rank at the start of this word

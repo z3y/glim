@@ -84,7 +84,7 @@ pub struct SpecializationConstants {
 
     pub ao_intensity: f32, // 12
     pub ao_range: f32,     // 13
-    pub pad0: u32,         // 14
+    pub backface_texel_start: u32, // 14
     pub pad1: u32,         // 15
 
     pub geometries_0_offset: u32, // 16

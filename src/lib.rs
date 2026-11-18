@@ -588,7 +588,7 @@ fn initialize_render(app: &mut Glim) {
         emissive_multiplier: app.config.emissive_multiplier,
         ao_intensity: config.ao_intensity,
         ao_range: config.ao_range,
-        pad0: 0,
+        backface_texel_start: u32::MAX,
         pad1: 0,
         geometries_0_offset: geometries_offsets[0],
         geometries_1_offset: geometries_offsets[1],
@@ -1616,7 +1616,7 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vec4>) {
         return;
     }
 
-    let visibility_texels_count = texels.visibility.len();
+    let visibility_texels_count = texels.front_count;
 
     let mut shadowmask_buffer = Buffer::empty(
         &app.vk,
@@ -1785,8 +1785,7 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vec4>) {
         decompact_shadowmask(
             buffer,
             &mut buffer_coverage,
-            &texels.visibility,
-            &texels.coverage,
+            &texels,
             &readback_buffer_slice,
             &app.gpu_mesh.merged_mesh,
             &group,
@@ -2470,17 +2469,19 @@ fn render_lightmaps(app: &mut Glim) {
     );
     let texels_count = texels.visibility.len();
 
-    let (comaction_buffer_data, offsets, table_base) =
-        build_compaction(&texels, &app.gpu_mesh.merged_mesh, &app.groups);
+    let compaction = build_compaction(&texels, &app.gpu_mesh.merged_mesh, &app.groups);
+
+    app.constants.backface_texel_start = texels.front_count as u32;
 
     let mut lightmaps_info = {
-        let mut infos = Vec::with_capacity(app.groups.len());
-        for group_index in 0..app.groups.len() {
-            let group = &app.groups[group_index].settings;
+        let group_count = app.groups.len();
+        let mut infos = Vec::with_capacity(group_count * 2);
+        for i in 0..group_count * 2 {
+            let group = &app.groups[i % group_count].settings;
             infos.push(LightmapInfo {
                 resolution: [group.width, group.height],
-                compaction_offset: offsets[group_index],
-                table_base: table_base,
+                compaction_offset: compaction.offsets[i],
+                table_base: compaction.table_bases[i],
             });
         }
 
@@ -2500,14 +2501,21 @@ fn render_lightmaps(app: &mut Glim) {
     let mut compaction_buffer = Buffer::new(
         &app.vk,
         "Compaction Buffer".to_owned(),
-        &comaction_buffer_data,
+        &compaction.words,
         vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
 
-    Log::msg(&format!("Created {} texels for baking.", texels_count));
+    drop(compaction);
+
+    Log::msg(&format!(
+        "Created {} texels for baking ({} front, {} back face).",
+        texels_count,
+        texels.front_count,
+        texels_count - texels.front_count
+    ));
 
     let visibility_buffer = Buffer::new(
         &app.vk,
@@ -2689,8 +2697,7 @@ fn render_lightmaps(app: &mut Glim) {
         let start = Instant::now();
         decompact_diffuse(
             &mut buffer,
-            &texels.visibility,
-            &texels.coverage,
+            &texels,
             &readback_buffer_slice,
             &app.gpu_mesh.merged_mesh,
             &group,
@@ -2793,8 +2800,7 @@ fn render_lightmaps(app: &mut Glim) {
             let tangent_space = false;
             decompact_directional(
                 &mut buffer,
-                &texels.visibility,
-                &texels.coverage,
+                &texels,
                 &readback_buffer_slice,
                 &app.gpu_mesh.merged_mesh,
                 &group,
@@ -2819,8 +2825,7 @@ fn render_lightmaps(app: &mut Glim) {
 
             render_normals(
                 &mut buffer_copy,
-                &texels.visibility,
-                &texels.coverage,
+                &texels,
                 &app.gpu_mesh.merged_mesh,
                 &group,
             );
@@ -2869,8 +2874,7 @@ fn render_lightmaps(app: &mut Glim) {
         if app.config.lightmap_mode == LightmapMode::CombinedSH {
             decompact_combined_sh(
                 &mut buffer,
-                &texels.visibility,
-                &texels.coverage,
+                &texels,
                 &readback_buffer_slice,
                 &app.gpu_mesh.merged_mesh,
                 &group,

@@ -1205,7 +1205,8 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
         }
     }
 
-    Surface surface = Surface::Get(primitiveID, bary);
+    bool frontFace = index < BACKFACE_TEXEL_START;
+    Surface surface = Surface::Get(primitiveID, bary, frontFace);
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
 }

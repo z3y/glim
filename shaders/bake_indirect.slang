@@ -84,17 +84,13 @@ void main(uint3 threadID: SV_DispatchThreadID)
             ao = 0.0;
         }
 
-        if (!bounceHit.frontFace)
+        if (!bounceHit.frontFace && !surface.backfaceGI)
         {
-            // this is incorrect, the cached bounce doesnt store lighting on the other side
-            // if (!surface.backfaceGI)
-            // {
             color.a = 0;
-            // }
         }
 
         float3 bounceAlbedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
-        uint compactIndex = GetCompactedIndex(surface.coords, surface.lightmapGroup, bounceHit.primitiveID, true);
+        uint compactIndex = GetCompactedIndex(surface.coords, surface.lightmapGroup, bounceHit.primitiveID, bounceHit.frontFace);
         if (compactIndex != uint::maxValue)
         {
             float3 previousDiffuse = float3(bounceBuffer[(previousOffset + compactIndex) * 3 + 0],

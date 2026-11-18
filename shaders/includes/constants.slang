@@ -43,7 +43,7 @@ const float AO_INTENSITY;
 const float AO_RANGE;
 
 [vk::constant_id(14)]
-const float CONSTANT_PAD0;
+const uint BACKFACE_TEXEL_START;
 
 [vk::constant_id(15)]
 const float CONSTANT_PAD1;

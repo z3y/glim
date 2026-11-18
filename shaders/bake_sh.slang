@@ -235,7 +235,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
             float3 bounceAlbedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
 
-            uint compactIndex = GetCompactedIndex(surface.coords, surface.lightmapGroup, hit.primitiveID);
+            uint compactIndex = GetCompactedIndex(surface.coords, surface.lightmapGroup, hit.primitiveID, hit.frontFace);
             if (compactIndex != uint::maxValue)
             {
                 float3 lightmapDiffuse = float3(lightmap[compactIndex * 3 + 0],

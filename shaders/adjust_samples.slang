@@ -61,7 +61,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float det = duv1.x * duv2.y - duv1.y * duv2.x;
     float invDetSigned = abs(det) > 1e-12 ? 1.0 / det : 0.0;
 
-    Surface surface = Surface::Get(primitiveID, bary);
+    bool frontFace = index < BACKFACE_TEXEL_START;
+    Surface surface = Surface::Get(primitiveID, bary, frontFace);
 
     float3 positionWS = RayOffset(surface.P, surface.Ng);
     float3 normalWS = surface.N;
@@ -118,7 +119,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
                 float travelWS = travelUV * worldPerUV[i];
                 float eps = 0.05 * worldPerUV[i] / float(resolution); // ~5% of a texel
 
-                bool coplanar = dot(hitSurf.Ng, surface.Ng) > 0.999;
+                float3 geometricNg = frontFace ? surface.Ng : -surface.Ng;
+                bool coplanar = dot(hitSurf.Ng, geometricNg) > 0.999;
 
                 if (hit.frontFace)
                 {
