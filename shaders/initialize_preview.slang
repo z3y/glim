@@ -54,7 +54,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float4 visibility = float4(0.0, 0.0, asfloat(uint::maxValue), 0.0);
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     Hit hit;
-    if (TraceRay(ray, hit))
+    if (TraceRayAlphaTested(ray, hit))
     {
         bool backfaceGI = !hit.frontFace && Surface::Get(hit.primitiveID, hit.bary, false).backfaceGI;
         if (hit.frontFace || backfaceGI)

@@ -233,6 +233,10 @@ namespace Glim
             public int alpha_index;
             [MarshalAs(UnmanagedType.I1)] public bool alpha_wrap;
             public float cutoff;
+
+            [MarshalAs(UnmanagedType.I1)] public bool alpha_blend;
+            public float alpha_intensity;
+            public float transmission;
         }
 
         public enum LightType : byte

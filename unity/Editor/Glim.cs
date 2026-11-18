@@ -1061,6 +1061,9 @@ namespace Glim
             public int alphaTextureIndex = -1;
             public bool alphaWrap;
             public float cutoff;
+            // only with transparent, alpha blended (partial shadows) instead of alpha tested against the cutoff
+            public bool alphaBlend;
+            public float alphaIntensity = 1.0f;
         }
 
         public static List<MeshData> ExtractMeshData(Renderer[] renderers, uint groupIndex)
@@ -1277,9 +1280,15 @@ namespace Glim
                     Texture2D alphaTexture = null;
                     bool alphaWrap = false;
                     float cutoff = 0.5f;
-                    if (MetaTexture.IsMaterialTransparent(material))
+                    bool alphaBlend = false;
+                    float alphaIntensity = 1.0f;
+                    if (transparent)
                     {
                         alphaTexture = MetaTexture.GetMaterialAlpha(material);
+                        alphaBlend = MetaTexture.IsMaterialAlphaBlended(material);
+                        cutoff = MetaTexture.GetMaterialCutoff(material);
+                        // the shader multiplies the alpha texture with this, for both blend and cutout
+                        alphaIntensity = MetaTexture.GetMaterialColorAlpha(material);
                     }
 
                     if (alphaTexture != null)
@@ -1293,17 +1302,6 @@ namespace Glim
                         }
 
                         alphaWrap = alphaTexture.wrapMode != TextureWrapMode.Clamp; // other modes can be supported too if needed
-                        float baseCutoff = MetaTexture.GetMaterialCutoff(material);
-
-                        float colorAlpha = MetaTexture.GetMaterialColorAlpha(material);
-                        if (colorAlpha > 1e-5f)
-                        {
-                            cutoff = baseCutoff / colorAlpha;
-                        }
-                        else
-                        {
-                            cutoff = baseCutoff <= 0.0f ? 0.0f : 2.0f;
-                        }
                     }
 
                     if (localVertices.Count != localNormals.Count ||
@@ -1332,6 +1330,8 @@ namespace Glim
                         alphaTexture = alphaTexture,
                         alphaWrap = alphaWrap,
                         cutoff = cutoff,
+                        alphaBlend = alphaBlend,
+                        alphaIntensity = alphaIntensity,
                     };
 
                     datas.Add(data);

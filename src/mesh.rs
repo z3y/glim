@@ -38,7 +38,21 @@ pub struct FfiMesh {
     pub alpha_index: i32,
     pub alpha_wrap: bool,
     pub cutoff: f32,
+
+    /// only used when `transparent` is set.
+    /// true: real alpha blending, shadows are partial and bounce rays pass through with probability 1 - alpha.
+    /// false: alpha test against `cutoff`.
+    pub alpha_blend: bool,
+    /// multiplied with the alpha texture (material color alpha)
+    pub alpha_intensity: f32,
+    /// [0, 1] blend only, fraction of the covered part that transmits light tinted by the albedo
+    pub transmission: f32,
 }
+
+// must match core.slang
+const ALPHA_TEXTURE_NONE: u32 = 0xFFFF;
+const ALPHA_WRAP_BIT: u32 = 1 << 16;
+const ALPHA_BLEND_BIT: u32 = 1 << 17;
 
 #[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
@@ -296,19 +310,40 @@ impl Mesh {
         self.main_uvs.reserve(index_count);
 
         let alpha_id: u32 = if mesh.alpha_index < 0 {
-            0xFFFF
+            ALPHA_TEXTURE_NONE
         } else {
             (mesh.alpha_index as u32) & 0xFFFF
         };
-        let wrap_bit: u32 = if mesh.alpha_wrap { 1 << 16 } else { 0 };
-        let packed = f32::from_bits(alpha_id | wrap_bit);
+        let wrap_bit: u32 = if mesh.alpha_wrap { ALPHA_WRAP_BIT } else { 0 };
+        let blend_bit: u32 = if mesh.alpha_blend { ALPHA_BLEND_BIT } else { 0 };
+        let packed = f32::from_bits(alpha_id | wrap_bit | blend_bit);
         let cutoff = mesh.cutoff;
+        let alpha_intensity = if mesh.alpha_intensity.is_finite() {
+            mesh.alpha_intensity.max(0.0)
+        } else {
+            1.0
+        };
+        let transmission = if mesh.alpha_blend && mesh.transmission.is_finite() {
+            mesh.transmission.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+
+        // per triangle alpha data in the free zw of the 3 entries, see TriangleAlpha in core.slang
+        let alpha_data = [
+            [packed, cutoff],
+            [alpha_intensity, transmission],
+            [0.0, 0.0],
+        ];
 
         match system {
             CoordinateSystem::Default => {
-                for &idx in indices {
-                    let uv = main_uvs[idx as usize];
-                    self.main_uvs.push([uv.x, uv.y, packed, cutoff]);
+                for triangle in indices.chunks(3) {
+                    for (corner, &idx) in triangle.iter().enumerate() {
+                        let uv = main_uvs[idx as usize];
+                        let [z, w] = alpha_data[corner];
+                        self.main_uvs.push([uv.x, uv.y, z, w]);
+                    }
                 }
                 self.indices.extend(indices.iter().map(|i| i + offset));
             }
@@ -316,10 +351,11 @@ impl Mesh {
                 self.indices.reserve(indices.len());
 
                 for triangle in indices.chunks(3) {
-                    for &k in &[0usize, 2, 1] {
+                    for (corner, &k) in [0usize, 2, 1].iter().enumerate() {
                         let idx = triangle[k];
                         let uv = main_uvs[idx as usize];
-                        self.main_uvs.push([uv.x, uv.y, packed, cutoff]);
+                        let [z, w] = alpha_data[corner];
+                        self.main_uvs.push([uv.x, uv.y, z, w]);
                         self.indices.push(idx + offset);
                     }
                 }
@@ -507,7 +543,11 @@ impl GpuMesh {
                 primitive_offset += triangle_count;
             }
 
-            let bvh = Cwbvh::build(&bvh_triangles);
+            // transparent triangles must have a single reference, shadow rays multiply the
+            // transmittance of every transparent hit and a duplicate would be applied twice
+            let bvh = Cwbvh::build_with_unsplittable(&bvh_triangles, |prim| {
+                bvh_triangles[prim as usize * 3 + 1][3] != 0.0
+            });
 
             let elapsed = Instant::now().duration_since(start).as_secs_f32();
             Log::msg(&format!("Created Software CWBVH in {}s", elapsed));

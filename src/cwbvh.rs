@@ -158,6 +158,16 @@ impl Cwbvh {
     /// Build over `triangles` (three `[x,y,z,w]` vertices per triangle).
     /// Empty input gives an empty BVH.
     pub fn build(triangles: &[[f32; 4]]) -> Self {
+        Self::build_with_unsplittable(triangles, |_| false)
+    }
+
+    /// Like `build`, but triangles for which `unsplittable(triangle_index)` is true are never
+    /// spatially split, so they are referenced by exactly one leaf. Traversal then reports each of
+    /// them at most once, which any hit accumulation (transparent shadows) relies on.
+    pub fn build_with_unsplittable(
+        triangles: &[[f32; 4]],
+        unsplittable: impl Fn(u32) -> bool,
+    ) -> Self {
         assert_eq!(
             triangles.len() % 3,
             0,
@@ -170,7 +180,7 @@ impl Cwbvh {
                 triangles: Vec::new(),
             };
         }
-        let (nodes, prim_idx) = build_sbvh(triangles, tri_count);
+        let (nodes, prim_idx) = build_sbvh(triangles, tri_count, &unsplittable);
         let (mut nodes, prim_idx) = compact(nodes, prim_idx);
         split_leafs(&mut nodes, MAX_LEAF_TRIS);
         let mut wide = collapse(&nodes);
@@ -320,7 +330,12 @@ fn clip_frag(
 /// Returns the node pool (node 1 unused, as in tinybvh) and the primitive index array.
 /// Leaf `left_first`/`tri_count` index into the returned array, which holds *original* triangle
 /// indices (a triangle may appear in several leaves when it was split).
-fn build_sbvh(verts: &[[f32; 4]], tri_count: usize) -> (Vec<Node>, Vec<u32>) {
+/// `unsplittable` triangles are binned and partitioned whole by their centroid in spatial splits.
+fn build_sbvh(
+    verts: &[[f32; 4]],
+    tri_count: usize,
+    unsplittable: &dyn Fn(u32) -> bool,
+) -> (Vec<Node>, Vec<u32>) {
     let slack = tri_count >> 1; // room for split references
     let total = tri_count + slack;
     let mut frags = vec![Fragment::default(); total];
@@ -472,6 +487,16 @@ fn build_sbvh(verts: &[[f32; 4]], tri_count: usize) -> (Vec<Node>, Vec<u32>) {
                     let node_min = node.bmin[a];
                     for i in 0..count {
                         let f = frags[prim_idx[first + i] as usize];
+                        if unsplittable(f.prim) {
+                            let center = (f.bmin[a] + f.bmax[a]) * 0.5;
+                            let bin = (((center - node_min) * r_plane) as i32)
+                                .clamp(0, BINS as i32 - 1) as usize;
+                            count_in[bin] += 1;
+                            count_out[bin] += 1;
+                            sbin_min[bin] = vmin(sbin_min[bin], f.bmin);
+                            sbin_max[bin] = vmax(sbin_max[bin], f.bmax);
+                            continue;
+                        }
                         let bin1 = (((f.bmin[a] - node_min) * r_plane) as i32)
                             .clamp(0, BINS as i32 - 1) as usize;
                         let bin2 = (((f.bmax[a] - node_min) * r_plane) as i32)
@@ -567,6 +592,20 @@ fn build_sbvh(verts: &[[f32; 4]], tri_count: usize) -> (Vec<Node>, Vec<u32>) {
                 for i in 0..count {
                     let frag_idx = prim_idx[first + i] as usize;
                     let f = frags[frag_idx];
+                    if unsplittable(f.prim) {
+                        // same side as in spatial binning
+                        let center = (f.bmin[best_axis] + f.bmax[best_axis]) * 0.5;
+                        let bin = (((center - node_min) * r_plane) as i32)
+                            .clamp(0, BINS as i32 - 1) as usize;
+                        if bin <= best_pos {
+                            idx_tmp[a_ptr] = frag_idx as u32;
+                            a_ptr += 1;
+                        } else {
+                            b_ptr -= 1;
+                            idx_tmp[b_ptr] = frag_idx as u32;
+                        }
+                        continue;
+                    }
                     let bin1 = fmax((f.bmin[best_axis] - node_min) * r_plane, 0.0) as u32 as usize;
                     let bin2 = fmax((f.bmax[best_axis] - node_min) * r_plane, 0.0) as u32 as usize;
                     if bin2 <= best_pos {
@@ -1071,7 +1110,7 @@ mod tests {
     fn walk(
         b: &Cwbvh,
         node: usize,
-        seen: &mut Vec<bool>,
+        seen: &mut Vec<u32>,
         bounds: Option<(V3, V3)>,
         leaf_refs: &mut usize,
     ) {
@@ -1134,14 +1173,14 @@ mod tests {
                             "tri outside child box"
                         );
                     }
-                    seen[v0[3] as usize] = true;
+                    seen[v0[3] as usize] += 1;
                     *leaf_refs += 1;
                 }
             }
         }
     }
 
-    fn run(n: usize) {
+    fn random_triangles(n: usize) -> Vec<[f32; 4]> {
         let mut r = Lcg(12345);
         let mut verts = Vec::new();
         for _ in 0..n {
@@ -1156,14 +1195,44 @@ mod tests {
                 ]);
             }
         }
-        let b = Cwbvh::build(&verts);
+        verts
+    }
+
+    /// Returns the number of references to each triangle.
+    fn check(b: &Cwbvh, n: usize) -> Vec<u32> {
         assert_eq!(b.nodes.len() % 5, 0);
         assert!(b.triangle_ref_count() >= n);
-        let mut seen = vec![false; n];
+        let mut seen = vec![0u32; n];
         let mut refs = 0;
-        walk(&b, 0, &mut seen, None, &mut refs);
+        walk(b, 0, &mut seen, None, &mut refs);
         assert_eq!(refs, b.triangle_ref_count());
-        assert!(seen.iter().all(|&s| s), "missing triangles");
+        assert!(seen.iter().all(|&s| s > 0), "missing triangles");
+        seen
+    }
+
+    fn run(n: usize) {
+        let verts = random_triangles(n);
+        let b = Cwbvh::build(&verts);
+        check(&b, n);
+    }
+
+    #[test]
+    fn unsplittable_single_reference() {
+        let n = 20_000;
+        let verts = random_triangles(n);
+
+        // the scene must actually produce spatial splits for this test to mean anything
+        let splits = Cwbvh::build(&verts);
+        assert!(splits.triangle_ref_count() > n, "no spatial splits");
+
+        let b = Cwbvh::build_with_unsplittable(&verts, |prim| prim % 2 == 0);
+        let seen = check(&b, n);
+        for (prim, &count) in seen.iter().enumerate() {
+            if prim % 2 == 0 {
+                assert_eq!(count, 1, "unsplittable triangle {prim} referenced {count} times");
+            }
+        }
+        assert!(b.triangle_ref_count() > n, "splittable triangles should still split");
     }
 
     #[test]

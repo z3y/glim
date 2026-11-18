@@ -359,6 +359,21 @@ namespace Glim
             return false;
         }
 
+        // Transparent materials that are alpha blended rather than alpha tested (cutout, grass, leaves).
+        // These get real partial shadows instead of a cutoff.
+        public static bool IsMaterialAlphaBlended(Material mat)
+        {
+            if (!mat) return false;
+            if (!mat.shader) return false;
+
+            const string blended = "Transparent";
+
+            if (mat.GetTag("SurfaceType", false, "") == blended) return true;
+            if (mat.GetTag("RenderType", false, "") == blended) return true;
+
+            return false;
+        }
+
         public static int GetMaterialAlbedoProperty(Material mat)
         {
             if (mat.HasProperty(_MainTex)) return _MainTex;

@@ -106,7 +106,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         {
             ray.D = rayDirs[i];
 
-            if (TraceRay(ray, hit))
+            if (TraceRayAlphaTested(ray, hit))
             {
                 Surface hitSurf = Surface::Get(hit.primitiveID, hit.bary, true);
 

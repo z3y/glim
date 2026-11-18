@@ -4,31 +4,112 @@
 #include "sobol_burley.slang"
 #include "util.slang"
 
-bool TriangleAlphaTest(uint primitiveID, float2 bary)
+// must match mesh.rs
+static const uint ALPHA_TEXTURE_NONE = 0xFFFFu;
+static const uint ALPHA_WRAP_BIT = 1u << 16;
+static const uint ALPHA_BLEND_BIT = 1u << 17;
+
+// below this transmittance a shadow ray counts as fully blocked and stops traversing
+static const float SHADOW_TRANSMITTANCE_EPSILON = 1e-3;
+
+// Per triangle alpha of meshes in the transparent geometry groups.
+// Stored in the zw of the 3 main uv entries of a triangle:
+// uv0.z packed texture index | wrap bit | blend bit, uv0.w cutoff, uv1.z alpha multiplier, uv1.w transmission
+struct TriangleAlpha
 {
-    float u = bary.x;
-    float v = bary.y;
-    float w = 1.0 - u - v;
+    // coverage in [0, 1], cutout is either 0 or 1
+    float alpha;
+    // fraction of the covered part that lets light through, tinted by the albedo. 0 for cutout
+    float transmission;
+    bool blend;
 
-    float4 *mainUV = Push.rt.mainUVs;
-
-    float4 uv0 = mainUV[primitiveID * 3 + 0];
-    float4 uv1 = mainUV[primitiveID * 3 + 1];
-    float4 uv2 = mainUV[primitiveID * 3 + 2];
-
-    float2 uv = uv0.xy * w + uv1.xy * u + uv2.xy * v;
-
-    uint packed = asuint(uv0.z);
-    uint textureIndex = packed & 0xFFFF;
-    bool wrapUV = (packed & (1u << 16)) != 0;
-    float cutoff = uv0.w;
-
-    if (textureIndex != 0xFFFF)
+    static TriangleAlpha Get(uint primitiveID, float2 bary)
     {
-        return SampleAlpha(uv, textureIndex, wrapUV) >= cutoff;
+        float u = bary.x;
+        float v = bary.y;
+        float w = 1.0 - u - v;
+
+        float4 *mainUV = Push.rt.mainUVs;
+
+        float4 uv0 = mainUV[primitiveID * 3 + 0];
+        float4 uv1 = mainUV[primitiveID * 3 + 1];
+        float4 uv2 = mainUV[primitiveID * 3 + 2];
+
+        uint packed = asuint(uv0.z);
+        uint textureIndex = packed & 0xFFFFu;
+        bool wrapUV = (packed & ALPHA_WRAP_BIT) != 0;
+        float cutoff = uv0.w;
+
+        TriangleAlpha result;
+        result.blend = (packed & ALPHA_BLEND_BIT) != 0;
+        result.transmission = uv1.w;
+
+        float alpha = uv1.z;
+        if (textureIndex != ALPHA_TEXTURE_NONE)
+        {
+            float2 uv = uv0.xy * w + uv1.xy * u + uv2.xy * v;
+            alpha *= SampleAlpha(uv, textureIndex, wrapUV);
+        }
+        alpha = saturate(alpha);
+
+        if (!result.blend)
+        {
+            alpha = alpha >= cutoff ? 1.0 : 0.0;
+        }
+
+        result.alpha = alpha;
+        return result;
+    }
+}
+
+// Seed for stochastic alpha, derived from the ray so every sample makes a new decision
+// but the same ray and triangle always make the same one (any hit can run more than once).
+uint RayAlphaSeed(Ray ray)
+{
+    return hash_uint3(asuint(ray.D.x) ^ asuint(ray.P.x), asuint(ray.D.y) ^ asuint(ray.P.y), asuint(ray.D.z) ^ asuint(ray.P.z));
+}
+
+// Closest hit visibility of a transparent triangle.
+// Stochastic: hit with probability alpha, unbiased coverage for path tracing.
+// Otherwise: hit if alpha >= 0.5, for geometry queries that need a stable answer.
+bool TriangleVisible(uint primitiveID, float2 bary, bool stochastic, uint seed)
+{
+    float alpha = TriangleAlpha::Get(primitiveID, bary).alpha;
+
+    if (alpha >= 1.0)
+    {
+        return true;
+    }
+    if (alpha <= 0.0)
+    {
+        return false;
     }
 
-    return true;
+    if (!stochastic)
+    {
+        return alpha >= 0.5;
+    }
+
+    return uint_to_float_incl(hash_uint2(seed, primitiveID)) < alpha;
+}
+
+// Light passing through a transparent triangle: the uncovered part (1 - alpha)
+// plus the transmitted part of the covered surface, tinted by its albedo.
+float3 TriangleTransmittance(uint primitiveID, float2 bary)
+{
+    TriangleAlpha a = TriangleAlpha::Get(primitiveID, bary);
+
+    float3 transmittance = 1.0 - a.alpha;
+
+    [branch]
+    if (a.transmission > 0.0 && a.alpha > 0.0)
+    {
+        Surface surface = Surface::Get(primitiveID, bary);
+        float3 albedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
+        transmittance += a.alpha * a.transmission * albedo;
+    }
+
+    return transmittance;
 }
 
 #pragma warning(disable: 41035)
@@ -46,10 +127,16 @@ float SafeDirComponent(float d)
     return d;
 }
 
+// shadowRay: any hit, accumulates the transmittance of every transparent triangle along the ray.
+// Each transparent triangle is referenced by exactly one leaf (the builder never spatially splits them),
+// so the product needs no deduplication and the order of hits does not matter.
+// Returns true if the ray is fully blocked, transmittance is 0 then.
+// Otherwise closest hit, transparent triangles are tested with TriangleVisible.
 [ForceInline]
-bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
+bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers, bool stochasticAlpha, uint alphaSeed, out float3 transmittance)
 {
     hit = {};
+    transmittance = 1.0;
 
     float3 O = ray.P;
     float3 D = float3(SafeDirComponent(ray.D.x), SafeDirComponent(ray.D.y), SafeDirComponent(ray.D.z));
@@ -190,11 +277,23 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
                         float d = f * dot(e1.xyz, q);
                         if (d > 0.0 && d < tmax)
                         {
-
                             [branch]
                             if (e2.w != 0)
                             {
-                                if (!TriangleAlphaTest(asuint(v0.w), float2(u, v)))
+                                uint primitiveID = asuint(v0.w);
+
+                                if (shadowRay)
+                                {
+                                    transmittance *= TriangleTransmittance(primitiveID, float2(u, v));
+                                    if (all(transmittance <= SHADOW_TRANSMITTANCE_EPSILON))
+                                    {
+                                        transmittance = 0.0;
+                                        return true;
+                                    }
+                                    continue;
+                                }
+
+                                if (!TriangleVisible(primitiveID, float2(u, v), stochasticAlpha, alphaSeed))
                                 {
                                     continue;
                                 }
@@ -202,6 +301,7 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers)
 
                             if (shadowRay)
                             {
+                                transmittance = 0.0;
                                 return true;
                             }
 
@@ -260,32 +360,71 @@ uint GlobalPrimitiveID(uint group, uint geometryID, uint localPrimitiveID)
     }
 }
 
-void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query)
+uint CandidateGlobalPrimitiveID<let T : uint>(inout RayQuery<T> query)
+{
+    uint primitiveID = query.CandidatePrimitiveIndex();
+    uint geometryID = query.CandidateGeometryIndex();
+    uint group = query.CandidateInstanceID();
+
+    return GlobalPrimitiveID(group, geometryID, primitiveID);
+}
+
+void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query, bool stochasticAlpha, uint alphaSeed)
 {
     if (query.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE)
     {
         return;
     }
 
-    uint primitiveID = query.CandidatePrimitiveIndex();
-    uint geometryID = query.CandidateGeometryIndex();
-    uint group = query.CandidateInstanceID();
-
-    primitiveID = GlobalPrimitiveID(group, geometryID, primitiveID);
-
+    uint primitiveID = CandidateGlobalPrimitiveID(query);
     float2 bary = query.CandidateTriangleBarycentrics();
 
-    bool visible = TriangleAlphaTest(primitiveID, bary);
-
-    if (visible)
+    if (TriangleVisible(primitiveID, bary, stochasticAlpha, alphaSeed))
     {
         query.CommitNonOpaqueTriangleHit();
     }
 }
 
-bool TraceRay(Ray ray, out Hit hit)
+// Multiplies the transmittance of every non opaque candidate, never commits them.
+// Transparent geometries are built with NO_DUPLICATE_ANY_HIT_INVOCATION so every triangle
+// is reported once. Opaque triangles commit on their own and end the search
+// (RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH), which means fully blocked.
+float3 QueryShadowTransmittance<let T : uint>(inout RayQuery<T> query)
+{
+    float3 transmittance = 1.0;
+
+    while (query.Proceed())
+    {
+        if (query.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE)
+        {
+            continue;
+        }
+
+        uint primitiveID = CandidateGlobalPrimitiveID(query);
+        float2 bary = query.CandidateTriangleBarycentrics();
+
+        transmittance *= TriangleTransmittance(primitiveID, bary);
+
+        if (all(transmittance <= SHADOW_TRANSMITTANCE_EPSILON))
+        {
+            query.Abort();
+            return 0.0;
+        }
+    }
+
+    if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+    {
+        return 0.0;
+    }
+
+    return transmittance;
+}
+
+bool TraceRayInternal(Ray ray, out Hit hit, bool stochasticAlpha)
 {
     hit = {};
+
+    uint alphaSeed = stochasticAlpha ? RayAlphaSeed(ray) : 0u;
 
     if (HARDWARE_RT == 1)
     {
@@ -300,7 +439,7 @@ bool TraceRay(Ray ray, out Hit hit)
 
         while (query.Proceed())
         {
-            QueryHandleAlpha(query);
+            QueryHandleAlpha(query, stochasticAlpha, alphaSeed);
         }
 
         if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
@@ -320,12 +459,25 @@ bool TraceRay(Ray ray, out Hit hit)
     }
     else
     {
-        return BVHTraceRay(ray, hit, false, false);
+        float3 transmittance;
+        return BVHTraceRay(ray, hit, false, false, stochasticAlpha, alphaSeed, transmittance);
     }
 }
 
-// exclude renderers with no shadow casting
-bool TraceShadowRay(Ray ray)
+// Closest hit for shading. Semi transparent surfaces are hit with probability alpha.
+bool TraceRay(Ray ray, out Hit hit)
+{
+    return TraceRayInternal(ray, hit, true);
+}
+
+// Closest hit for geometry queries (leak detection, probe placement, preview visibility).
+// Semi transparent surfaces are hit if alpha >= 0.5, so the result does not change per sample.
+bool TraceRayAlphaTested(Ray ray, out Hit hit)
+{
+    return TraceRayInternal(ray, hit, false);
+}
+
+float3 TraceTransmittance(Ray ray, uint instanceMask, bool shadowRenderers)
 {
     if (HARDWARE_RT == 1)
     {
@@ -336,48 +488,30 @@ bool TraceShadowRay(Ray ray)
         rayDesc.TMax = ray.tMax;
 
         RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
-        query.TraceRayInline(TopLevelAS, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0x02, rayDesc);
+        query.TraceRayInline(TopLevelAS, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, instanceMask, rayDesc);
 
-        while (query.Proceed())
-        {
-            QueryHandleAlpha(query);
-        }
-
-        return query.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+        return QueryShadowTransmittance(query);
     }
     else
     {
         Hit hit = {};
-        return BVHTraceRay(ray, hit, true, false);
+        float3 transmittance;
+        BVHTraceRay(ray, hit, true, shadowRenderers, false, 0u, transmittance);
+        return transmittance;
     }
 }
 
-// includes renderers with no shadow casting
-bool TraceAnyHit(Ray ray)
+// Fraction of light that reaches the end of the ray, in [0, 1] per channel.
+// Excludes renderers with no shadow casting.
+float3 TraceShadowRay(Ray ray)
 {
-    if (HARDWARE_RT == 1)
-    {
-        RayDesc rayDesc;
-        rayDesc.Origin = ray.P;
-        rayDesc.Direction = ray.D;
-        rayDesc.TMin = ray.tMin;
-        rayDesc.TMax = ray.tMax;
+    return TraceTransmittance(ray, 0x02, false);
+}
 
-        RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
-        query.TraceRayInline(TopLevelAS, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0x01, rayDesc);
-
-        while (query.Proceed())
-        {
-            QueryHandleAlpha(query);
-        }
-
-        return query.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
-    }
-    else
-    {
-        Hit hit = {};
-        return BVHTraceRay(ray, hit, true, true);
-    }
+// Same as TraceShadowRay but includes renderers with no shadow casting.
+float3 TraceAnyHit(Ray ray)
+{
+    return TraceTransmittance(ray, 0x01, true);
 }
 
 float CalculateTriangleArea(uint primitiveID)
@@ -843,10 +977,7 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     if (visible > 0.0)
     {
         shadowRay.P = terminator.Origin(positionWS, normalWS, L);
-        if (TraceAnyHit(shadowRay))
-        {
-            color = 0.0;
-        }
+        color *= TraceAnyHit(shadowRay);
     }
 
     return color;
@@ -1132,10 +1263,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     if (visible > 0.0 && light.CastShadows())
     {
         shadowRay.P = terminator.Origin(positionWS, normalWS, L);
-        if (TraceShadowRay(shadowRay))
-        {
-            color = 0.0;
-        }
+        color *= TraceShadowRay(shadowRay);
     }
 
     return color;
@@ -1276,20 +1404,21 @@ bool ShadowMaskRay(Light light, float3 positionWS, float2 xi, out Ray shadowRay,
     return true;
 }
 
-bool ShadowMaskVisibility(Light light, float3 positionWS, float3 normalWS, float2 xi, ShadowTerminator terminator, out float3 L)
+// shadowmask is a single channel, colored transmittance is reduced to its luminance
+float ShadowMaskVisibility(Light light, float3 positionWS, float3 normalWS, float2 xi, ShadowTerminator terminator, out float3 L)
 {
     Ray shadowRay;
     if (!ShadowMaskRay(light, positionWS, xi, shadowRay, L))
     {
-        return false;
+        return 0.0;
     }
 
     // facing away, no need to trace
     if (dot(normalWS, L) <= 0.0)
     {
-        return false;
+        return 0.0;
     }
 
     shadowRay.P = terminator.Origin(positionWS, normalWS, L);
-    return !TraceShadowRay(shadowRay);
+    return Luminance(TraceShadowRay(shadowRay));
 }

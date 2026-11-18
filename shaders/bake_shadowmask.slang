@@ -65,12 +65,13 @@ void main(uint3 threadID: SV_DispatchThreadID)
         float3 L;
         float2 xi = DecorrelateSample2D(xiLight, lightIndex);
 
-        if (ShadowMaskVisibility(light, positionWS, normalWS, xi, terminator, L))
+        float visibility = ShadowMaskVisibility(light, positionWS, normalWS, xi, terminator, L);
+        if (visibility > 0.0)
         {
             float NoL = saturate(dot(normalWS, L));
             if (NoL > 0.0)
             {
-                occlusionChannels[channel] = 1.0;
+                occlusionChannels[channel] = visibility;
             }
         }
     }

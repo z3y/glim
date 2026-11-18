@@ -86,7 +86,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         ray.tMax = texelSize * c;
 
         Hit hit;
-        if (TraceRay(ray, hit))
+        if (TraceRayAlphaTested(ray, hit))
         {
             if (!hit.frontFace)
             {

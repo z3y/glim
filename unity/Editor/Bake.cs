@@ -886,6 +886,7 @@ namespace Glim
             }
 
             _bakeStartTime = Time.realtimeSinceStartupAsDouble;
+            float transmission = Mathf.Clamp01(baker.transparentTransmission);
             var thread = new Thread(() =>
             {
                 try
@@ -958,6 +959,9 @@ namespace Glim
                                     alpha_index = data.alphaTextureIndex,
                                     cutoff = data.cutoff,
                                     alpha_wrap = data.alphaWrap,
+                                    alpha_blend = data.alphaBlend,
+                                    alpha_intensity = data.alphaIntensity,
+                                    transmission = data.alphaBlend ? transmission : 0.0f,
                                 };
 
                                 Bindings.app_add_mesh(app, exportedMesh);

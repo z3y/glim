@@ -106,10 +106,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
                     // light index stored in sh[4..7].w as int bits, -1 = no light
                     probe.sh[4 + channel].w = asfloat(int(lightIndex));
 
-                    if (!TraceShadowRay(shadowRay))
-                    {
-                        occlusion[channel] = 1.0;
-                    }
+                    occlusion[channel] = Luminance(TraceShadowRay(shadowRay));
                 }
             }
             continue;
