@@ -9,11 +9,11 @@ mod tests {
 
     use crate::bindings::*;
     use crate::lights::LightType;
-    use glam::{Vec2, Vec3};
     use crate::mesh::FfiMesh;
     use crate::pack::UVPacker;
     use crate::texture2d::encode_r11g11b10;
     use crate::*;
+    use glam::{Vec2, Vec3};
 
     const TEST_NAME: &str = "raster_test";
 

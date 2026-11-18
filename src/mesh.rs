@@ -1,5 +1,5 @@
-use glam::{Vec2, Vec3};
 use ash::vk::{self, Handle};
+use glam::{Vec2, Vec3};
 
 use crate::{
     CoordinateSystem, LightmapGroup,

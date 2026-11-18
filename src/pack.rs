@@ -1,7 +1,7 @@
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
-use glam::{Vec2, Vec3};
 use core::slice;
+use glam::{Vec2, Vec3};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 

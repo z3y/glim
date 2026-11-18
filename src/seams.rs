@@ -6,8 +6,8 @@
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use crate::bindings::Log;
-use glam::{Vec2, Vec3, Vec4};
 use crate::mesh::Mesh;
+use glam::{Vec2, Vec3, Vec4};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -59,6 +59,19 @@ pub struct Seam {
 struct SamplePoint {
     uv_a: Vec2,
     uv_b: Vec2,
+    /// Multiplier on the edge constraint, 0 = sample ignored (too much contrast across the seam).
+    weight: f32,
+}
+
+/// Relative difference across the seam where the constraint starts fading out.
+const CONTRAST_FADE_START: f32 = 0.5;
+/// Relative difference across the seam where the constraint is fully disabled.
+const CONTRAST_FADE_END: f32 = 0.8;
+
+#[inline]
+fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
+    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -311,8 +324,6 @@ struct PixelInfo {
     color: [f32; 4],
 }
 
-// todo
-// there seems to be a bug where the seam fixer makes high contrast seams look even worse
 pub fn fix_seams(
     pixels: &mut [Vec4],
     width: u32,
@@ -337,7 +348,11 @@ pub fn fix_seams(
             continue;
         }
 
-        let length = seam.edge0_uv0.distance(seam.edge0_uv1);
+        // Use the longer side so a side with higher texel density isn't undersampled.
+        let length = f32::max(
+            seam.edge0_uv0.distance(seam.edge0_uv1),
+            seam.edge1_uv0.distance(seam.edge1_uv1),
+        );
         let samples = u32::max(3, (length * sample_scale).ceil() as u32);
 
         for i in 0..samples {
@@ -346,7 +361,11 @@ pub fn fix_seams(
             let uv_a = seam.edge0_uv0.lerp(seam.edge0_uv1, t);
             let uv_b = seam.edge1_uv0.lerp(seam.edge1_uv1, t);
 
-            sample_points.push(SamplePoint { uv_a, uv_b });
+            sample_points.push(SamplePoint {
+                uv_a,
+                uv_b,
+                weight: 1.0,
+            });
         }
     }
 
@@ -400,6 +419,60 @@ pub fn fix_seams(
         return;
     }
 
+    // Per pixel [min, max] of the original colors it is tied to through a constraint. The
+    // unconstrained least squares solve can overshoot (ringing, negative values) when the two
+    // sides differ a lot, which shows up as dark/odd blotches; clamping to this range stops it.
+    let mut range_min: Vec<[f32; 4]> = pixel_info.iter().map(|p| p.color).collect();
+    let mut range_max: Vec<[f32; 4]> = range_min.clone();
+
+    let mut skipped = 0usize;
+    for point in sample_points.iter_mut() {
+        let (taps_a, w_a) = bilinear_taps(point.uv_a * size - Vec2::new(0.5, 0.5), w, h);
+        let (taps_b, w_b) = bilinear_taps(point.uv_b * size - Vec2::new(0.5, 0.5), w, h);
+        let ix_a = taps_a.map(|(x, y)| pixel_map[&Vector2Int::new(x, y)]);
+        let ix_b = taps_b.map(|(x, y)| pixel_map[&Vector2Int::new(x, y)]);
+
+        // Contrast across the seam at this sample: relative difference of the bilinear values.
+        // Large differences are usually real lighting (e.g. a shadow edge lying on the seam),
+        // so fade the constraint out instead of forcing both sides to meet.
+        let mut contrast = 0.0f32;
+        for c in 0..channels {
+            let a: f32 = (0..4).map(|k| pixel_info[ix_a[k]].color[c] * w_a[k]).sum();
+            let b: f32 = (0..4).map(|k| pixel_info[ix_b[k]].color[c] * w_b[k]).sum();
+            let denom = f32::max(a.abs(), b.abs()).max(1e-4);
+            contrast = contrast.max((a - b).abs() / denom);
+        }
+
+        point.weight = 1.0 - smoothstep(CONTRAST_FADE_START, CONTRAST_FADE_END, contrast);
+        if point.weight <= 0.0 {
+            skipped += 1;
+            continue;
+        }
+
+        let mut lo = [f32::MAX; 4];
+        let mut hi = [f32::MIN; 4];
+        for &i in ix_a.iter().chain(ix_b.iter()) {
+            for c in 0..4 {
+                lo[c] = lo[c].min(pixel_info[i].color[c]);
+                hi[c] = hi[c].max(pixel_info[i].color[c]);
+            }
+        }
+        for &i in ix_a.iter().chain(ix_b.iter()) {
+            for c in 0..4 {
+                range_min[i][c] = range_min[i][c].min(lo[c]);
+                range_max[i][c] = range_max[i][c].max(hi[c]);
+            }
+        }
+    }
+
+    if skipped > 0 {
+        Log::msg(&format!(
+            "Skipped {} of {} seam samples due to high contrast",
+            skipped,
+            sample_points.len()
+        ));
+    }
+
     let total_pixels = pixel_info.len();
     let mut at_a = SparseMat::new(total_pixels, total_pixels);
     let mut at_bs: Vec<VectorX> = (0..channels).map(|_| VectorX::new(total_pixels)).collect();
@@ -424,16 +497,13 @@ pub fn fix_seams(
 
     for (i, pixel) in pixel_info.iter().enumerate() {
         let index = (pixel.position.y * w + pixel.position.x) as usize;
+        let solved = |c: usize| solutions[c][i].clamp(range_min[i][c], range_max[i][c]);
 
-        if channels == 3 {
-            pixels[index].x = solutions[0][i];
-            pixels[index].y = solutions[1][i];
-            pixels[index].z = solutions[2][i];
-        } else if channels == 4 {
-            pixels[index].x = solutions[0][i];
-            pixels[index].y = solutions[1][i];
-            pixels[index].z = solutions[2][i];
-            pixels[index].w = solutions[3][i];
+        pixels[index].x = solved(0);
+        pixels[index].y = solved(1);
+        pixels[index].z = solved(2);
+        if channels == 4 {
+            pixels[index].w = solved(3);
         }
     }
 }
@@ -492,10 +562,13 @@ fn setup_least_squares(
     let mut other_weight = [0.0; 4];
 
     for point in sample_points {
-        let scaled_uv_a =
-            point.uv_a * Vec2::new(width as f32, height as f32) - Vec2::new(0.5, 0.5);
-        let scaled_uv_b =
-            point.uv_b * Vec2::new(width as f32, height as f32) - Vec2::new(0.5, 0.5);
+        if point.weight <= 0.0 {
+            continue;
+        }
+        let edge_constraint_weight = edge_constraint_weight * point.weight;
+
+        let scaled_uv_a = point.uv_a * Vec2::new(width as f32, height as f32) - Vec2::new(0.5, 0.5);
+        let scaled_uv_b = point.uv_b * Vec2::new(width as f32, height as f32) - Vec2::new(0.5, 0.5);
 
         bilinear_sample(
             &pixel_map,

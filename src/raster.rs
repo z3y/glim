@@ -1,8 +1,6 @@
 use glam::{Vec2, Vec3, Vec4, vec3, vec4};
 
-use crate::{
-    LightmapGroup, Mesh,
-};
+use crate::{LightmapGroup, Mesh};
 
 #[repr(C, align(16))]
 #[derive(Debug, Clone)]
@@ -615,12 +613,7 @@ pub fn dilate_texture(pixels: &mut [Vec4], mask: &mut [bool], resolution: usize,
     }
 }
 
-pub fn dilate_shadowmask(
-    color: &mut [Vec4],
-    coverage: &[f32],
-    resolution: usize,
-    radius: usize,
-) {
+pub fn dilate_shadowmask(color: &mut [Vec4], coverage: &[f32], resolution: usize, radius: usize) {
     for y in 0..resolution {
         for x in 0..resolution {
             let index = y * resolution + x;

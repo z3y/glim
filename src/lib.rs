@@ -19,7 +19,6 @@ use crate::bindings::*;
 use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
-use glam::{Vec2, Vec3, Vec4};
 use crate::mesh::GEOMETRIES_VARIANTS;
 use crate::meta::{MetaType, write_unity_texture_meta};
 use crate::raster::{
@@ -29,6 +28,7 @@ use crate::raster::{
 };
 use crate::seams::{Seam, fix_seams};
 use crate::sh::SHProbeL2;
+use glam::{Vec2, Vec3, Vec4};
 
 use crate::light_tree::LightTriangle;
 use crate::shader::{
