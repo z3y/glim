@@ -1211,8 +1211,10 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     normalWS = surface.N;
 }
 
-// Builds the shadowmask shadow ray, false if the position is outside the light range or spot cone
-bool ShadowMaskRay(Light light, float3 positionWS, out Ray shadowRay, out float3 L)
+// Builds the shadowmask shadow ray, false if the position is outside the light range or spot cone.
+// xi samples the light's shadow angle (directional) or radius (point/spot) for soft shadows,
+// the same way ShadeLightDirect does.
+bool ShadowMaskRay(Light light, float3 positionWS, float2 xi, out Ray shadowRay, out float3 L)
 {
     shadowRay.P = positionWS;
     shadowRay.tMin = 0;
@@ -1221,20 +1223,20 @@ bool ShadowMaskRay(Light light, float3 positionWS, out Ray shadowRay, out float3
 
     if (ty == LightType::Directional)
     {
-        shadowRay.D = light.direction;
+        L = GetDirectionalLightAngle(light.direction, light.ShadowRadiusOrAngle, xi);
+        shadowRay.D = L;
         shadowRay.tMax = RAY_MAX;
-
-        L = light.position;
     }
     else
     {
-        float3 positionToLight = light.position - positionWS;
-        float distanceSquare = dot(positionToLight, positionToLight);
+        // range and spot cone are tested against the light center so the mask
+        // footprint does not depend on the sampled shadow position
+        float3 positionToCenter = light.position - positionWS;
+        float centerDistanceSquare = dot(positionToCenter, positionToCenter);
 
-        L = normalize(positionToLight);
-
-        if (distanceSquare > (light.range * light.range))
+        if (centerDistanceSquare > (light.range * light.range))
         {
+            L = normalize(positionToCenter);
             return false;
         }
 
@@ -1244,12 +1246,23 @@ bool ShadowMaskRay(Light light, float3 positionWS, out Ray shadowRay, out float3
             float spotOffset;
             SpotLightScaleOffset(light.SpotOuter + 1, light.SpotInnerPercent, spotScale, spotOffset);
 
-            if (SpotLightAngleAttenuation(light.direction, L, spotScale, spotOffset) <= 0.0)
+            if (SpotLightAngleAttenuation(light.direction, normalize(positionToCenter), spotScale, spotOffset) <= 0.0)
             {
+                L = normalize(positionToCenter);
                 return false;
             }
         }
 
+        float3 lightPosition = light.position;
+        if (light.ShadowRadiusOrAngle > 0.0)
+        {
+            lightPosition = RandomPointOnOrientedDisk(light.position, light.ShadowRadiusOrAngle, positionWS, xi);
+        }
+
+        float3 positionToLight = lightPosition - positionWS;
+        float distanceSquare = dot(positionToLight, positionToLight);
+
+        L = positionToLight * rsqrt(max(distanceSquare, 1e-12));
         shadowRay.D = L;
         shadowRay.tMax = sqrt(distanceSquare);
     }
@@ -1257,10 +1270,10 @@ bool ShadowMaskRay(Light light, float3 positionWS, out Ray shadowRay, out float3
     return true;
 }
 
-bool ShadowMaskVisibility(Light light, float3 positionWS, out float3 L)
+bool ShadowMaskVisibility(Light light, float3 positionWS, float2 xi, out float3 L)
 {
     Ray shadowRay;
-    if (!ShadowMaskRay(light, positionWS, shadowRay, L))
+    if (!ShadowMaskRay(light, positionWS, xi, shadowRay, L))
     {
         return false;
     }

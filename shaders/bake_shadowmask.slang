@@ -1,4 +1,5 @@
 #include "includes/core.slang"
+#include "includes/sobol_burley.slang"
 
 [[vk::push_constant]]
 PushConstants Push;
@@ -44,6 +45,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint lightsStart = Push.lightsStart;
     uint lightsCount = Push.lightsCount;
 
+    float2 xiLight = SobolBurleySample2D(indexing.x, DIMENSION_LIGHT, indexing.y, indexing.z);
+
     float4 occlusionChannels = float4(0.0, 0.0, 0.0, 0.0);
 
     Light *lights = Push.lights;
@@ -59,8 +62,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
         }
 
         float3 L;
+        float2 xi = DecorrelateSample2D(xiLight, lightIndex);
 
-        if (ShadowMaskVisibility(light, positionWS, L))
+        if (ShadowMaskVisibility(light, positionWS, xi, L))
         {
             float NoL = saturate(dot(normalWS, L));
             if (NoL > 0.0)

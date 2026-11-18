@@ -166,6 +166,16 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint occlusionSampleCount = (sampleCount + OCCLUSION_SAMPLE_STRIDE - 1) / OCCLUSION_SAMPLE_STRIDE;
     float4 occlusion = float4(0.0);
 
+    // occlusion only runs every OCCLUSION_SAMPLE_STRIDE samples, every 16th index of the main sequence
+    // would land in a single stratum, so it gets its own dense sequence
+    float2 xiOcclusionBase = 0.0;
+    if (traceOcclusion)
+    {
+        uint occlusionIndex = sampleIndex / OCCLUSION_SAMPLE_STRIDE;
+        uint3 occlusionIndexing = BlueNoiseIndexing(pixelSeed, occlusionIndex, sobolIndexMask, occlusionSampleCount, pattern);
+        xiOcclusionBase = SobolBurleySample2D(occlusionIndexing.x, DIMENSION_LIGHT, occlusionIndexing.y, occlusionIndexing.z);
+    }
+
     Light *lights = Push.lights;
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
@@ -177,7 +187,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
             {
                 Ray shadowRay;
                 float3 L;
-                if (ShadowMaskRay(light, probePosition, shadowRay, L))
+                float2 xiOcclusion = DecorrelateSample2D(xiOcclusionBase, lightIndex);
+                if (ShadowMaskRay(light, probePosition, xiOcclusion, shadowRay, L))
                 {
                     // channels are assigned so lights sharing one never overlap,
                     // the light in range is the only one that can affect this probe on that channel

@@ -1643,7 +1643,17 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vec4>) {
 
     Log::msg("Baking Shadowmasks");
 
-    const SHADOWMASK_SAMPLES: u32 = 32;
+    // hard shadows only need enough samples for anti-aliasing, soft shadows sample the
+    // light radius/angle and are not denoised, so use at least the direct light sample count
+    const SHADOWMASK_MIN_SAMPLES: u32 = 32;
+    let soft_shadows = app.cpu_lights.iter().any(|l| {
+        l.occlusion_channel != u8::MAX && l.cast_shadows && l.shadow_radius_or_angle > 0.0
+    });
+    let shadowmask_samples = if soft_shadows {
+        app.config.direct_light_samples.max(SHADOWMASK_MIN_SAMPLES)
+    } else {
+        SHADOWMASK_MIN_SAMPLES
+    };
 
     #[repr(C, align(16))]
     pub struct PushConstants {
@@ -1699,7 +1709,7 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vec4>) {
         pad0: 0,
         pixels: shadowmask_buffer.gpu_address,
         sample_index: 0,
-        sample_count: SHADOWMASK_SAMPLES,
+        sample_count: shadowmask_samples,
         lights: app.gpu_lights.gpu_address,
         pad1: 0,
         pad2: 0,
@@ -1707,7 +1717,7 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vec4>) {
 
     let start = Instant::now();
 
-    for sample_index in 0..SHADOWMASK_SAMPLES {
+    for sample_index in 0..shadowmask_samples {
         push.sample_index = sample_index;
         let push_bytes = as_bytes(&push);
 
@@ -2235,27 +2245,31 @@ fn bake_indirect(
         lightmap: lightmap.gpu_address,
     };
 
-    let total_steps = (app.config.bounce_count * app.config.indirect_samples) as f32;
+    let bounce_samples: Vec<u32> = (0..app.config.bounce_count)
+        .map(|bounce_index| bounce_sample_count(app.config.indirect_samples, bounce_index))
+        .collect();
+    let total_steps = bounce_samples.iter().sum::<u32>() as f32;
+    let mut steps_done = 0u32;
 
     let start = Instant::now();
 
     'bounces: for bounce_index in 0..app.config.bounce_count {
+        let samples = bounce_samples[bounce_index as usize];
         push.bounce_index = bounce_index;
+        push.sample_count = samples;
 
-        let message = format!("Baking Bounce {}", bounce_index + 1);
+        let message = format!("Baking Bounce {} ({} samples)", bounce_index + 1, samples);
         Log::msg(&message);
 
-        // let last_sample = app.config.indirect_samples - 1;
-        for sample_index in 0..app.config.indirect_samples {
+        for sample_index in 0..samples {
             if is_cancelled() {
                 break 'bounces;
             }
             push.sample_index = sample_index;
             let push_bytes = as_bytes(&push);
 
-            Log::progress(
-                (bounce_index * app.config.indirect_samples + sample_index) as f32 / total_steps,
-            );
+            Log::progress(steps_done as f32 / total_steps);
+            steps_done += 1;
 
             let vk = &app.vk.device;
             let shader = &indirect_shader;
@@ -2289,6 +2303,18 @@ fn bake_indirect(
 
     indirect_shader.destroy(&app.vk);
     indirect_buffer.destroy(&app.vk);
+}
+
+/// Later bounces carry less energy and are lower frequency, so each one after the first
+/// gets half the samples of the previous, never going below `MIN_BOUNCE_SAMPLES`
+/// (or the configured count if that is lower).
+fn bounce_sample_count(indirect_samples: u32, bounce_index: u32) -> u32 {
+    const MIN_BOUNCE_SAMPLES: u32 = 32;
+    let floor = indirect_samples.min(MIN_BOUNCE_SAMPLES);
+    indirect_samples
+        .checked_shr(bounce_index)
+        .unwrap_or(0)
+        .max(floor)
 }
 
 fn light_sort_order(light: &Light) -> u8 {

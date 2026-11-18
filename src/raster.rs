@@ -19,6 +19,38 @@ impl VisibilityTexel {
 
         y * resolution + x
     }
+
+    /// Morton (Z-order) cell id used to order the compacted texels. Neighbouring
+    /// threads then get texels from small 2D tiles instead of long rows, which keeps
+    /// their rays more coherent. Must match GetCompactedIndex in compaction.slang.
+    #[inline]
+    fn cell(&self, resolution: usize) -> usize {
+        let x = self.x as u32;
+        let y = (resolution - 1 - self.y as usize) as u32;
+        morton_encode(x, y) as usize
+    }
+}
+
+#[inline]
+fn interleave_with_zero(x: u32) -> u32 {
+    let mut x = x & 0x0000ffff;
+    x = (x ^ (x << 8)) & 0x00ff00ff;
+    x = (x ^ (x << 4)) & 0x0f0f0f0f;
+    x = (x ^ (x << 2)) & 0x33333333;
+    x = (x ^ (x << 1)) & 0x55555555;
+    x
+}
+
+#[inline]
+fn morton_encode(x: u32, y: u32) -> u32 {
+    interleave_with_zero(x) | (interleave_with_zero(y) << 1)
+}
+
+/// Number of Morton cells covering a resolution x resolution lightmap.
+#[inline]
+fn morton_cell_count(resolution: usize) -> usize {
+    let r = resolution.next_power_of_two();
+    r * r
 }
 
 type P = (f64, f64);
@@ -930,8 +962,8 @@ pub fn rasterize_texels(
         let vertex_index = mesh.indices[primitive_id as usize * 3];
         let group_index = mesh.vertices[vertex_index as usize].group();
         let resolution = resolution_lookups[group_index as usize];
-        let texel_index = t.index(resolution);
-        ((group_index as u64) << 32) | texel_index as u64
+        let cell = t.cell(resolution);
+        ((group_index as u64) << 32) | cell as u64
     };
     visibility_and_coverage
         .sort_unstable_by(|a, b| key(a).cmp(&key(b)).then_with(|| b.1.total_cmp(&a.1)));
@@ -955,8 +987,7 @@ pub fn rasterize_texels(
             let vertex_index = mesh.indices[primitive_id as usize * 3];
             let group_index = mesh.vertices[vertex_index as usize].group();
             let resolution = resolution_lookups[group_index as usize];
-            let texel_index = texel.index(resolution);
-            let key = (group_index, texel_index);
+            let key = (group_index, texel.cell(resolution));
 
             if key != prev_key {
                 current_coverage = 0;
@@ -1047,7 +1078,7 @@ fn build_compaction_part(
     let mut per_group: Vec<Vec<[u32; 2]>> = vec![Vec::new(); groups.len()];
 
     // One entry per occupied cell: [start, count].
-    // Relies on rasterize_texels output being sorted by (group, cell),
+    // Relies on rasterize_texels output being sorted by (group, Morton cell),
     // with the best-coverage texel first in each run.
     let mut table: Vec<[u32; 2]> = Vec::new();
     let mut run: Option<(usize, usize)> = None;
@@ -1056,11 +1087,11 @@ fn build_compaction_part(
         let v0 = &mesh.vertices[mesh.indices[t.primitive_id as usize * 3] as usize];
         let g = v0.group() as usize;
         let res = groups[g].settings.width as usize;
-        let cell = t.index(res);
+        let cell = t.cell(res);
 
         let g_words = &mut per_group[g];
         if g_words.is_empty() {
-            *g_words = vec![[0u32; 2]; (res * res).div_ceil(32)];
+            *g_words = vec![[0u32; 2]; morton_cell_count(res).div_ceil(32)];
         }
         g_words[cell >> 5][0] |= 1u32 << (cell & 31);
 

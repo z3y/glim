@@ -1,5 +1,7 @@
 #pragma once
 
+#include "util.slang"
+
 struct LightmapInfo
 {
     uint2 resolution;
@@ -21,7 +23,8 @@ uint GetCompactedIndex(uint2 coords, uint lightmapGroup, uint primitiveID, bool 
         coords.y = info.resolution.y - 1 - coords.y;
     }
 
-    uint index = coords.y * info.resolution.x + coords.x;
+    // texels are compacted in Morton order, see VisibilityTexel::cell in raster.rs
+    uint index = MortonEncode(coords);
 
     uint word = index >> 5;
     uint bit = index & 31;

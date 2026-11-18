@@ -102,9 +102,12 @@ void main(uint3 threadID: SV_DispatchThreadID)
                 float3 current = previousDiffuse * bounceAlbedo * color.a;
                 current *= lerp(1.0, ao, AO_INTENSITY);
                 color.rgb += current;
-                dominantDirection.xyz += ray.D * Luminance(current * sampleScale);
 
-                AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
+                // the bounce buffer stays unscaled, INDIRECT_INTENSITY only applies to the lightmap output
+                float3 scaled = current * INDIRECT_INTENSITY;
+                dominantDirection.xyz += ray.D * Luminance(scaled * sampleScale);
+
+                AccumulateL1LightmapIndirect(sh, scaled, ray.D, normalWS);
             }
         }
         else
