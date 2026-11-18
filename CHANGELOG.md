@@ -24,7 +24,8 @@
   - Based on "Hacking the Shadow Terminator" (Hanika 2021), adapted from Cycles
   - Shadow rays near the terminator start from a point lifted towards the smooth surface the vertex normals describe
   - Fixes blocky shadow artifacts on low poly meshes with smooth normals, this replaces the workaround removed in v0.12.0
-  - Applies to direct lights, emissive meshes and shadowmasks
+  - Applies to direct lights, emissive meshes, shadowmasks and the preview window
+  - On by default, can be disabled per renderer with `GlimRendererSettings` for meshes with bad normals (e.g. smooth normals across hard corners)
 - Implemented light probe occlusion for shadowmask mode
   - Light probes now store occlusion for mixed lights, so dynamic objects get shadowmask shadows too
   - Written directly into the Lighting Data Asset
@@ -44,6 +45,7 @@
 - Increased default indirect samples to 512
 - Texels are now sorted in Morton order for better ray coherence
 - Fixed some correlation between random samples of different baking stages
+- Fixed Indirect Multiplier not affecting Combined SH lightmaps and the direction of Dominant Direction lightmaps
 - UV packing is now ~2x faster
 - Added an option to play a sound when the bake finishes or fails (thanks [Pesky12](https://github.com/pesky12))
 - Benchmark timings are now logged in one line
@@ -63,6 +65,7 @@
   - Emission multiplier, scales the baked emission of a renderer without using any extra memory, 0 removes it as a light source
   - Transmission
   - UV packing override (Group, ScaleOffset, SplitCharts)
+  - Shadow terminator fix toggle
 - ScaleOffset and SplitCharts UV packing can now be mixed in one lightmap group
   - Renderers that aren't Batching Static or have a GPU instanced material automatically use ScaleOffset in SplitCharts groups
 - LODs now share the LOD0 lightmap
