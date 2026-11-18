@@ -146,15 +146,16 @@ void main(uint3 threadID: SV_DispatchThreadID)
     SamplingPattern pattern = SamplingPattern::BlueNoisePure;
     uint pixelSeed = RNGPixelInit1D(probeIndex);
     uint3 indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, sobolIndexMask, sampleCount, pattern);
-    uint dimension = 0;
-
-    float2 xiLight = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
-    float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
+    float2 xiLight = SobolBurleySample2D(indexing.x, DIMENSION_LIGHT, indexing.y, indexing.z);
+    float2 xiBounce = SobolBurleySample2D(indexing.x, DIMENSION_BOUNCE, indexing.y, indexing.z);
 
     float radius = probe.radius;
     if (radius > 0.0)
     {
-        float3 jitter = float3(xiLight.x, xiLight.y, xiBounce.x) * 2.0 - 1.0;
+        // own dimensions, reusing xiLight/xiBounce correlates the position with the light sample and ray direction
+        float2 xiJitter = SobolBurleySample2D(indexing.x, DIMENSION_PROBE_JITTER_XY, indexing.y, indexing.z);
+        float xiJitterZ = SobolBurleySample1D(indexing.x, DIMENSION_PROBE_JITTER_Z, indexing.y, indexing.z);
+        float3 jitter = float3(xiJitter, xiJitterZ) * 2.0 - 1.0;
         probePosition += jitter * radius;
     }
 
@@ -169,7 +170,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
             continue;
         }
         float3 L;
-        float3 color = ShadeLightDirect(light, probePosition, 0.0, xiLight, throughput, L, true);
+        float2 xi = DecorrelateSample2D(xiLight, lightIndex);
+        float3 color = ShadeLightDirect(light, probePosition, 0.0, xi, throughput, L, true);
         AccumulateL2(probe, sampleIndex, color * sampleScale, L);
     }
 
@@ -177,16 +179,18 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
-        float2 xiPick = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
+        float xiPick = SobolBurleySample1D(indexing.x, DIMENSION_LIGHT_PICK, indexing.y, indexing.z);
 
         uint emissivePrimitiveID;
         float selectionPmf;
 
-        if (LightTreeSample(Push.lightTree, probePosition, 0.0, false, xiPick.x, emissivePrimitiveID, selectionPmf))
+        if (LightTreeSample(Push.lightTree, probePosition, 0.0, false, xiPick, emissivePrimitiveID, selectionPmf))
         {
             float3 L;
             float pdf = 0.0;
-            float3 current = ShadeTriangleLight(emissivePrimitiveID, probePosition, 0.0, xiLight, throughput, selectionPmf, pdf, L, true);
+            // own key, light indices never reach ~0u
+            float2 xi = DecorrelateSample2D(xiLight, ~0u);
+            float3 current = ShadeTriangleLight(emissivePrimitiveID, probePosition, 0.0, xi, throughput, selectionPmf, pdf, L, true);
             current *= MISWeight(pdf, bsdfPdf);
             AccumulateL2(probe, sampleIndex, current * sampleScale, L);
         }
@@ -255,7 +259,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
                         continue;
                     }
                     float3 L;
-                    float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L, false);
+                    float2 xi = DecorrelateSample2D(xiLight, lightIndex);
+                    float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false);
                     float NoL = saturate(dot(L, normalWS));
                     current *= NoL;
                     AccumulateL2(probe, sampleIndex, current * bounceAlbedo * 4 * sampleScale, ray.D);

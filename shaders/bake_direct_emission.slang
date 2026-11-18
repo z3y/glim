@@ -45,7 +45,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
 
-    float2 xiBounce = SobolBurleySample2D(indexing.x, 1, indexing.y, indexing.z);
+    float2 xiBounce = SobolBurleySample2D(indexing.x, DIMENSION_BOUNCE, indexing.y, indexing.z);
 
     Ray ray;
     ray.P = positionWS;
@@ -55,13 +55,13 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     if (EMISSIVE_TRIANGLES_COUNT > 0)
     {
-        float2 xiPick = SobolBurleySample2D(indexing.x, 2, indexing.y, indexing.z);
-        float2 xiLight = SobolBurleySample2D(indexing.x, 3, indexing.y, indexing.z);
+        float xiPick = SobolBurleySample1D(indexing.x, DIMENSION_LIGHT_PICK, indexing.y, indexing.z);
+        float2 xiLight = SobolBurleySample2D(indexing.x, DIMENSION_TRIANGLE_LIGHT, indexing.y, indexing.z);
 
         uint emissivePrimitiveID;
         float selectionPmf;
 
-        if (LightTreeSample(Push.lightTree, positionWS, normalWS, true, xiPick.x, emissivePrimitiveID, selectionPmf))
+        if (LightTreeSample(Push.lightTree, positionWS, normalWS, true, xiPick, emissivePrimitiveID, selectionPmf))
         {
             float3 L;
             float pdf = 0.0;

@@ -68,7 +68,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
         {
             float3 L;
             Light light = Push.lights[lightIndex];
-            float3 current = ShadeLightDirect(light, positionWS, normalWS, xiLight, throughput, L, false);
+            float2 xi = DecorrelateSample2D(xiLight, lightIndex);
+            float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false);
             float NoL = saturate(dot(L, normalWS));
             color.rgb += current * NoL;
         }

@@ -42,7 +42,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     uint3 indexing;
     CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
 
-    uint dimension = 4 + bounceIndex * 2;
+    uint dimension = DIMENSION_INDIRECT_BOUNCE + bounceIndex;
     float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
 
     Ray ray;

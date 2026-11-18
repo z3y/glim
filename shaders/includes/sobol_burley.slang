@@ -111,6 +111,25 @@ float SobolBurley(uint revBitIndex, uint dimension, uint scrambleSeed)
     return UintToFloatExclusive(result);
 }
 
+static const uint DIMENSION_AA = 0;
+static const uint DIMENSION_LIGHT = 1;
+static const uint DIMENSION_BOUNCE = 2;
+static const uint DIMENSION_LIGHT_PICK = 3;
+static const uint DIMENSION_TRIANGLE_LIGHT = 4;
+static const uint DIMENSION_PROBE_JITTER_XY = 5;
+static const uint DIMENSION_PROBE_JITTER_Z = 6;
+static const uint DIMENSION_INDIRECT_BOUNCE = 7; // + bounceIndex, keep last
+
+float SobolBurleySample1D(uint index, uint dimensionSet, uint seed, uint shuffledIndexMask)
+{
+    seed ^= HashHPUint(dimensionSet);
+
+    index = ReversedBitOwen(reversebits(index), seed ^ 0xbff95bfe);
+    index &= reversebits(shuffledIndexMask);
+
+    return SobolBurley(index, 0, seed ^ 0x635d5b8d);
+}
+
 float2 SobolBurleySample2D(uint index, uint dimensionSet, uint seed, uint shuffledIndexMask)
 {
     // Include the dimension set in the seed, so we get decorrelated
@@ -124,6 +143,13 @@ float2 SobolBurleySample2D(uint index, uint dimensionSet, uint seed, uint shuffl
 
     return float2(SobolBurley(index, 0, seed ^ 0xe0aaaf76),
                   SobolBurley(index, 1, seed ^ 0x94964d4e));
+}
+
+float2 DecorrelateSample2D(float2 xi, uint key)
+{
+    uint2 shift = uint2(HashHPUint(key), HashHPUint(key ^ 0x9e3779b9u)) >> 8;
+    uint2 q = uint2(xi * 16777216.0) ^ shift;
+    return float2(q) * (1.0 / 16777216.0);
 }
 
 enum SamplingPattern
@@ -191,32 +217,7 @@ uint RNGPixelInit1D(uint index)
     return nested_uniform_scramble_base4(index, seed);
 }
 
-uint3 BlueNoiseIndexing(uint pixelIndex,
-                        uint sample,
-                        uint sobolIndexMask,
-                        uint blueNoiseSequenceLength,
-                        SamplingPattern pattern)
-{
-    if (pattern == SamplingPattern::SobolBurley)
-    {
-        return uint3(sample, pixelIndex, sobolIndexMask);
-    }
-    else if (pattern == SamplingPattern::BlueNoisePure)
-    {
-        uint globalSampleIndex = sample + (pixelIndex * blueNoiseSequenceLength);
-        return uint3(globalSampleIndex, 0, 0xffffffff);
-    }
-    else // SamplingPattern::BlueNoiseFirst
-    {
-        if (sample == 0)
-        {
-            return uint3(pixelIndex, 0x0cd0519f, 0xffffffff);
-        }
-        uint globalSampleIndex = (sample - 1) + (pixelIndex * blueNoiseSequenceLength);
-        return uint3(globalSampleIndex, 0, 0xffffffff);
-    }
-}
-
+// Mask covering [0, n), so mask + 1 is the smallest power of two >= n
 uint IndexMaskForCount(uint n)
 {
     uint m = max(n, 1u) - 1u;
@@ -226,4 +227,35 @@ uint IndexMaskForCount(uint n)
     m |= m >> 8;
     m |= m >> 16;
     return m;
+}
+
+uint3 BlueNoiseIndexing(uint pixelIndex,
+                        uint sample,
+                        uint sobolIndexMask,
+                        uint blueNoiseSequenceLength,
+                        SamplingPattern pattern)
+{
+    // Each pixel gets a slice of one global sequence. Slices must be power-of-two sized
+    // and aligned, otherwise they straddle Sobol blocks and lose stratification.
+    if (pattern == SamplingPattern::SobolBurley)
+    {
+        return uint3(sample, pixelIndex, sobolIndexMask);
+    }
+    else if (pattern == SamplingPattern::BlueNoisePure)
+    {
+        uint length = IndexMaskForCount(blueNoiseSequenceLength) + 1u;
+        uint globalSampleIndex = sample + (pixelIndex * length);
+        return uint3(globalSampleIndex, 0, 0xffffffff);
+    }
+    else // SamplingPattern::BlueNoiseFirst
+    {
+        if (sample == 0)
+        {
+            return uint3(pixelIndex, 0x0cd0519f, 0xffffffff);
+        }
+        // sample 0 is separate, the rest form an (N - 1) sample sequence
+        uint length = IndexMaskForCount(max(blueNoiseSequenceLength, 2u) - 1u) + 1u;
+        uint globalSampleIndex = (sample - 1) + (pixelIndex * length);
+        return uint3(globalSampleIndex, 0, 0xffffffff);
+    }
 }

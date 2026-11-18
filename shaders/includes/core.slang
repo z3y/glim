@@ -1176,7 +1176,7 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
 
     if (JITTER_BARYCENTRICS > 0)
     {
-        float2 xiAA = SobolBurleySample2D(indexing.x, 0, indexing.y, indexing.z);
+        float2 xiAA = SobolBurleySample2D(indexing.x, DIMENSION_AA, indexing.y, indexing.z);
         // inspired by cycles
         // https://projects.blender.org/blender/cycles/src/branch/main/src/kernel/integrator/init_from_bake.h
         const uint attempts = 10;
