@@ -79,7 +79,7 @@ Affects lightmaps, light probes and light volumes.")]
         public uint directEmissionSamples = 512;
 
         [Tooltip("Only affects bounced light")]
-        public uint indirectSamples = 256;
+        public uint indirectSamples = 512;
         public uint bounces = 5;
 
         [Space]
