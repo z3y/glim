@@ -18,6 +18,39 @@ namespace Glim
         static readonly float[] Scales = { 1f, 0.75f, 0.5f, 0.25f };
         static readonly string[] ScaleNames = { "100%", "75%", "50%", "25%" };
 
+        // only the first frame, the window size takes over right after
+        public const uint InitialWidth = 512;
+        public const uint InitialHeight = 512;
+
+        // not remembered, reset with the domain
+        public static uint Samples = 512;
+        public static uint Bounces = 2;
+
+        /// <summary>
+        /// Same frame throttling as the editor, Preferences > General > Interaction Mode
+        /// </summary>
+        public static uint ThrottleMs
+        {
+            get
+            {
+                const int DefaultIdleTimeMs = 4;
+                switch (EditorPrefs.GetInt("InteractionMode", 0))
+                {
+                    case 1: // No Throttling
+                        return 0;
+                    case 2: // Monitor Refresh Rate
+                        {
+                            double hz = Screen.currentResolution.refreshRateRatio.value;
+                            return hz > 0 ? (uint)Math.Round(1000.0 / hz) : DefaultIdleTimeMs;
+                        }
+                    case 3: // Custom
+                        return (uint)Mathf.Max(0, EditorPrefs.GetInt("ApplicationIdleTime", DefaultIdleTimeMs));
+                    default:
+                        return DefaultIdleTimeMs;
+                }
+            }
+        }
+
         Texture2D _texture;
         Bindings.PreviewStats _stats;
 
@@ -105,6 +138,13 @@ namespace Glim
                 looking = _looking,
             });
             _lookDelta = Vector2.zero;
+
+            Bindings.app_preview_set_settings(new Bindings.PreviewSettings
+            {
+                sample_count = Samples,
+                bounce_count = Bounces,
+                throttle_ms = ThrottleMs,
+            });
 
             // debounce so dragging the window edge doesn't restart the render every frame
             if (_pendingSize != _size && EditorApplication.timeSinceStartup - _pendingSince > ResizeDelay)
@@ -219,6 +259,12 @@ namespace Glim
             fontSize = Larger(EditorStyles.miniLabel, 9),
         };
 
+        static GUIStyle _headerField;
+        static GUIStyle HeaderField => _headerField ??= new GUIStyle(EditorStyles.toolbarTextField)
+        {
+            fontSize = Larger(EditorStyles.toolbarTextField, 9),
+        };
+
         static GUIStyle _headerPopup;
         static GUIStyle HeaderPopup => _headerPopup ??= new GUIStyle(EditorStyles.toolbarPopup)
         {
@@ -248,6 +294,12 @@ namespace Glim
                 }
 
                 GUILayout.FlexibleSpace();
+
+                GUILayout.Label(new GUIContent("Samples", "Preview sample count, restarts the preview"), HeaderLabel);
+                Samples = (uint)Mathf.Clamp(EditorGUILayout.DelayedIntField((int)Samples, HeaderField, GUILayout.Width(50)), 1, 65536);
+
+                GUILayout.Label(new GUIContent("Bounces", "Preview bounce count, restarts the preview"), HeaderLabel);
+                Bounces = (uint)Mathf.Clamp(EditorGUILayout.DelayedIntField((int)Bounces, HeaderField, GUILayout.Width(30)), 0, 127);
 
                 GUILayout.Label(new GUIContent("Resolution", "Render resolution relative to the window size"), HeaderLabel);
                 int current = Array.IndexOf(Scales, Scale);

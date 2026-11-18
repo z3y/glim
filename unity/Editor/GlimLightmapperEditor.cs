@@ -117,17 +117,17 @@ namespace Glim
                 var camera = SceneView.lastActiveSceneView.camera;
 
                 var previewSettings = new Bindings.LightmapSettings(
-                    lightmapper.previewWidth, lightmapper.previewHeight, false, false, false, false);
+                    PreviewWindow.InitialWidth, PreviewWindow.InitialHeight, false, false, false, false);
 
                 var config = new Bindings.GlimConfig(
                     Bindings.CoordinateSystem.Unity,
-                    lightmapper.previewSamples,
-                    lightmapper.previewSamples,
-                    lightmapper.previewSamples,
-                    lightmapper.previewBounces,
+                    PreviewWindow.Samples,
+                    PreviewWindow.Samples,
+                    PreviewWindow.Samples,
+                    PreviewWindow.Bounces,
                     true,
                     lightmapper.hardwareRayTracing,
-                    lightmapper.previewThrottle,
+                    PreviewWindow.ThrottleMs,
                     previewSettings,
                     camera.transform.position,
                     camera.transform.forward,

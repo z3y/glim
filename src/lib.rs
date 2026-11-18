@@ -714,6 +714,20 @@ fn render_preview(app: &mut Glim) {
         let now = std::time::Instant::now();
         let delta_time = now.duration_since(previous_time).as_secs_f32();
 
+        if let Some(settings) = frame.settings {
+            app.config.throttle_preview_ms = settings.throttle_ms;
+
+            let sample_count = clamp_samples(settings.sample_count.max(1));
+            let bounce_count = clamp_bounces(settings.bounce_count);
+            if (sample_count, bounce_count) != (push.sample_count, push.bounce_count) {
+                app.config.direct_emission_samples = sample_count;
+                app.config.bounce_count = bounce_count;
+                push.sample_count = sample_count;
+                push.bounce_count = bounce_count;
+                app.preview_initialized = false;
+            }
+        }
+
         update_camera(app, &frame.input, delta_time);
 
         if LIGHT_UPDATE_REQUESTED.load(Ordering::Acquire) {

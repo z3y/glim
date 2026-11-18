@@ -9,7 +9,7 @@ use ash::vk::{self, Handle};
 
 use crate::bindings::is_cancelled;
 use crate::buffer::Buffer;
-use crate::preview::{HostFrame, PreviewHost, PreviewInput, PreviewStats};
+use crate::preview::{HostFrame, PreviewHost, PreviewInput, PreviewSettings, PreviewStats};
 use crate::texture2d::Texture2D;
 use crate::vulkan_context::VulkanContext;
 
@@ -33,6 +33,7 @@ struct Shared {
     look_delta: [f32; 2],
 
     requested_size: (u32, u32),
+    settings: Option<PreviewSettings>,
 
     accepting: bool,
     latest: Option<Published>,
@@ -47,6 +48,7 @@ static SHARED: Mutex<Shared> = Mutex::new(Shared {
     looking: false,
     look_delta: [0.0; 2],
     requested_size: (0, 0),
+    settings: None,
     accepting: false,
     latest: None,
     locked: None,
@@ -82,6 +84,12 @@ pub extern "C" fn app_preview_set_input(input: PreviewInput) {
     s.looking = input.looking;
     s.look_delta[0] += input.look_delta_x;
     s.look_delta[1] += input.look_delta_y;
+}
+
+/// Sample count, bounces and throttle, the accumulation restarts only if samples or bounces changed
+#[unsafe(no_mangle)]
+pub extern "C" fn app_preview_set_settings(settings: PreviewSettings) {
+    shared().settings = Some(settings);
 }
 
 #[unsafe(no_mangle)]
@@ -171,6 +179,7 @@ impl ExternalHost {
             s.looking = false;
             s.look_delta = [0.0; 2];
             s.requested_size = (0, 0);
+            s.settings = None;
             s.latest = None;
             s.locked = None;
             s.consumed_id = 0;
@@ -288,6 +297,7 @@ impl PreviewHost for ExternalHost {
         HostFrame {
             input,
             close: is_cancelled(),
+            settings: s.settings.take(),
         }
     }
 

@@ -128,14 +128,6 @@ Automatically applied to light volumes based on texel size."
         [Tooltip("Play a sound when bake finishes or fails.")]
         public bool playBakeCompletionSound = false;
 
-        [Space]
-        public uint previewWidth = 1024;
-        public uint previewHeight = 1024;
-        public uint previewThrottle = 2;
-        public uint previewSamples = 512;
-        public uint previewBounces = 2;
-
-
         // todo this has bugs
         [Tooltip("(Experimental)\nHashes mesh data in order to skip uv packing if no changes are detected.")]
         [NonSerialized] public bool enableUVCache = false;

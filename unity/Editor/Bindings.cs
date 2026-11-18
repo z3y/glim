@@ -237,6 +237,14 @@ namespace Glim
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        public struct PreviewSettings
+        {
+            public uint sample_count;
+            public uint bounce_count;
+            public uint throttle_ms;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
         public struct PreviewFrame
         {
             public IntPtr pixels; // tightly packed RGBA8 sRGB, first row is the top
@@ -258,6 +266,9 @@ namespace Glim
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_preview_set_input(PreviewInput input);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_preview_set_settings(PreviewSettings settings);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_preview_resize(uint width, uint height);

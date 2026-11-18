@@ -133,6 +133,7 @@ impl PreviewHost for GlfwHost {
             HostFrame {
                 input,
                 close: glfwWindowShouldClose(window) != 0,
+                settings: None,
             }
         }
     }

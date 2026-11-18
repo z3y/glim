@@ -40,9 +40,20 @@ pub struct PreviewStats {
     pub hardware_rt: bool,
 }
 
+/// Settings that can change while the preview is running
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct PreviewSettings {
+    pub sample_count: u32,
+    pub bounce_count: u32,
+    pub throttle_ms: u32,
+}
+
 pub struct HostFrame {
     pub input: PreviewInput,
     pub close: bool,
+    /// latest settings sent by the host, if any
+    pub settings: Option<PreviewSettings>,
 }
 
 /// Where the preview gets its input from and where the rendered image goes.
