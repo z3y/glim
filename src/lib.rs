@@ -3020,5 +3020,5 @@ fn render_lightmaps(app: &mut Glim) {
     lightmap_texels.destroy(&app.vk);
     drop(lightmap_texels);
 
-    Log::msg(&format!("Benchmarks: {:#?}", app.benchmarks));
+    Log::msg(&format!("Benchmarks: {:?}", app.benchmarks));
 }
