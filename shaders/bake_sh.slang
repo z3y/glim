@@ -2,8 +2,8 @@
 
 #include "includes/compaction.slang"
 #include "includes/core.slang"
-#include "includes/sobol_burley.slang"
 #include "includes/light_tree.slang"
+#include "includes/sobol_burley.slang"
 
 [[vk::push_constant]]
 PushConstants Push;
@@ -161,12 +161,35 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float3 throughput = float3(1.0);
 
+    const uint OCCLUSION_SAMPLE_STRIDE = 16;
+    bool traceOcclusion = (sampleIndex % OCCLUSION_SAMPLE_STRIDE) == 0;
+    uint occlusionSampleCount = (sampleCount + OCCLUSION_SAMPLE_STRIDE - 1) / OCCLUSION_SAMPLE_STRIDE;
+    float4 occlusion = float4(0.0);
+
     Light *lights = Push.lights;
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
         Light light = lights[lightIndex];
         if (light.Mixed())
         {
+            uint channel = light.OcclusionChannel();
+            if (traceOcclusion && channel <= 3 && light.CastShadows())
+            {
+                Ray shadowRay;
+                float3 L;
+                if (ShadowMaskRay(light, probePosition, shadowRay, L))
+                {
+                    // channels are assigned so lights sharing one never overlap,
+                    // the light in range is the only one that can affect this probe on that channel
+                    // light index stored in sh[4..7].w as int bits, -1 = no light
+                    probe.sh[4 + channel].w = asfloat(int(lightIndex));
+
+                    if (!TraceShadowRay(shadowRay))
+                    {
+                        occlusion[channel] = 1.0;
+                    }
+                }
+            }
             continue;
         }
         float3 L;
@@ -174,6 +197,12 @@ void main(uint3 threadID: SV_DispatchThreadID)
         float3 color = ShadeLightDirect(light, probePosition, 0.0, xi, throughput, L, true);
         AccumulateL2(probe, sampleIndex, color * sampleScale, L);
     }
+
+    occlusion /= float(occlusionSampleCount);
+    probe.sh[0].w += occlusion.x;
+    probe.sh[1].w += occlusion.y;
+    probe.sh[2].w += occlusion.z;
+    probe.sh[3].w += occlusion.w;
 
     float bsdfPdf = 1.0 / (4.0 * float.getPi());
 

@@ -10,25 +10,25 @@ pub struct SHProbeL2 {
 
     // L0
     pub l0: Vec3,
-    pub pad1: u32,
+    pub occlusion0: f32, // light probe occlusion, shadowmask channel 0
 
     // L1
     pub l1_1: Vec3,
-    pub pad2: u32,
+    pub occlusion1: f32,
     pub l10: Vec3,
-    pub pad3: u32,
+    pub occlusion2: f32,
     pub l11: Vec3,
-    pub pad4: u32,
+    pub occlusion3: f32,
 
     // L2
     pub l2_2: Vec3,
-    pub pad5: u32,
+    pub occlusion_light0: i32, // light index for shadowmask channel 0, -1 = none
     pub l2_1: Vec3,
-    pub pad6: u32,
+    pub occlusion_light1: i32,
     pub l20: Vec3,
-    pub pad7: u32,
+    pub occlusion_light2: i32,
     pub l21: Vec3,
-    pub pad8: u32,
+    pub occlusion_light3: i32,
     pub l22: Vec3,
     pub pad9: u32,
 }

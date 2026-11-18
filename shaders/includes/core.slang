@@ -1210,3 +1210,60 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
 }
+
+// Builds the shadowmask shadow ray, false if the position is outside the light range or spot cone
+bool ShadowMaskRay(Light light, float3 positionWS, out Ray shadowRay, out float3 L)
+{
+    shadowRay.P = positionWS;
+    shadowRay.tMin = 0;
+
+    LightType ty = light.Type();
+
+    if (ty == LightType::Directional)
+    {
+        shadowRay.D = light.direction;
+        shadowRay.tMax = RAY_MAX;
+
+        L = light.position;
+    }
+    else
+    {
+        float3 positionToLight = light.position - positionWS;
+        float distanceSquare = dot(positionToLight, positionToLight);
+
+        L = normalize(positionToLight);
+
+        if (distanceSquare > (light.range * light.range))
+        {
+            return false;
+        }
+
+        if (ty == LightType::Spot)
+        {
+            float spotScale;
+            float spotOffset;
+            SpotLightScaleOffset(light.SpotOuter + 1, light.SpotInnerPercent, spotScale, spotOffset);
+
+            if (SpotLightAngleAttenuation(light.direction, L, spotScale, spotOffset) <= 0.0)
+            {
+                return false;
+            }
+        }
+
+        shadowRay.D = L;
+        shadowRay.tMax = sqrt(distanceSquare);
+    }
+
+    return true;
+}
+
+bool ShadowMaskVisibility(Light light, float3 positionWS, out float3 L)
+{
+    Ray shadowRay;
+    if (!ShadowMaskRay(light, positionWS, shadowRay, L))
+    {
+        return false;
+    }
+
+    return !TraceShadowRay(shadowRay);
+}

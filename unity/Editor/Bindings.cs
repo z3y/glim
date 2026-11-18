@@ -275,27 +275,45 @@ namespace Glim
 
             // L0
             public Vector3 L0;
-            public uint Pad1;
+            public float Occlusion0; // light probe occlusion, shadowmask channel 0
 
             // L1
             public Vector3 L1_1;
-            public uint Pad2;
+            public float Occlusion1;
             public Vector3 L10;
-            public uint Pad3;
+            public float Occlusion2;
             public Vector3 L11;
-            public uint Pad4;
+            public float Occlusion3;
 
             // L2
             public Vector3 L2_2;
-            public uint Pad5;
+            public int OcclusionLight0; // light index for shadowmask channel 0, -1 = none
             public Vector3 L2_1;
-            public uint Pad6;
+            public int OcclusionLight1;
             public Vector3 L20;
-            public uint Pad7;
+            public int OcclusionLight2;
             public Vector3 L21;
-            public uint Pad8;
+            public int OcclusionLight3;
             public Vector3 L22;
             public uint Pad9;
+
+            public float GetOcclusion(int channel) => channel switch
+            {
+                0 => Occlusion0,
+                1 => Occlusion1,
+                2 => Occlusion2,
+                3 => Occlusion3,
+                _ => 0.0f,
+            };
+
+            public int GetOcclusionLight(int channel) => channel switch
+            {
+                0 => OcclusionLight0,
+                1 => OcclusionLight1,
+                2 => OcclusionLight2,
+                3 => OcclusionLight3,
+                _ => -1,
+            };
         }
 
         [StructLayout(LayoutKind.Sequential)]

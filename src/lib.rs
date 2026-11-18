@@ -95,6 +95,8 @@ pub struct Glim {
     pub meshes: [Mesh; GEOMETRIES_VARIANTS],
 
     pub cpu_lights: Vec<Light>,
+    // cpu_lights[i] was added as light cpu_lights_source_index[i], empty if not sorted
+    pub cpu_lights_source_index: Vec<u32>,
     pub cpu_lights_hash: u64,
     pub light_cookies: Vec<TexturePixelsData>,
     pub alphas: Vec<TexturePixelsData>,
@@ -361,15 +363,24 @@ fn initialize_render(app: &mut Glim) {
     if app.cpu_lights.len() > 0 {
         if !app.config.is_preview {
             // first other lights, then area, then mixed
-            app.cpu_lights.sort_unstable_by_key(|x| {
-                if x.ty == LightType::Area || x.ty == LightType::Disc {
-                    1u8
-                } else if x.mixed {
-                    2u8
-                } else {
-                    0u8
-                }
-            });
+            // keep the source index, probe occlusion light indices are remapped back to it
+            let count = app.cpu_lights.len();
+
+            let mut source_index: Vec<u32> = Vec::with_capacity(count);
+            for i in 0..count {
+                source_index.push(i as u32);
+            }
+
+            let cpu_lights = &app.cpu_lights;
+            source_index.sort_unstable_by_key(|&i| light_sort_order(&cpu_lights[i as usize]));
+
+            let mut lights: Vec<Light> = Vec::with_capacity(count);
+            for i in 0..count {
+                lights.push(app.cpu_lights[source_index[i] as usize]);
+            }
+
+            app.cpu_lights = lights;
+            app.cpu_lights_source_index = source_index;
         }
 
         app.gpu_lights_staging = Buffer::empty(
@@ -1391,6 +1402,7 @@ impl Glim {
             window: window,
             config: config,
             cpu_lights: Vec::new(),
+            cpu_lights_source_index: Vec::new(),
             preview_shader: ComputeShader::null(),
             gpu_mesh: GpuMesh::null(),
             tlas: VulkanAs::null(),
@@ -2279,6 +2291,24 @@ fn bake_indirect(
     indirect_buffer.destroy(&app.vk);
 }
 
+fn light_sort_order(light: &Light) -> u8 {
+    if light.ty == LightType::Area || light.ty == LightType::Disc {
+        1
+    } else if light.mixed {
+        2
+    } else {
+        0
+    }
+}
+
+fn remap_light_index(source_index: &[u32], index: i32) -> i32 {
+    if index < 0 {
+        return -1;
+    }
+
+    source_index[index as usize] as i32
+}
+
 fn bake_light_probes(
     app: &mut Glim,
     mixed_start: usize,
@@ -2443,6 +2473,25 @@ fn bake_light_probes(
         )
     };
     app.vk.end_single_use_cmd(cmd);
+
+    // probe occlusion light indices point into the sorted gpu lights, remap them to the source light order
+    if !app.cpu_lights_source_index.is_empty() {
+        let probes = unsafe {
+            std::slice::from_raw_parts_mut(
+                staging_buffer_light_probes.ptr as *mut SHProbeL2,
+                app.probes.len(),
+            )
+        };
+        let source_index = &app.cpu_lights_source_index;
+
+        for i in 0..probes.len() {
+            let probe = &mut probes[i];
+            probe.occlusion_light0 = remap_light_index(source_index, probe.occlusion_light0);
+            probe.occlusion_light1 = remap_light_index(source_index, probe.occlusion_light1);
+            probe.occlusion_light2 = remap_light_index(source_index, probe.occlusion_light2);
+            probe.occlusion_light3 = remap_light_index(source_index, probe.occlusion_light3);
+        }
+    }
 
     let readback_data = LightprobesReadbackData {
         probes: staging_buffer_light_probes.ptr as *const SHProbeL2,

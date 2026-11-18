@@ -408,6 +408,8 @@ namespace Glim
 
                     obj.bakedProbes = bakedProbesArray;
                     EditorUtility.SetDirty(obj);
+
+                    WriteProbeOcclusion(obj, bakedCoeffCount);
                 }
 
                 // skybox probe
@@ -514,6 +516,55 @@ namespace Glim
                 if (playSound)
                     PlayCompletionSound();
             }
+        }
+
+        static void WriteProbeOcclusion(LightProbes probes, int probeCount)
+        {
+            using var so = new SerializedObject(probes);
+            LightingData.InspectorModeObject.SetValue(so, InspectorMode.DebugInternal);
+
+            var occlusionProp = so.FindProperty("m_BakedLightOcclusion");
+            if (occlusionProp == null)
+            {
+                Debug.LogWarning("m_BakedLightOcclusion not found, light probe occlusion not written");
+                return;
+            }
+
+            occlusionProp.arraySize = probeCount;
+
+            bool shadowmask = _context.mixedMode == MixedLightMode.Shadowmask;
+
+            for (int i = 0; i < probeCount; i++)
+            {
+                var element = occlusionProp.GetArrayElementAtIndex(i);
+                var lightIndexProp = element.FindPropertyRelative("m_ProbeOcclusionLightIndex");
+                var occProp = element.FindPropertyRelative("m_Occlusion");
+                var channelProp = element.FindPropertyRelative("m_OcclusionMaskChannel");
+
+                if (lightIndexProp == null || occProp == null || channelProp == null)
+                {
+                    Debug.LogWarning("unexpected m_BakedLightOcclusion layout, light probe occlusion not written");
+                    return;
+                }
+
+                // newly added elements come with empty arrays
+                lightIndexProp.arraySize = 4;
+                occProp.arraySize = 4;
+                channelProp.arraySize = 4;
+
+                Bindings.SHProbe probe = _bakeProbesResults[i];
+
+                for (int channel = 0; channel < 4; channel++)
+                {
+                    int lightIndex = shadowmask ? probe.GetOcclusionLight(channel) : -1;
+
+                    lightIndexProp.GetArrayElementAtIndex(channel).intValue = lightIndex;
+                    occProp.GetArrayElementAtIndex(channel).floatValue = lightIndex == -1 ? 0.0f : Mathf.Clamp01(probe.GetOcclusion(channel));
+                    channelProp.GetArrayElementAtIndex(channel).intValue = lightIndex == -1 ? -1 : channel;
+                }
+            }
+
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         public static void PlayCompletionSound()

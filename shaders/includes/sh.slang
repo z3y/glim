@@ -4,6 +4,8 @@ struct SHProbeL2
 {
     float3 position;
     float radius;
+    // probe occlusion for shadowmask channels 0-3 is stored in sh[0..3].w
+    // light index for each channel (int bits, -1 = none) is stored in sh[4..7].w
     float4 sh[9];
 
     static SHProbeL2 zero()

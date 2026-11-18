@@ -394,7 +394,8 @@ namespace Glim
                         bakeLights[lightIndex] = l;
                     }
 
-                    outputElement.FindPropertyRelative("probeOcclusionLightIndex").intValue = 0;
+                    // matches m_ProbeOcclusionLightIndex in the probes m_BakedLightOcclusion
+                    outputElement.FindPropertyRelative("probeOcclusionLightIndex").intValue = occlusionChannel == -1 ? -1 : lightIndex;
                     outputElement.FindPropertyRelative("occlusionMaskChannel").intValue = occlusionChannel;
 
                     var mixedLightingMode = mixedMode;

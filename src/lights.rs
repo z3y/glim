@@ -2,7 +2,7 @@ use glam::{Vec2, Vec3};
 use std::hash::{Hash, Hasher};
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
 pub enum LightType {
     Directional = 0,
     Point = 1,
@@ -12,7 +12,7 @@ pub enum LightType {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Light {
     pub position: Vec3,
     pub ty: LightType,
