@@ -8,6 +8,7 @@
 #pragma once
 
 #include "bindings.slang"
+#include "ray.slang"
 
 // Shadow terminator fix for smooth normals on low poly meshes, based on
 // "Hacking the Shadow Terminator" (Hanika 2021). Shadow rays leave from a point lifted toward the
@@ -72,6 +73,34 @@ struct ShadowTerminator
         }
 
         return positionWS;
+    }
+
+    // Offsets a shadow ray that was built from the unoffset position. Like Cycles shadow_ray_setup,
+    // rays to local lights are re-aimed from the new origin at the same end point, otherwise they
+    // would end past or short of the light by the offset (and could hit the emitter or a lamp mesh).
+    // Distant lights (tMax == RAY_MAX) keep their direction.
+    void OffsetShadowRay(inout Ray ray, float3 N, float3 L)
+    {
+        float3 P = Origin(ray.P, N, L);
+
+        if (all(P == ray.P))
+        {
+            return;
+        }
+
+        if (ray.tMax < RAY_MAX)
+        {
+            float3 target = ray.P + ray.D * ray.tMax;
+            float3 toTarget = target - P;
+            float len = length(toTarget);
+            if (len > 0.0)
+            {
+                ray.D = toTarget / len;
+                ray.tMax = len;
+            }
+        }
+
+        ray.P = P;
     }
 
     float3 SmoothSurfaceOffset()

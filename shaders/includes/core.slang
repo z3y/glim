@@ -976,7 +976,7 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     [branch]
     if (visible > 0.0)
     {
-        shadowRay.P = terminator.Origin(positionWS, normalWS, L);
+        terminator.OffsetShadowRay(shadowRay, normalWS, L);
         color *= TraceAnyHit(shadowRay);
     }
 
@@ -1262,7 +1262,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     [branch]
     if (visible > 0.0 && light.CastShadows())
     {
-        shadowRay.P = terminator.Origin(positionWS, normalWS, L);
+        terminator.OffsetShadowRay(shadowRay, normalWS, L);
         color *= TraceShadowRay(shadowRay);
     }
 
@@ -1419,6 +1419,6 @@ float ShadowMaskVisibility(Light light, float3 positionWS, float3 normalWS, floa
         return 0.0;
     }
 
-    shadowRay.P = terminator.Origin(positionWS, normalWS, L);
+    terminator.OffsetShadowRay(shadowRay, normalWS, L);
     return Luminance(TraceShadowRay(shadowRay));
 }
