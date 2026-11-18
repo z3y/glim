@@ -7,13 +7,7 @@ use std::mem;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
-use std::{ptr, time::Duration};
-
-use glfw_sys::{
-    GLFW_FLOATING, GLFW_KEY_ESCAPE, GLFW_PRESS, GLFW_TRUE, GLFWwindow, glfwCreateWindowSurface,
-    glfwGetKey, glfwGetWindowSize, glfwPollEvents, glfwSetWindowAttrib, glfwSetWindowShouldClose,
-    glfwSetWindowTitle, glfwWindowShouldClose,
-};
+use std::time::Duration;
 
 use crate::bindings::*;
 use crate::buffer::Buffer;
@@ -43,9 +37,10 @@ use crate::{
     lights::Light,
     mesh::{GpuMesh, Mesh, VulkanAs, create_tlas},
     oidn::Oidn,
+    preview::{PreviewHost, PreviewStats, update_camera},
+    preview_external::ExternalHost,
     texture2d::Texture2D,
     vulkan_context::{VulkanConfig, VulkanContext},
-    window::{initialize_window, update_camera},
 };
 
 mod bindings;
@@ -59,6 +54,8 @@ mod mesh;
 mod meta;
 mod oidn;
 mod pack;
+mod preview;
+mod preview_external;
 mod raster;
 mod seams;
 mod sh;
@@ -70,7 +67,18 @@ mod texture_array;
 mod vulkan_cmd;
 mod vulkan_context;
 mod vulkan_swapchain;
+#[cfg(any(test, feature = "glfw"))]
 mod window;
+
+/// Where the interactive preview is displayed
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PreviewBackend {
+    /// frames are read back and polled by the host application (Unity)
+    External,
+    /// standalone GLFW window with a swapchain
+    #[cfg(any(test, feature = "glfw"))]
+    Window,
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn default_logger(data: Log) {
@@ -90,7 +98,7 @@ pub static mut LOG_CALLBACK: LogCallback = default_logger;
 pub struct Glim {
     pub config: GlimConfig,
     pub vk: VulkanContext,
-    pub window: *mut GLFWwindow,
+    pub preview_host: Option<Box<dyn PreviewHost>>,
 
     pub meshes: [Mesh; GEOMETRIES_VARIANTS],
 
@@ -135,7 +143,6 @@ pub struct Glim {
     pub alphas_array: TextureArray,
 
     pub linear_sampler: vk::Sampler,
-    pub window_title: String,
 
     pub benchmarks: Vec<(&'static str, f32)>,
 
@@ -145,6 +152,11 @@ pub struct Glim {
 
 impl Drop for Glim {
     fn drop(&mut self) {
+        if let Some(mut host) = self.preview_host.take() {
+            unsafe { self.vk.device.device_wait_idle().unwrap() };
+            host.destroy(&mut self.vk);
+        }
+
         self.albedo_array.destroy(&self.vk);
         self.emission_array.destroy(&self.vk);
         self.cookie_array.destroy(&self.vk);
@@ -617,59 +629,57 @@ fn initialize_render(app: &mut Glim) {
     }
 }
 
-fn format_window_title(
-    title: &mut String,
-    sample_index: u32,
-    max_samples: u32,
-    light_count: usize,
-    hardware_rt: bool,
-    w: i32,
-    h: i32,
-) {
-    use std::fmt::Write;
-    title.clear();
-
-    let _ = write!(
-        title,
-        "Preview | Hardware RT: {} | {}x{} | Lights {} | Sample {}/{}\0",
-        hardware_rt, w, h, light_count, sample_index, max_samples
-    );
-}
-
-fn render_preview(app: &mut Glim) {
-    let window = app.window;
-
-    let preview_settings = app.config.preview_settings.clone();
-
-    update_render_target(app, &preview_settings);
-
-    let visibility = &mut app.render_target.visibility;
-    let diffuse = &mut app.render_target.diffuse;
-
-    let albedos = app.albedo_array.views();
-    let emissions = app.emission_array.views();
-
+fn bind_preview_shader(app: &mut Glim) {
     let shader_bindings = ShaderBindings {
         tlas: app.tlas.acceleration_structure,
-        albedos: &albedos,
-        emissions: &emissions,
+        albedos: &app.albedo_array.views(),
+        emissions: &app.emission_array.views(),
         skybox: app.skybox.view(),
         skybox_sampler: app.skybox.sampler(),
-        visibility: visibility.view,
-        preview_diffuse: diffuse.view(),
+        visibility: app.render_target.visibility.view,
+        preview_diffuse: app.render_target.diffuse.view(),
         cookies: &app.cookie_array.views(),
         alphas: &app.alphas_array.views(),
         linear_sampler: app.linear_sampler,
     };
 
-    app.preview_shader = load_compute_shader(
-        &app.vk,
-        ShaderName::Preview,
-        &app.constants,
-        &shader_bindings,
-        size_of::<PreviewPushConstants>(),
-    );
+    if app.preview_shader.pipeline.is_null() {
+        app.preview_shader = load_compute_shader(
+            &app.vk,
+            ShaderName::Preview,
+            &app.constants,
+            &shader_bindings,
+            size_of::<PreviewPushConstants>(),
+        );
+    }
     update_compute_shader(&app.vk, &app.preview_shader, &shader_bindings);
+}
+
+fn resize_preview(app: &mut Glim, push: &mut PreviewPushConstants, width: u32, height: u32) {
+    unsafe { app.vk.device.device_wait_idle().unwrap() };
+
+    app.config.preview_settings.width = width;
+    app.config.preview_settings.height = height;
+    push.resolution = [width, height];
+
+    let preview_settings = app.config.preview_settings.clone();
+    update_render_target(app, &preview_settings);
+    bind_preview_shader(app);
+}
+
+fn render_preview(app: &mut Glim) {
+    let Some(mut host) = app.preview_host.take() else {
+        Log::msg("preview has no host");
+        return;
+    };
+
+    let (width, height) = host.size(&app.vk);
+    app.config.preview_settings.width = width.max(1);
+    app.config.preview_settings.height = height.max(1);
+
+    let preview_settings = app.config.preview_settings.clone();
+    update_render_target(app, &preview_settings);
+    bind_preview_shader(app);
 
     let mut push = PreviewPushConstants {
         rt: app.rt_data(),
@@ -693,166 +703,112 @@ fn render_preview(app: &mut Glim) {
 
     LIGHT_UPDATE_READY.store(true, Ordering::Release);
 
-    unsafe {
-        while glfwWindowShouldClose(window) == 0 {
-            glfwPollEvents();
-
-            Log::progress(push.sample_index as f32 / push.sample_count as f32);
-
-            {
-                use std::ffi::c_char;
-
-                let (mut w, mut h) = (0, 0);
-                glfwGetWindowSize(window, &mut w, &mut h);
-
-                format_window_title(
-                    &mut app.window_title,
-                    push.sample_index,
-                    push.sample_count,
-                    push.light_count as usize,
-                    hardware_rt,
-                    w,
-                    h,
-                );
-
-                glfwSetWindowTitle(window, app.window_title.as_ptr().cast::<c_char>());
-            }
-
-            let now = std::time::Instant::now();
-
-            if glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS {
-                glfwSetWindowShouldClose(window, 1);
-            }
-
-            let delta_time = now.duration_since(previous_time).as_secs_f32();
-
-            update_camera(app, delta_time);
-
-            if LIGHT_UPDATE_REQUESTED.load(Ordering::Acquire) {
-                let changed = app.upload_lights();
-                if changed {
-                    app.preview_initialized = false;
-                }
-            }
-
-            if !app.preview_initialized {
-                push.sample_index = 0;
-                bake_start_time = std::time::Instant::now();
-                bake_complete_printed = false;
-            }
-
-            // render finished
-            if push.sample_index >= push.sample_count {
-                std::thread::sleep(Duration::from_millis(16));
-                if !bake_complete_printed {
-                    io::stdout().flush().unwrap();
-                    let bake_time = now.duration_since(bake_start_time).as_secs_f32();
-                    println!("bake complete in {}s", bake_time);
-                    bake_complete_printed = true;
-                }
-            }
-
-            if !render_sample_camera(app, &mut push) {
-                // restart bake
-                app.config.preview_settings.width = app.vk.swapchain.extent.width;
-                app.config.preview_settings.height = app.vk.swapchain.extent.height;
-
-                update_render_target(app, &preview_settings);
-
-                let diffuse = &mut app.render_target.diffuse;
-                let visibility = &mut app.render_target.visibility;
-
-                let shader_bindings = ShaderBindings {
-                    tlas: app.tlas.acceleration_structure,
-                    albedos: &app.albedo_array.views(),
-                    emissions: &app.emission_array.views(),
-                    skybox: app.skybox.view(),
-                    skybox_sampler: app.skybox.sampler(),
-                    visibility: visibility.view,
-                    preview_diffuse: diffuse.view(),
-                    alphas: &app.alphas_array.views(),
-                    cookies: &app.cookie_array.views(),
-                    linear_sampler: app.linear_sampler,
-                };
-                update_compute_shader(&app.vk, &app.preview_shader, &shader_bindings);
-
-                continue;
-            }
-
-            if app.config.throttle_preview_ms > 0 {
-                let target_duration_secs = app.config.throttle_preview_ms as f32 / 1000.0;
-                let sleep_duration = target_duration_secs - delta_time;
-                if sleep_duration > 0.0 {
-                    std::thread::sleep(Duration::from_secs_f32(sleep_duration));
-                }
-            }
-
-            previous_time = now;
+    loop {
+        let frame = host.begin_frame();
+        if frame.close {
+            break;
         }
+
+        Log::progress(push.sample_index as f32 / push.sample_count as f32);
+
+        let now = std::time::Instant::now();
+        let delta_time = now.duration_since(previous_time).as_secs_f32();
+
+        update_camera(app, &frame.input, delta_time);
+
+        if LIGHT_UPDATE_REQUESTED.load(Ordering::Acquire) {
+            let changed = app.upload_lights();
+            if changed {
+                app.preview_initialized = false;
+            }
+            push.light_count = app.cpu_lights.len() as u32;
+            push.lights = app.gpu_lights.gpu_address;
+        }
+
+        let (width, height) = host.size(&app.vk);
+        if width == 0 || height == 0 {
+            // minimized
+            std::thread::sleep(Duration::from_millis(16));
+            previous_time = now;
+            continue;
+        }
+
+        if (width, height)
+            != (
+                app.config.preview_settings.width,
+                app.config.preview_settings.height,
+            )
+        {
+            resize_preview(app, &mut push, width, height);
+        }
+
+        if !app.preview_initialized {
+            push.sample_index = 0;
+            bake_start_time = std::time::Instant::now();
+            bake_complete_printed = false;
+        }
+
+        // render finished
+        if push.sample_index >= push.sample_count {
+            std::thread::sleep(Duration::from_millis(16));
+            if !bake_complete_printed {
+                io::stdout().flush().unwrap();
+                let bake_time = now.duration_since(bake_start_time).as_secs_f32();
+                println!("bake complete in {}s", bake_time);
+                bake_complete_printed = true;
+            }
+        }
+
+        if !render_sample_camera(app, host.as_mut(), &mut push) {
+            // output out of date, the size is queried again next iteration
+            continue;
+        }
+
+        host.end_frame(&PreviewStats {
+            sample_index: push.sample_index,
+            sample_count: push.sample_count,
+            width: app.config.preview_settings.width,
+            height: app.config.preview_settings.height,
+            light_count: push.light_count,
+            hardware_rt,
+        });
+
+        if app.config.throttle_preview_ms > 0 {
+            let target_duration_secs = app.config.throttle_preview_ms as f32 / 1000.0;
+            let sleep_duration = target_duration_secs - delta_time;
+            if sleep_duration > 0.0 {
+                std::thread::sleep(Duration::from_secs_f32(sleep_duration));
+            }
+        }
+
+        previous_time = now;
     }
 
-    unsafe {
-        glfwPollEvents();
-        glfw_sys::glfwDestroyWindow(window);
-        // glfw_sys::glfwTerminate();
-    };
+    unsafe { app.vk.device.device_wait_idle().unwrap() };
+    host.destroy(&mut app.vk);
 }
 
-fn render_sample_camera(app: &mut Glim, push: &mut PreviewPushConstants) -> bool {
-    let frame_index = app.vk.swapchain.frame_index;
-
-    let frame = &app.vk.swapchain.frames[frame_index];
-
+fn render_sample_camera(
+    app: &mut Glim,
+    host: &mut dyn PreviewHost,
+    push: &mut PreviewPushConstants,
+) -> bool {
     let width = app.config.preview_settings.width;
     let height = app.config.preview_settings.height;
 
-    let vk = &app.vk.device;
-
-    unsafe {
-        vk.wait_for_fences(&[frame.fence], true, u64::MAX).unwrap();
-        vk.reset_fences(&[frame.fence]).unwrap()
-    }
-
-    let (image_index, _is_optimal) = match unsafe {
-        app.vk.swapchain_device.acquire_next_image(
-            app.vk.swapchain.swapchain,
-            u64::MAX,
-            frame.image_available_semaphore,
-            vk::Fence::null(),
-        )
-    } {
-        Ok(result) => result,
-        Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-            unsafe {
-                vk.device_wait_idle().unwrap();
-            }
-            app.vk.create_swapchain(width, height);
-            return false;
-        }
-        Err(e) => panic!("acquire failed: {e}"),
+    let Some(cmd) = host.acquire(&mut app.vk, width, height) else {
+        return false;
     };
-
-    // assert!(is_optimal);
-
-    // todo: handle is_optimal
-    let fence = frame.fence;
-    let cmd = frame.command_buffer;
-    let image_available_semaphore = frame.image_available_semaphore;
 
     let begin_info = vk::CommandBufferBeginInfo {
         flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
         ..Default::default()
     };
 
-    let subresource_range = vk::ImageSubresourceRange {
-        aspect_mask: vk::ImageAspectFlags::COLOR,
-        base_mip_level: 0,
-        level_count: 1,
-        base_array_layer: 0,
-        layer_count: 1,
-    };
+    let mut changed = false;
 
     unsafe {
+        let vk = &app.vk.device;
         vk.reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())
             .unwrap();
 
@@ -861,11 +817,11 @@ fn render_sample_camera(app: &mut Glim, push: &mut PreviewPushConstants) -> bool
         if push.sample_index == 0 {
             update_visibility_from_camera(app, cmd);
             app.preview_initialized = true;
+            changed = true;
 
             let diffuse = &mut app.render_target.diffuse;
 
-            let vk: &VulkanContext = &app.vk;
-            let vk = &vk.device;
+            let vk = &app.vk.device;
             if diffuse.layout() != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
                 let barrier = diffuse.barrier(
                     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -929,143 +885,37 @@ fn render_sample_camera(app: &mut Glim, push: &mut PreviewPushConstants) -> bool
             );
             vk.cmd_dispatch(cmd, groups_x, groups_y, 1);
             push.sample_index += 1;
+            changed = true;
         }
 
-        let swapchain_image = &app.vk.swapchain.frames[image_index as usize];
+        let barrier = diffuse.barrier(
+            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::AccessFlags::TRANSFER_READ,
+        );
+        vk.cmd_pipeline_barrier(
+            cmd,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier],
+        );
+    }
 
-        let vk = &app.vk.device;
+    host.record_output(
+        &app.vk,
+        cmd,
+        app.render_target.diffuse.image(),
+        width,
+        height,
+        changed,
+    );
 
-        {
-            let barrier = diffuse.barrier(
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                vk::AccessFlags::SHADER_WRITE,
-                vk::AccessFlags::TRANSFER_READ,
-            );
+    unsafe { app.vk.device.end_command_buffer(cmd).unwrap() };
 
-            let swapchain_barrier = vk::ImageMemoryBarrier {
-                src_access_mask: vk::AccessFlags::empty(),
-                dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
-                old_layout: vk::ImageLayout::UNDEFINED,
-                new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                image: swapchain_image.image,
-                subresource_range,
-                ..Default::default()
-            };
-
-            vk.cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier, swapchain_barrier],
-            );
-        }
-
-        {
-            let offset0 = vk::Offset3D { x: 0, y: 0, z: 0 };
-            let offset1 = vk::Offset3D {
-                x: width as i32,
-                y: height as i32,
-                z: 1,
-            };
-
-            let blit = vk::ImageBlit {
-                src_subresource: vk::ImageSubresourceLayers {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    mip_level: 0,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                },
-                src_offsets: [offset0, offset1],
-                dst_subresource: vk::ImageSubresourceLayers {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    mip_level: 0,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                },
-                dst_offsets: [offset0, offset1],
-            };
-
-            vk.cmd_blit_image(
-                cmd,
-                diffuse.image(),
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                swapchain_image.image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[blit],
-                vk::Filter::NEAREST,
-            );
-        }
-
-        {
-            let swapchain_barrier = vk::ImageMemoryBarrier {
-                src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
-                dst_access_mask: vk::AccessFlags::empty(),
-                old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                new_layout: vk::ImageLayout::PRESENT_SRC_KHR,
-                image: swapchain_image.image,
-                subresource_range,
-                ..Default::default()
-            };
-
-            vk.cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[swapchain_barrier],
-            );
-        }
-
-        vk.end_command_buffer(cmd).unwrap();
-
-        let render_finished_semaphore =
-            app.vk.swapchain.frames[image_index as usize].render_finished_semaphore;
-
-        let wait_dst_stage_mask = [vk::PipelineStageFlags::TRANSFER];
-        let cmds = [cmd];
-        let wait_semaphores = [image_available_semaphore];
-        let signal_semaphores = [render_finished_semaphore];
-        let submit_info = vk::SubmitInfo::default()
-            .command_buffers(&cmds)
-            .wait_semaphores(&wait_semaphores)
-            .signal_semaphores(&signal_semaphores)
-            .wait_dst_stage_mask(&wait_dst_stage_mask);
-
-        let submits = [submit_info];
-        vk.queue_submit(app.vk.compute_queue, &submits, fence)
-            .unwrap();
-
-        let swapchains = [app.vk.swapchain.swapchain];
-        let image_indices = [image_index];
-        let present_info = vk::PresentInfoKHR::default()
-            .wait_semaphores(&signal_semaphores)
-            .swapchains(&swapchains)
-            .image_indices(&image_indices);
-
-        match {
-            app.vk
-                .swapchain_device
-                .queue_present(app.vk.present_queue, &present_info)
-        } {
-            Ok(_) => {}
-            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                vk.device_wait_idle().unwrap();
-                app.vk.create_swapchain(width, height);
-                return false;
-            }
-            Err(e) => panic!("present failed: {e}"),
-        }
-    };
-
-    app.vk.swapchain.frame_index =
-        (app.vk.swapchain.frame_index + 1) % app.vk.swapchain.frames.len();
-
-    true
+    host.submit(&mut app.vk, cmd, width, height)
 }
 
 fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
@@ -1286,34 +1136,57 @@ impl LightmapGroup {
 }
 
 impl Glim {
-    pub fn new(config: GlimConfig, output_dir: PathBuf) -> Glim {
+    pub fn new(config: GlimConfig, output_dir: PathBuf, backend: PreviewBackend) -> Glim {
         unsafe { LOG_CALLBACK = config.log_callback };
 
+        let preview_width = config.preview_settings.width;
+        let preview_height = config.preview_settings.height;
+
+        #[cfg(any(test, feature = "glfw"))]
+        let use_window = config.is_preview && backend == PreviewBackend::Window;
+        #[cfg(not(any(test, feature = "glfw")))]
+        let use_window = {
+            let _ = backend;
+            false
+        };
+
+        #[cfg_attr(not(any(test, feature = "glfw")), allow(unused_mut))]
         let mut vulkan_config = VulkanConfig {
             enable_validation_layers: config.vulkan_validation_layers,
-            enable_window: config.is_preview,
+            enable_window: use_window,
             window_extensions: Vec::new(),
         };
 
-        let window_title = String::from("Preview\0");
-        let window = initialize_window(&config, &mut vulkan_config, &window_title);
+        #[cfg(any(test, feature = "glfw"))]
+        let window = use_window
+            .then(|| window::GlfwHost::new(preview_width, preview_height, &mut vulkan_config));
 
-        let create_surface_callback = |instance: &ash::Instance| unsafe {
-            let instance = instance.handle().as_raw() as glfw_sys::VkInstance;
-            let mut surface: glfw_sys::VkSurfaceKHR = ptr::null_mut();
-            glfwCreateWindowSurface(instance, window, std::ptr::null(), &mut surface);
-            glfwSetWindowAttrib(window, GLFW_FLOATING, GLFW_TRUE);
-            ash::vk::SurfaceKHR::from_raw(surface as u64)
+        let create_surface_callback = |_instance: &ash::Instance| -> vk::SurfaceKHR {
+            #[cfg(any(test, feature = "glfw"))]
+            if let Some(window) = &window {
+                return window.create_surface(_instance);
+            }
+            unreachable!("surface requested without a window");
         };
 
+        #[cfg_attr(not(any(test, feature = "glfw")), allow(unused_mut))]
         let mut vk = VulkanContext::new(&vulkan_config, create_surface_callback);
         println!("Vulkan Initialized");
 
-        if config.is_preview {
-            vk.create_swapchain(
-                config.preview_settings.width,
-                config.preview_settings.height,
-            );
+        let mut preview_host: Option<Box<dyn PreviewHost>> = None;
+
+        #[cfg(any(test, feature = "glfw"))]
+        if let Some(window) = window {
+            vk.create_swapchain(preview_width, preview_height);
+            preview_host = Some(Box::new(window));
+        }
+
+        if config.is_preview && preview_host.is_none() {
+            preview_host = Some(Box::new(ExternalHost::new(
+                &vk,
+                preview_width,
+                preview_height,
+            )));
         }
 
         let mut pos = config.camera_position;
@@ -1323,7 +1196,6 @@ impl Glim {
             yaw: 0.0,
             pitch: 0.0,
             fov: 60.0,
-            last_cursor_pos: None,
         };
         let mut fwd = config.camera_forward;
         config.coordinate_system.transform(&mut fwd);
@@ -1400,7 +1272,7 @@ impl Glim {
         Self {
             vk,
             meshes,
-            window: window,
+            preview_host,
             config: config,
             cpu_lights: Vec::new(),
             cpu_lights_source_index: Vec::new(),
@@ -1426,7 +1298,6 @@ impl Glim {
             light_cookies: Vec::new(),
             cookie_array: TextureArray::null(),
             linear_sampler,
-            window_title,
             alphas: Vec::new(),
             alphas_array: TextureArray::null(),
             compacted_visibility: Buffer::null(),

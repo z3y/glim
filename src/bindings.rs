@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    Glim, LOG_CALLBACK, LightmapGroup, initialize_render,
+    Glim, LOG_CALLBACK, LightmapGroup, PreviewBackend, initialize_render,
     lights::Light,
     mesh::{FfiMesh, Mesh},
     sh::SHProbeL2,
@@ -241,13 +241,28 @@ pub extern "C" fn app_request_cancel() {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn app_new(config: GlimConfig, output_dir: FfiString) -> *mut Glim {
+    app_new_with_backend(config, output_dir, PreviewBackend::External)
+}
+
+/// Same as `app_new` but the preview opens in its own GLFW window
+#[cfg(any(test, feature = "glfw"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn app_new_windowed(config: GlimConfig, output_dir: FfiString) -> *mut Glim {
+    app_new_with_backend(config, output_dir, PreviewBackend::Window)
+}
+
+fn app_new_with_backend(
+    config: GlimConfig,
+    output_dir: FfiString,
+    backend: PreviewBackend,
+) -> *mut Glim {
     CANCEL_REQUESTED.store(false, Ordering::Relaxed);
     LIGHT_UPDATE_READY.store(false, Ordering::Relaxed);
     LIGHT_UPDATE_REQUESTED.store(false, Ordering::Relaxed);
 
     let result = catch_unwind(AssertUnwindSafe(|| {
         let output_dir = PathBuf::from(output_dir.to_string());
-        let app = Glim::new(config.clone(), output_dir);
+        let app = Glim::new(config.clone(), output_dir, backend);
         Box::into_raw(Box::new(app))
     }));
 

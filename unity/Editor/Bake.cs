@@ -46,6 +46,7 @@ namespace Glim
         static volatile bool _cancelRequested = false;
 
         public static bool IsBaking => _running && !_isPreview;
+        public static bool IsPreviewing => _running && _isPreview;
         public static bool IsCancelling => _cancelRequested && _running;
         public static float BakeProgress => _progress;
         public static string BakeMessage => _bakeMessage;
@@ -58,6 +59,14 @@ namespace Glim
             }
             _cancelRequested = true;
             Bindings.app_request_cancel();
+        }
+
+        public static void StopPreview()
+        {
+            if (_running && _isPreview)
+            {
+                Bindings.app_request_cancel();
+            }
         }
 
         [AOT.MonoPInvokeCallback(typeof(Bindings.ReadbackProbesCallback))]
@@ -282,6 +291,7 @@ namespace Glim
             {
                 PrintBakeLogs();
                 ResetBake();
+                PreviewWindow.CloseFromBake();
                 return;
             }
 
@@ -883,6 +893,10 @@ namespace Glim
                 _progressID = Progress.Start("", null, Progress.Options.None);
                 Progress.RegisterCancelCallback(_progressID, () => { Cancel(); return true; });
                 RestoreSelection();
+            }
+            else
+            {
+                PreviewWindow.Open();
             }
 
             _bakeStartTime = Time.realtimeSinceStartupAsDouble;

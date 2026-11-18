@@ -90,8 +90,97 @@ mod tests {
 
     fn test_render(config: GlimConfig) {
         let output_dir = FfiString::new("temp");
-        let app = app_new(config, output_dir);
+        // the preview test opens its own GLFW window, Unity uses the external (readback) host
+        let app = app_new_windowed(config, output_dir);
+        setup_scene(app);
 
+        app_run(app);
+
+        app_destroy(app);
+    }
+
+    /// Runs the preview the way Unity does: render thread + polling frames and sending input
+    #[test]
+    fn test_preview_external() {
+        use crate::preview::{PreviewInput, PreviewStats, keys};
+        use crate::preview_external::*;
+        use std::time::{Duration, Instant};
+
+        let mut config = make_config();
+        config.is_preview = true;
+        config.vulkan_validation_layers = true;
+        config.preview_settings.width = 256;
+        config.preview_settings.height = 128;
+        config.direct_emission_samples = 64;
+
+        let app = app_new(config, FfiString::new("temp"));
+        assert!(!app.is_null());
+        setup_scene(app);
+
+        let app_addr = app as usize;
+        let render_thread = std::thread::spawn(move || app_run(app_addr as *mut Glim));
+
+        let wait_frame = |w: u32, h: u32| -> PreviewFrame {
+            let start = Instant::now();
+            loop {
+                assert!(
+                    start.elapsed() < Duration::from_secs(60),
+                    "no {w}x{h} frame"
+                );
+                let mut frame = PreviewFrame {
+                    pixels: std::ptr::null(),
+                    width: 0,
+                    height: 0,
+                    id: 0,
+                };
+                if app_preview_acquire_frame(&mut frame) {
+                    assert!(!frame.pixels.is_null());
+                    // read the whole buffer like the consumer would
+                    let bytes = unsafe {
+                        std::slice::from_raw_parts(
+                            frame.pixels,
+                            (frame.width * frame.height * 4) as usize,
+                        )
+                    };
+                    let sum: u64 = bytes.iter().map(|&b| b as u64).sum();
+                    app_preview_release_frame();
+                    println!(
+                        "frame {} {}x{} sum {}",
+                        frame.id, frame.width, frame.height, sum
+                    );
+                    if frame.width == w && frame.height == h {
+                        return frame;
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        };
+
+        let first = wait_frame(256, 128);
+
+        // camera input restarts accumulation and produces new frames
+        app_preview_set_input(PreviewInput {
+            keys: keys::FORWARD,
+            look_delta_x: 10.0,
+            look_delta_y: 0.0,
+            looking: true,
+        });
+        app_preview_set_input(PreviewInput::default());
+
+        app_preview_resize(320, 200);
+        let resized = wait_frame(320, 200);
+        assert!(resized.id > first.id);
+
+        let mut stats = PreviewStats::default();
+        app_preview_get_stats(&mut stats);
+        assert_eq!((stats.width, stats.height), (320, 200));
+
+        app_request_cancel();
+        render_thread.join().unwrap();
+        app_destroy(app);
+    }
+
+    fn setup_scene(app: *mut Glim) {
         let mesh_path = format!("tests/{}.glb", TEST_NAME);
 
         let emission_path = format!("tests/{}_emission.tga", TEST_NAME);
@@ -146,10 +235,6 @@ mod tests {
         }
 
         app_add_probe(app, Vec3::new(0.0, 1.0, 0.0), 0.0);
-
-        app_run(app);
-
-        app_destroy(app);
     }
 
     #[allow(dead_code)]

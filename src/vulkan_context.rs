@@ -447,6 +447,18 @@ impl VulkanContext {
         panic!("Failed to find a suitable memory type");
     }
 
+    /// true if any memory type has all of `properties`
+    pub fn supports_memory_properties(&self, properties: vk::MemoryPropertyFlags) -> bool {
+        let memory_properties = unsafe {
+            self.instance
+                .get_physical_device_memory_properties(self.physical_device)
+        };
+
+        memory_properties.memory_types[..memory_properties.memory_type_count as usize]
+            .iter()
+            .any(|t| t.property_flags.contains(properties))
+    }
+
     pub fn create_buffer(
         &self,
         size: vk::DeviceSize,

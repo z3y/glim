@@ -209,6 +209,69 @@ namespace Glim
         public static unsafe extern void app_add_lightmap_group(IntPtr app, LightmapSettings settings, byte* albedoPixels, uint albedoPixelsLength, byte* emissionPixels, uint emissionPixelsLength,
             FfiString diffuse_guid, FfiString directional_guid, FfiString shadowmask_guid);
 
+        // preview, matches src/preview.rs and src/preview_external.rs
+
+        [Flags]
+        public enum PreviewKeys : uint
+        {
+            None = 0,
+            Forward = 1 << 0,
+            Back = 1 << 1,
+            Left = 1 << 2,
+            Right = 1 << 3,
+            Down = 1 << 4,
+            Up = 1 << 5,
+            Fast = 1 << 6,
+            Slow = 1 << 7,
+            Restart = 1 << 8,
+            PrintCamera = 1 << 9,
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PreviewInput
+        {
+            public PreviewKeys keys;
+            public float look_delta_x;
+            public float look_delta_y;
+            [MarshalAs(UnmanagedType.I1)] public bool looking;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PreviewFrame
+        {
+            public IntPtr pixels; // tightly packed RGBA8 sRGB, first row is the top
+            public uint width;
+            public uint height;
+            public ulong id;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PreviewStats
+        {
+            public uint sample_index;
+            public uint sample_count;
+            public uint width;
+            public uint height;
+            public uint light_count;
+            [MarshalAs(UnmanagedType.I1)] public bool hardware_rt;
+        }
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_preview_set_input(PreviewInput input);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_preview_resize(uint width, uint height);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool app_preview_acquire_frame(out PreviewFrame frame);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_preview_release_frame();
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_preview_get_stats(out PreviewStats stats);
+
         [StructLayout(LayoutKind.Sequential)]
         public unsafe struct Mesh
         {
