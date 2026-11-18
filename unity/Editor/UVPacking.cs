@@ -17,11 +17,22 @@ namespace Glim
         [DllImport(DLL)]
         public static extern unsafe void uvpacker_add_mesh(IntPtr handle, Vector3* positions, uint positionCount, Vector2* uvs, uint uvCount, int* indices, uint indexCount, float scaleMultiplier, uint meshId);
 
+        public enum SplitMode : uint
+        {
+            Default = 0,     // use splitCharts from uvpacker_create
+            ScaleOffset = 1, // whole mesh is one chart (e.g. GPU instanced materials)
+            Split = 2,       // split into UV islands
+        }
+
+        // Same as uvpacker_add_mesh, with a per-mesh override of splitCharts.
+        [DllImport(DLL)]
+        public static extern unsafe void uvpacker_add_mesh_ex(IntPtr handle, Vector3* positions, uint positionCount, Vector2* uvs, uint uvCount, int* indices, uint indexCount, float scaleMultiplier, uint meshId, SplitMode splitMode);
+
         [DllImport(DLL)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool uvpacker_pack(IntPtr handle);
 
-        // Only valid for meshes packed as a single chart (splitCharts == false).
+        // Only valid for meshes packed as a single chart (added without splitting).
         // x,y = scale, z,w = offset
         [DllImport(DLL)]
         public static extern Vector4 uvpacker_get_scale_offset(IntPtr handle, uint chart);

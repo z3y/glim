@@ -537,7 +537,7 @@ mod tests {
                     indices.extend(iter.into_u32());
                 }
 
-                packer.add_mesh(&positions, &uvs, &indices, scale_multiplier, mesh_id);
+                packer.add_mesh(&positions, &uvs, &indices, scale_multiplier, mesh_id, None);
 
                 mesh_id += 1;
             }

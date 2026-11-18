@@ -316,8 +316,11 @@ impl UVPacker {
         chart
     }
 
-    // todo mixed split charts and scale offset mode
     // todo 2D world scale for meshes where thats possibe (for example a plane)
+    /// `split` overrides the packer-wide `split_charts` setting for this mesh:
+    /// `Some(false)` keeps the whole mesh as one chart (required for meshes that must use
+    /// scale/offset, e.g. GPU instanced materials), `Some(true)` splits it into UV islands,
+    /// `None` uses the packer default. Split and non-split meshes can be mixed in one pack.
     pub fn add_mesh(
         &mut self,
         positions: &[Vec3],
@@ -325,6 +328,7 @@ impl UVPacker {
         indices: &[u32],
         user_scale_multiplier: f32,
         mesh_id: usize,
+        split: Option<bool>,
     ) {
         if indices.len() % 3 != 0 {
             return;
@@ -340,7 +344,7 @@ impl UVPacker {
 
         self.mesh_vertex_counts.insert(mesh_id, positions.len());
 
-        if !self.split_charts {
+        if !split.unwrap_or(self.split_charts) {
             // whole mesh = one chart, vertex map is identity
             let vertex_map: Vec<u32> = (0..positions.len() as u32).collect();
             let chart = Self::build_chart(
@@ -487,7 +491,7 @@ impl UVPacker {
     }
 
     /// Single scale/offset for a whole mesh. Only meaningful when the mesh ended up as exactly
-    /// one chart (always the case with `split_charts == false`). With chart splitting use
+    /// one chart (always the case when the mesh was added without splitting). With chart splitting use
     /// `get_mesh_uvs` instead; for meshes with several charts this returns identity.
     pub fn get_scale_offset(&self, mesh_id: usize) -> (Vec2, Vec2) {
         let Some(lookup) = &self.charts_lookup else {
@@ -1001,7 +1005,52 @@ pub unsafe extern "C" fn uvpacker_add_mesh(
 
     let packer = unsafe { &mut *handle };
 
-    packer.add_mesh(positions, uvs, indices, scale_multiplier, mesh_id as usize);
+    packer.add_mesh(
+        positions,
+        uvs,
+        indices,
+        scale_multiplier,
+        mesh_id as usize,
+        None,
+    );
+}
+
+/// Same as `uvpacker_add_mesh`, with a per-mesh override of the packer's `split_charts`:
+/// `split_mode` 0 = packer default, 1 = scale/offset (whole mesh is one chart), 2 = split charts.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn uvpacker_add_mesh_ex(
+    handle: *mut UVPacker,
+    positions: *const Vec3,
+    position_count: u32,
+    uvs: *const Vec2,
+    uv_count: u32,
+    indices: *const u32,
+    index_count: u32,
+    scale_multiplier: f32,
+    mesh_id: u32,
+    split_mode: u32,
+) {
+    let positions =
+        unsafe { slice::from_raw_parts(positions as *const Vec3, position_count as usize) };
+    let uvs = unsafe { slice::from_raw_parts(uvs as *const Vec2, uv_count as usize) };
+    let indices = unsafe { slice::from_raw_parts(indices, index_count as usize) };
+
+    let packer = unsafe { &mut *handle };
+
+    let split = match split_mode {
+        1 => Some(false),
+        2 => Some(true),
+        _ => None,
+    };
+
+    packer.add_mesh(
+        positions,
+        uvs,
+        indices,
+        scale_multiplier,
+        mesh_id as usize,
+        split,
+    );
 }
 
 #[unsafe(no_mangle)]
@@ -1016,7 +1065,7 @@ pub struct ScaleOffset {
     pub offset: Vec2,
 }
 
-/// Only valid for meshes that were packed as a single chart (split_charts == false).
+/// Only valid for meshes that were packed as a single chart (added without splitting).
 /// With chart splitting use `uvpacker_get_mesh_uvs`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn uvpacker_get_scale_offset(

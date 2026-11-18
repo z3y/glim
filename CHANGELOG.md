@@ -62,6 +62,9 @@
   - Double Sided GI override (Material, On, Off)
   - Emission multiplier, scales the baked emission of a renderer without using any extra memory, 0 removes it as a light source
   - Transmission
+  - UV packing override (Group, ScaleOffset, SplitCharts)
+- ScaleOffset and SplitCharts UV packing can now be mixed in one lightmap group
+  - Renderers with a GPU instanced material automatically use ScaleOffset in SplitCharts groups
 
 # v0.12.5
 

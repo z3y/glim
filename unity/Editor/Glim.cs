@@ -528,9 +528,12 @@ namespace Glim
                         float worldScaleExponent = lightmapGroup.scaleExponent;
                         bool split = lightmapGroup.packingType == UVPackingType.SplitCharts;
                         var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling, split, worldScaleExponent);
+                        // per renderer: true = split charts (uv mesh), false = scale offset
+                        var rendererSplit = new bool[renderers.Count];
                         for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                         {
                             Renderer r = renderers[rendererIndex];
+                            rendererSplit[rendererIndex] = Glim.UseSplitCharts(r, split);
                             var mf = r.GetComponent<MeshFilter>();
                             var t = r.GetComponent<Transform>();
 
@@ -555,7 +558,8 @@ namespace Glim
                                 fixed (Vector2* uv = uvs)
                                 fixed (int* i = indices)
                                 {
-                                    UVPacking.uvpacker_add_mesh(packer, p, (uint)positions.Length, uv, (uint)uvs.Length, i, (uint)indices.Length, scale, (uint)rendererIndex);
+                                    var splitMode = rendererSplit[rendererIndex] ? UVPacking.SplitMode.Split : UVPacking.SplitMode.ScaleOffset;
+                                    UVPacking.uvpacker_add_mesh_ex(packer, p, (uint)positions.Length, uv, (uint)uvs.Length, i, (uint)indices.Length, scale, (uint)rendererIndex, splitMode);
                                 }
                             }
                         }
@@ -576,7 +580,7 @@ namespace Glim
 
                             if (r is MeshRenderer mr)
                             {
-                                if (split)
+                                if (rendererSplit[rendererIndex])
                                 {
                                     var uvs = UVPacking.GetMeshUvs(packer, (uint)rendererIndex);
                                     if (uvs != null)
@@ -673,7 +677,7 @@ namespace Glim
                         lmData.FindPropertyRelative("lightmapIndexDynamic").intValue = 65535;
 
                         var uvMeshProp = lmData.FindPropertyRelative("uvMesh");
-                        if (lightmapGroup.packingType == UVPackingType.SplitCharts && mr.enlightenVertexStream)
+                        if (lightmapGroup.packingType != UVPackingType.None && mr.enlightenVertexStream)
                         {
                             Mesh uvMesh = mr.enlightenVertexStream;
                             AssetDatabase.AddObjectToAsset(uvMesh, lda.targetObject);
@@ -962,6 +966,25 @@ namespace Glim
 
     public class Glim
     {
+        // Whether a renderer gets split charts (uv mesh) or a single scale offset, given the group default.
+        public static bool UseSplitCharts(Renderer renderer, bool groupSplit)
+        {
+            var settings = renderer.GetComponent<GlimRendererSettings>();
+            var mode = settings ? settings.uvPacking : GlimUVPackingOverride.Group;
+
+            if (mode == GlimUVPackingOverride.ScaleOffset) return false;
+            if (mode == GlimUVPackingOverride.SplitCharts) return true;
+            if (!groupSplit) return false;
+
+            // instanced renderers can't use the per renderer uv mesh
+            foreach (var mat in renderer.sharedMaterials)
+            {
+                if (mat && mat.enableInstancing) return false;
+            }
+
+            return true;
+        }
+
         public static bool IsLightmapStatic(MeshRenderer renderer)
         {
             if (!renderer.enabled)
