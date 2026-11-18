@@ -65,6 +65,10 @@
   - UV packing override (Group, ScaleOffset, SplitCharts)
 - ScaleOffset and SplitCharts UV packing can now be mixed in one lightmap group
   - Renderers that aren't Batching Static or have a GPU instanced material automatically use ScaleOffset in SplitCharts groups
+- LODs now share the LOD0 lightmap
+  - Only LOD0 is baked, lower LODs use the same lightmap and scale offset as LOD0, so their lightmap UVs need to match LOD0
+  - LOD0 renderers with lower LODs always use ScaleOffset packing
+  - Fixed lower LODs getting baked when assigned to a lightmap group with a Lightmap Group Selector
 
 # v0.12.5
 

@@ -429,6 +429,45 @@ namespace Glim
 
             Array.Sort(allSelectors, (a, b) => GetDepth(b.transform).CompareTo(GetDepth(a.transform)));
 
+            // Only LOD0 gets baked. Lower LODs share the LOD0 uv space: they get the same lightmap
+            // and scale offset as the LOD0 renderer they belong to, so LOD0 can't use split charts.
+            var lodGroups = rootObjects.SelectMany(x => x.GetComponentsInChildren<LODGroup>(false));
+            var lowerLods = new Dictionary<MeshRenderer, List<MeshRenderer>>(); // LOD0 -> lower LODs
+            var lowerLodSet = new HashSet<MeshRenderer>();
+            foreach (var lodGroup in lodGroups)
+            {
+                var lods = lodGroup.GetLODs();
+                if (lods.Length < 2) continue;
+
+                var lod0 = lods[0].renderers.OfType<MeshRenderer>().ToArray();
+
+                for (int i = 1; i < lods.Length; i++)
+                {
+                    var lodRenderers = lods[i].renderers.OfType<MeshRenderer>().ToArray();
+                    for (int j = 0; j < lodRenderers.Length; j++)
+                    {
+                        var mr = lodRenderers[j];
+                        if (!mr || lod0.Contains(mr)) continue;
+
+                        // always excluded from the bake, even without a LOD0 to share with
+                        lowerLodSet.Add(mr);
+
+                        if (lod0.Length == 0) continue;
+
+                        // match renderers by index when LOD0 has several of them
+                        var parent = lod0[Mathf.Min(j, lod0.Length - 1)];
+                        if (!parent) continue;
+
+                        if (!lowerLods.TryGetValue(parent, out var list))
+                        {
+                            list = new List<MeshRenderer>();
+                            lowerLods[parent] = list;
+                        }
+                        list.Add(mr);
+                    }
+                }
+            }
+
             var groupMap = new Dictionary<GlimLightmapGroup, List<MeshRenderer>>();
             var claimed = new HashSet<MeshRenderer>();
 
@@ -437,7 +476,7 @@ namespace Glim
                 if (selector.group == null) continue;
 
                 var renderers = selector.GetComponentsInChildren<MeshRenderer>(false)
-                    .Where(x => Glim.IsLightmapStatic(x));
+                    .Where(x => !lowerLodSet.Contains(x) && Glim.IsLightmapStatic(x));
 
                 foreach (var r in renderers)
                 {
@@ -453,33 +492,12 @@ namespace Glim
                 }
             }
 
-            var allRenderers = rootObjects.SelectMany(x => x.GetComponentsInChildren<MeshRenderer>(false)).ToList();
-            var allLodGroups = rootObjects.SelectMany(x => x.GetComponentsInChildren<LODGroup>(false));
-
-            // keep only highest level LODs for bake
-            foreach (var group in allLodGroups)
-            {
-                var lods = group.GetLODs();
-
-                for (int i = 1; i < lods.Length; i++)
-                {
-                    LOD lod = lods[i];
-
-                    foreach (var renderer in lods[i].renderers)
-                    {
-                        if (renderer is MeshRenderer mr)
-                        {
-                            allRenderers.Remove(mr);
-                        }
-                    }
-                }
-
-            }
+            var allRenderers = rootObjects.SelectMany(x => x.GetComponentsInChildren<MeshRenderer>(false));
 
             var unclaimedRenderers = new List<MeshRenderer>();
             foreach (var r in allRenderers)
             {
-                if (claimed.Contains(r))
+                if (claimed.Contains(r) || lowerLodSet.Contains(r))
                 {
                     continue;
                 }
@@ -533,7 +551,8 @@ namespace Glim
                         for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                         {
                             Renderer r = renderers[rendererIndex];
-                            rendererSplit[rendererIndex] = Glim.UseSplitCharts(r, split);
+                            // lower LODs reuse the LOD0 scale offset, so LOD0 can't be split
+                            rendererSplit[rendererIndex] = !(r is MeshRenderer lodMr && lowerLods.ContainsKey(lodMr)) && Glim.UseSplitCharts(r, split);
                             var mf = r.GetComponent<MeshFilter>();
                             var t = r.GetComponent<Transform>();
 
@@ -643,18 +662,36 @@ namespace Glim
                 //     Bake.bakeMessages.AppendLine($"Group {groupIndex} using cached lightmap UVs");
                 // }
 
+                // lower LODs aren't baked, they use the LOD0 lightmap and scale offset
+                var savedRenderers = new List<MeshRenderer>(rendererArray);
+                foreach (var lod0 in rendererArray)
+                {
+                    if (!lowerLods.TryGetValue(lod0, out var lodList)) continue;
+
+                    foreach (var lod in lodList)
+                    {
+                        if (!Glim.IsLightmapStatic(lod)) continue;
+
+                        lod.enlightenVertexStream = null;
+                        lod.additionalVertexStreams = null;
+                        lod.lightmapScaleOffset = lod0.lightmapScaleOffset;
+                        EditorUtility.SetDirty(lod);
+                        savedRenderers.Add(lod);
+                    }
+                }
+
                 bool saveGroup = !(config.is_preview || lightmapGroup.discard);
 
                 if (saveGroup)
                 {
                     var rendererDataIds = lda.FindProperty("m_LightmappedRendererDataIDs");
                     var rendererData = lda.FindProperty("m_LightmappedRendererData");
-                    rendererDataIds.arraySize += rendererArray.Length;
-                    rendererData.arraySize += rendererArray.Length;
+                    rendererDataIds.arraySize += savedRenderers.Count;
+                    rendererData.arraySize += savedRenderers.Count;
 
-                    for (int i = 0; i < rendererArray.Length; i++)
+                    for (int i = 0; i < savedRenderers.Count; i++)
                     {
-                        MeshRenderer mr = rendererArray[i];
+                        MeshRenderer mr = savedRenderers[i];
                         var scaleOffset = mr.lightmapScaleOffset;
 
                         var ids = rendererDataIds.GetArrayElementAtIndex(mrDataOffset + i);
