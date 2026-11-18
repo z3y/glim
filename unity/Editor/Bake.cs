@@ -409,7 +409,10 @@ namespace Glim
                     obj.bakedProbes = bakedProbesArray;
                     EditorUtility.SetDirty(obj);
 
-                    WriteProbeOcclusion(obj, bakedCoeffCount);
+                    if (_context.mixedMode == MixedLightMode.Shadowmask)
+                    {
+                        WriteProbeOcclusion(obj, bakedCoeffCount);
+                    }
                 }
 
                 // skybox probe
@@ -530,38 +533,83 @@ namespace Glim
                 return;
             }
 
+            if (probeCount == 0)
+            {
+                occlusionProp.arraySize = 0;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                return;
+            }
+
+            // size the inner arrays on a single element, growing the array copies the last element into the new ones
+            occlusionProp.arraySize = 1;
+            var first = occlusionProp.GetArrayElementAtIndex(0);
+            var firstLightIndex = first.FindPropertyRelative("m_ProbeOcclusionLightIndex");
+            var firstOcclusion = first.FindPropertyRelative("m_Occlusion");
+            var firstChannel = first.FindPropertyRelative("m_OcclusionMaskChannel");
+
+            if (firstLightIndex == null || firstOcclusion == null || firstChannel == null)
+            {
+                Debug.LogWarning("unexpected m_BakedLightOcclusion layout, light probe occlusion not written");
+                return;
+            }
+
+            firstLightIndex.arraySize = 4;
+            firstOcclusion.arraySize = 4;
+            firstChannel.arraySize = 4;
             occlusionProp.arraySize = probeCount;
 
-            bool shadowmask = _context.mixedMode == MixedLightMode.Shadowmask;
+            // walk the whole array once in serialization order
+            // every probe has 12 values: 4 light indices, 4 occlusions, 4 mask channels
+            var it = occlusionProp.Copy();
+            var end = occlusionProp.GetEndProperty();
 
-            for (int i = 0; i < probeCount; i++)
+            int valueIndex = 0;
+            int valueCount = probeCount * 12;
+
+            while (it.Next(true) && !SerializedProperty.EqualContents(it, end))
             {
-                var element = occlusionProp.GetArrayElementAtIndex(i);
-                var lightIndexProp = element.FindPropertyRelative("m_ProbeOcclusionLightIndex");
-                var occProp = element.FindPropertyRelative("m_Occlusion");
-                var channelProp = element.FindPropertyRelative("m_OcclusionMaskChannel");
-
-                if (lightIndexProp == null || occProp == null || channelProp == null)
+                var type = it.propertyType;
+                if (type != SerializedPropertyType.Integer && type != SerializedPropertyType.Float)
                 {
-                    Debug.LogWarning("unexpected m_BakedLightOcclusion layout, light probe occlusion not written");
-                    return;
+                    continue;
                 }
 
-                // newly added elements come with empty arrays
-                lightIndexProp.arraySize = 4;
-                occProp.arraySize = 4;
-                channelProp.arraySize = 4;
-
-                Bindings.SHProbe probe = _bakeProbesResults[i];
-
-                for (int channel = 0; channel < 4; channel++)
+                // skip array sizes
+                if (it.name != "data")
                 {
-                    int lightIndex = shadowmask ? probe.GetOcclusionLight(channel) : -1;
-
-                    lightIndexProp.GetArrayElementAtIndex(channel).intValue = lightIndex;
-                    occProp.GetArrayElementAtIndex(channel).floatValue = lightIndex == -1 ? 0.0f : Mathf.Clamp01(probe.GetOcclusion(channel));
-                    channelProp.GetArrayElementAtIndex(channel).intValue = lightIndex == -1 ? -1 : channel;
+                    continue;
                 }
+
+                if (valueIndex >= valueCount)
+                {
+                    break;
+                }
+
+                int probeIndex = valueIndex / 12;
+                int field = (valueIndex % 12) / 4;
+                int slot = valueIndex % 4;
+                valueIndex++;
+
+                Bindings.SHProbe probe = _bakeProbesResults[probeIndex];
+                int lightIndex = probe.GetOcclusionLight(slot);
+
+                if (field == 0)
+                {
+                    it.intValue = lightIndex;
+                }
+                else if (field == 1)
+                {
+                    it.floatValue = lightIndex == -1 ? 0.0f : Mathf.Clamp01(probe.GetOcclusion(slot));
+                }
+                else
+                {
+                    it.intValue = lightIndex == -1 ? -1 : slot;
+                }
+            }
+
+            if (valueIndex != valueCount)
+            {
+                Debug.LogWarning($"light probe occlusion: wrote {valueIndex} of {valueCount} values, unexpected m_BakedLightOcclusion layout");
             }
 
             so.ApplyModifiedPropertiesWithoutUndo();
