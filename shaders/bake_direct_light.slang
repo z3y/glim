@@ -43,7 +43,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 positionWS;
     float3 normalWS;
     uint3 indexing;
-    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
+    ShadowTerminator terminator;
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing, terminator);
 
     float2 xiLight = SobolBurleySample2D(indexing.x, DIMENSION_LIGHT, indexing.y, indexing.z);
 
@@ -58,7 +59,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         Light light = lights[lightIndex];
         float3 L;
         float2 xi = DecorrelateSample2D(xiLight, lightIndex);
-        float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false);
+        float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false, terminator);
         float NoL = saturate(dot(L, normalWS));
         color.rgb += current * NoL;
         dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);

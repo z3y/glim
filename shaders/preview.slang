@@ -62,6 +62,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float3 positionWS = RayOffset(surface.P, surface.Ng);
     float3 normalWS = surface.N;
+    ShadowTerminator terminator = ShadowTerminator::Create(primitiveID, bary, surface.Ng, frontFace);
 
     for (uint bounceIndex = 0; bounceIndex < (Push.bounceCount + 1); bounceIndex++)
     {
@@ -72,7 +73,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
             float3 L;
             Light light = Push.lights[lightIndex];
             float2 xi = DecorrelateSample2D(xiLight, lightIndex);
-            float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false);
+            float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false, terminator);
             float NoL = saturate(dot(L, normalWS));
             color.rgb += current * NoL;
         }
@@ -91,6 +92,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
             Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
             positionWS = RayOffset(surface.P, surface.Ng);
             normalWS = surface.N;
+            terminator = ShadowTerminator::Create(bounceHit.primitiveID, bounceHit.bary, surface.Ng, bounceHit.frontFace);
 
             if (!bounceHit.frontFace)
             {

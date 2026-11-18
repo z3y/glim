@@ -40,7 +40,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 positionWS;
     float3 normalWS;
     uint3 indexing;
-    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
+    ShadowTerminator terminator; // bounce rays are not shadow rays, unused
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing, terminator);
 
     uint dimension = DIMENSION_INDIRECT_BOUNCE + bounceIndex;
     float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);

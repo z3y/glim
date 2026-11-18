@@ -40,7 +40,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 positionWS;
     float3 normalWS;
     uint3 indexing;
-    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
+    ShadowTerminator terminator;
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing, terminator);
 
     uint lightsStart = Push.lightsStart;
     uint lightsCount = Push.lightsCount;
@@ -64,7 +65,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         float3 L;
         float2 xi = DecorrelateSample2D(xiLight, lightIndex);
 
-        if (ShadowMaskVisibility(light, positionWS, xi, L))
+        if (ShadowMaskVisibility(light, positionWS, normalWS, xi, terminator, L))
         {
             float NoL = saturate(dot(normalWS, L));
             if (NoL > 0.0)

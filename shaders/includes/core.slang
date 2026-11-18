@@ -1,5 +1,6 @@
 #include "bindings.slang"
 #include "ray.slang"
+#include "shadow_terminator.slang"
 #include "sobol_burley.slang"
 #include "util.slang"
 
@@ -755,7 +756,7 @@ float TriangleLightPdf(uint primitiveID, float3 positionWS, float3 normalWS, flo
     return distSq / (area * cosLight);
 }
 
-float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, float selectionPmf, out float pdf, out float3 L, bool isLightProbe)
+float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, float selectionPmf, out float pdf, out float3 L, bool isLightProbe, ShadowTerminator terminator)
 {
     pdf = 0.0;
     L = 0.0;
@@ -841,6 +842,7 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     [branch]
     if (visible > 0.0)
     {
+        shadowRay.P = terminator.Origin(positionWS, normalWS, L);
         if (TraceAnyHit(shadowRay))
         {
             color = 0.0;
@@ -940,7 +942,7 @@ struct SphericalRectangle
     }
 };
 
-float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, out float3 L, bool isLightProbe)
+float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, out float3 L, bool isLightProbe, ShadowTerminator terminator)
 {
     Ray shadowRay;
     shadowRay.P = positionWS;
@@ -1129,7 +1131,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     [branch]
     if (visible > 0.0 && light.CastShadows())
     {
-        // todo shadow terminator fix
+        shadowRay.P = terminator.Origin(positionWS, normalWS, L);
         if (TraceShadowRay(shadowRay))
         {
             color = 0.0;
@@ -1139,7 +1141,9 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     return color;
 }
 
-void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 positionWS, out float3 normalWS, out uint3 indexing)
+// terminator is only set up for jittered samples, fixed samples (moved by leak detection,
+// no room to jitter or jitter disabled) only store a position and get ShadowTerminator::None()
+void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 positionWS, out float3 normalWS, out uint3 indexing, out ShadowTerminator terminator)
 {
     uint pixelSeed = RNGPixelInit1D(index);
     indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, ~0u, sampleCount, SamplingPattern::BlueNoiseFirst);
@@ -1152,6 +1156,7 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     {
         positionWS = visibility.xyz;
         normalWS = UnpackNormalOctahedron(visibility.w);
+        terminator = ShadowTerminator::None();
         return;
     }
 
@@ -1209,6 +1214,7 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     Surface surface = Surface::Get(primitiveID, bary, frontFace);
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
+    terminator = ShadowTerminator::Create(primitiveID, bary, surface.Ng, frontFace);
 }
 
 // Builds the shadowmask shadow ray, false if the position is outside the light range or spot cone.
@@ -1270,7 +1276,7 @@ bool ShadowMaskRay(Light light, float3 positionWS, float2 xi, out Ray shadowRay,
     return true;
 }
 
-bool ShadowMaskVisibility(Light light, float3 positionWS, float2 xi, out float3 L)
+bool ShadowMaskVisibility(Light light, float3 positionWS, float3 normalWS, float2 xi, ShadowTerminator terminator, out float3 L)
 {
     Ray shadowRay;
     if (!ShadowMaskRay(light, positionWS, xi, shadowRay, L))
@@ -1278,5 +1284,12 @@ bool ShadowMaskVisibility(Light light, float3 positionWS, float2 xi, out float3 
         return false;
     }
 
+    // facing away, no need to trace
+    if (dot(normalWS, L) <= 0.0)
+    {
+        return false;
+    }
+
+    shadowRay.P = terminator.Origin(positionWS, normalWS, L);
     return !TraceShadowRay(shadowRay);
 }

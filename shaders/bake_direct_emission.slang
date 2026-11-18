@@ -38,7 +38,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 positionWS;
     float3 normalWS;
     uint3 indexing;
-    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing);
+    ShadowTerminator terminator;
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing, terminator);
 
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0);
@@ -65,7 +66,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         {
             float3 L;
             float pdf = 0.0;
-            float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, selectionPmf, pdf, L, false);
+            float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, selectionPmf, pdf, L, false, terminator);
             float NoL = saturate(dot(L, normalWS));
 
             float bsdfPdfL = NoL * invPi;

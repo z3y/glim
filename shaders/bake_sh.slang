@@ -205,7 +205,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         }
         float3 L;
         float2 xi = DecorrelateSample2D(xiLight, lightIndex);
-        float3 color = ShadeLightDirect(light, probePosition, 0.0, xi, throughput, L, true);
+        float3 color = ShadeLightDirect(light, probePosition, 0.0, xi, throughput, L, true, ShadowTerminator::None());
         AccumulateL2(probe, sampleIndex, color * sampleScale, L);
     }
 
@@ -230,7 +230,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
             float pdf = 0.0;
             // own key, light indices never reach ~0u
             float2 xi = DecorrelateSample2D(xiLight, ~0u);
-            float3 current = ShadeTriangleLight(emissivePrimitiveID, probePosition, 0.0, xi, throughput, selectionPmf, pdf, L, true);
+            float3 current = ShadeTriangleLight(emissivePrimitiveID, probePosition, 0.0, xi, throughput, selectionPmf, pdf, L, true, ShadowTerminator::None());
             current *= MISWeight(pdf, bsdfPdf);
             AccumulateL2(probe, sampleIndex, current * sampleScale, L);
         }
@@ -300,7 +300,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
                     }
                     float3 L;
                     float2 xi = DecorrelateSample2D(xiLight, lightIndex);
-                    float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false);
+                    float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false, ShadowTerminator::None());
                     float NoL = saturate(dot(L, normalWS));
                     current *= NoL;
                     AccumulateL2(probe, sampleIndex, current * bounceAlbedo * 4 * sampleScale, ray.D);
