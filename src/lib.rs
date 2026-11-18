@@ -2309,7 +2309,7 @@ fn bake_indirect(
 /// gets half the samples of the previous, never going below `MIN_BOUNCE_SAMPLES`
 /// (or the configured count if that is lower).
 fn bounce_sample_count(indirect_samples: u32, bounce_index: u32) -> u32 {
-    const MIN_BOUNCE_SAMPLES: u32 = 32;
+    const MIN_BOUNCE_SAMPLES: u32 = 64;
     let floor = indirect_samples.min(MIN_BOUNCE_SAMPLES);
     indirect_samples
         .checked_shr(bounce_index)
