@@ -136,7 +136,10 @@ namespace Glim
         public MixedLightMode mixedMode;
         public bool isPreview;
 
+        // skybox material capture, used for the skybox reflection
         public Color[] skyboxPixels;
+        // environment lighting source (skybox, gradient or color), used for baking
+        public Color[] ambientPixels;
 
         private static int GetDepth(Transform t)
         {
@@ -155,6 +158,7 @@ namespace Glim
             this.playBakeCompletionSound = lightmapper.playBakeCompletionSound;
 
             this.skyboxPixels = SkyboxCapture.Capture(SceneManager.GetActiveScene());
+            this.ambientPixels = SkyboxCapture.CaptureAmbient(this.skyboxPixels);
 
             var bakerId = GlobalObjectId.GetGlobalObjectIdSlow(lightmapper);
 

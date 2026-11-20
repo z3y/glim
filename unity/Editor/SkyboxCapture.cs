@@ -3,6 +3,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
 
@@ -62,6 +63,78 @@ namespace Glim
 
             return pixels;
         }
+
+        /// <summary>
+        /// Intensity multiplier Unity applies to environment lighting. The slider only exists for the skybox source,
+        /// color and gradient are used as is.
+        /// </summary>
+        public static float AmbientIntensity =>
+            RenderSettings.ambientMode == AmbientMode.Skybox ? RenderSettings.ambientIntensity : 1.0f;
+
+        /// <summary>
+        /// Builds the environment used for lighting, following the Environment Lighting source in the lighting window.
+        /// Skybox reuses the captured skybox, color and gradient are generated with the same resolution and face layout.
+        /// </summary>
+        public static Color[] CaptureAmbient(Color[] skyboxPixels)
+        {
+            var mode = RenderSettings.ambientMode;
+            if (mode == AmbientMode.Skybox)
+            {
+                return skyboxPixels;
+            }
+
+            int res = (int)Mathf.Sqrt(skyboxPixels.Length / 6);
+            var pixels = new Color[res * res * 6];
+
+            if (mode == AmbientMode.Flat)
+            {
+                var color = ToLinear(RenderSettings.ambientSkyColor);
+                color.a = 1.0f;
+                for (int i = 0; i < pixels.Length; i++) pixels[i] = color;
+                return pixels;
+            }
+
+            // Trilight (gradient): sky above, equator at the horizon, ground below.
+            var sky = ToLinear(RenderSettings.ambientSkyColor);
+            var equator = ToLinear(RenderSettings.ambientEquatorColor);
+            var ground = ToLinear(RenderSettings.ambientGroundColor);
+
+            for (int face = 0; face < 6; face++)
+            {
+                var cubeFace = (CubemapFace)face;
+                for (int y = 0; y < res; y++)
+                {
+                    for (int x = 0; x < res; x++)
+                    {
+                        // texel center in [-1, 1], row 0 is the top of the face (same layout as the captured pixels)
+                        float s = (x + 0.5f) / res * 2.0f - 1.0f;
+                        float t = (y + 0.5f) / res * 2.0f - 1.0f;
+                        float dirY = FaceDirection(cubeFace, s, t).normalized.y;
+
+                        var c = dirY >= 0.0f
+                            ? Color.LerpUnclamped(equator, sky, dirY)
+                            : Color.LerpUnclamped(equator, ground, -dirY);
+                        c.a = 1.0f;
+                        pixels[face * res * res + y * res + x] = c;
+                    }
+                }
+            }
+
+            return pixels;
+        }
+
+        static Color ToLinear(Color c) => QualitySettings.activeColorSpace == ColorSpace.Linear ? c.linear : c;
+
+        // Standard cubemap face orientation (D3D/Vulkan convention, t pointing down).
+        static Vector3 FaceDirection(CubemapFace face, float s, float t) => face switch
+        {
+            CubemapFace.PositiveX => new Vector3(1.0f, -t, -s),
+            CubemapFace.NegativeX => new Vector3(-1.0f, -t, s),
+            CubemapFace.PositiveY => new Vector3(s, 1.0f, t),
+            CubemapFace.NegativeY => new Vector3(s, -1.0f, -t),
+            CubemapFace.PositiveZ => new Vector3(s, -t, 1.0f),
+            _ => new Vector3(-s, -t, -1.0f),
+        };
 
         public static void SaveAsCubemapAsset(Color[] pixels, string assetPath)
         {
