@@ -6,6 +6,7 @@
   - Drawn as a full screen quad before post processing, so the Scene view post processing (bloom, tonemapping, color grading) applies to it
   - Frames are now linear HDR (RGBA16F) instead of 8 bit sRGB
   - Follows the Scene view camera exactly: position, rotation, field of view and orthographic mode, moving the Scene view camera restarts the preview
+- Added a progress bar for the UV packer
 
 # v0.13.0
 
