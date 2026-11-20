@@ -124,7 +124,7 @@ Affects lightmaps, light probes and light volumes.")]
 Probe positions are also moved outside of geometry defined by this radius.
 Automatically applied to light volumes based on texel size."
 )]
-        public float lightProbeRadius = 0.0f;
+        public float lightProbeRadius = 0.05f;
 
         [Tooltip("Applies Lanczos windowing function to the direct light in light probes to reduce ringing")]
         public bool lightProbeDeringing = false;
