@@ -64,6 +64,7 @@ pub enum LightmapMode {
     NonDirectional = 0,
     DominantDirection = 1,
     CombinedSH = 3,
+    Neural = 5,
 }
 
 #[repr(u32)]

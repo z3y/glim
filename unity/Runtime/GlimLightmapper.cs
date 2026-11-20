@@ -20,6 +20,7 @@ namespace Glim
         NonDirectional = 0,
         DominantDirection = 1,
         MonoSH = 3,
+        Neural = 5,
     }
 
     public enum MixedLightMode : uint
@@ -39,7 +40,10 @@ Bakes a single diffuse lightmap texture.
 Bakes an additional directional lightmap that stores the dominant incoming light direction. Supports normal maps and improves directional lighting.
 
 - Mono SH
-Bakes two textures (L0 and Monochromatic luminance of L1). Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it."
+Bakes two textures (L0 and Monochromatic luminance of L1). Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it.
+
+- Neural (Experimental)
+Trains a small neural network and 16 features per lightmap pixel on the GPU after the bake. Gives diffuse with normal maps and baked specular for any roughness. Needs the Glim/Neural Lightmap Unlit shader (or GlimNeuralLightmap.hlsl), textures are bound by a Glim Neural Lightmaps component created after the bake."
 )]
         public LightmapMode lightmapMode = LightmapMode.NonDirectional;
 

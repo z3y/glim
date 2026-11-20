@@ -52,6 +52,7 @@ mod light_tree;
 mod lights;
 mod mesh;
 mod meta;
+mod neural;
 mod oidn;
 mod pack;
 mod preview;
@@ -2563,6 +2564,7 @@ fn render_lightmaps(app: &mut Glim) {
         LightmapMode::NonDirectional => 3,
         LightmapMode::DominantDirection => 6,
         LightmapMode::CombinedSH => 9,
+        LightmapMode::Neural => 3,
     };
 
     let mut lightmap_texels = Buffer::empty(
@@ -2673,6 +2675,26 @@ fn render_lightmaps(app: &mut Glim) {
             lightmap_texels_channels * texels_count,
         )
     };
+
+    if app.config.lightmap_mode == LightmapMode::Neural && !is_cancelled() {
+        Log::msg("Training Neural Lightmaps");
+        let result = neural::train_neural(
+            app,
+            &texels,
+            &lightmap_texels,
+            readback_buffer_slice,
+            &compaction_buffer,
+            &lightmaps_info,
+            mixed_start,
+            mixed_count,
+        );
+        if let Some(result) = result {
+            if !is_cancelled() {
+                let debug_images = std::env::var("GLIM_NN_NO_DEBUG").is_err();
+                neural::export_neural(app, &result, debug_images);
+            }
+        }
+    }
 
     let oidn = Oidn::load();
     let mut oidn = if oidn.is_err() {

@@ -142,6 +142,61 @@ namespace Glim
 
         public static int ReportVersion { get; private set; }
 
+        // finds or creates the component that binds the neural lightmap textures, and fills it with this bake's textures
+        static void ApplyNeuralLightmaps(BakeContext context)
+        {
+            var weightsPath = Path.Combine(context.outputDir, "NeuralWeights.exr");
+            var weights = AssetDatabase.LoadAssetAtPath<Texture2D>(weightsPath);
+            if (!weights)
+            {
+                Debug.LogError($"[Glim] Neural weights not found at {weightsPath}");
+                return;
+            }
+
+            GlimNeuralLightmaps target = null;
+            foreach (var root in context.scene.GetRootGameObjects())
+            {
+                target = root.GetComponentInChildren<GlimNeuralLightmaps>(true);
+                if (target)
+                {
+                    break;
+                }
+            }
+
+            if (!target)
+            {
+                var go = new GameObject("Glim Neural Lightmaps");
+                UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(go, context.scene);
+                target = go.AddComponent<GlimNeuralLightmaps>();
+            }
+
+            var groups = new GlimNeuralLightmaps.Group[context.groups.Count];
+            for (int groupIndex = 0; groupIndex < context.groups.Count; groupIndex++)
+            {
+                if (context.groups[groupIndex].settings.discard)
+                {
+                    continue;
+                }
+
+                var group = new GlimNeuralLightmaps.Group();
+                for (int i = 0; i < 4; i++)
+                {
+                    var path = Path.Combine(context.outputDir, $"Lightmap-{groupIndex}_Neural{i}.exr");
+                    group.features[i] = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                    if (!group.features[i])
+                    {
+                        Debug.LogError($"[Glim] Neural features not found at {path}");
+                    }
+                }
+                groups[groupIndex] = group;
+            }
+
+            target.weights = weights;
+            target.groups = groups;
+            EditorUtility.SetDirty(target);
+            target.Apply();
+        }
+
         static void SaveReport(string scenePath, BakeReport report)
         {
             if (string.IsNullOrEmpty(scenePath))
@@ -493,6 +548,11 @@ namespace Glim
 
                 LightmapSettings.lightmaps = lightmapDatas.ToArray();
                 LightmapSettings.lightmapsMode = hasDirectional ? LightmapsMode.CombinedDirectional : LightmapsMode.NonDirectional;
+
+                if (_context.lightmapMode == LightmapMode.Neural)
+                {
+                    ApplyNeuralLightmaps(_context);
+                }
 
                 SaveReport(scenePath, new BakeReport
                 {

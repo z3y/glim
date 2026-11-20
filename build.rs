@@ -60,6 +60,13 @@ fn main() {
         dst: "bake_shadowmask.spv".into(),
     });
 
+    for name in ["neural_train", "neural_grad", "neural_adam", "neural_eval"] {
+        shaders.push(Shader {
+            src: format!("{name}.slang"),
+            dst: format!("{name}.spv"),
+        });
+    }
+
     for shader in shaders {
         let shader_path = shader_dir.join(shader.src);
         let spv_path = out_dir.join(shader.dst);

@@ -12,6 +12,10 @@ pub enum ShaderName {
     AdjustSamples,
     AdjustProbes,
     ShadowMask,
+    NeuralTrain,
+    NeuralGrad,
+    NeuralAdam,
+    NeuralEval,
 }
 
 pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
@@ -26,6 +30,10 @@ pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
         ShaderName::BakeDirectLight => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_light.spv")),
         ShaderName::BakeDirectEmission => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_emission.spv")),
         ShaderName::ShadowMask => include_bytes!(concat!(env!("OUT_DIR"), "/bake_shadowmask.spv")),
+        ShaderName::NeuralTrain => include_bytes!(concat!(env!("OUT_DIR"), "/neural_train.spv")),
+        ShaderName::NeuralGrad => include_bytes!(concat!(env!("OUT_DIR"), "/neural_grad.spv")),
+        ShaderName::NeuralAdam => include_bytes!(concat!(env!("OUT_DIR"), "/neural_adam.spv")),
+        ShaderName::NeuralEval => include_bytes!(concat!(env!("OUT_DIR"), "/neural_eval.spv")),
     };
 
     let aligned = bytes

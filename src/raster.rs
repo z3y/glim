@@ -13,7 +13,7 @@ pub struct VisibilityTexel {
 
 impl VisibilityTexel {
     #[inline]
-    fn index(&self, resolution: usize) -> usize {
+    pub(crate) fn index(&self, resolution: usize) -> usize {
         let x = self.x as usize;
         let y = resolution - 1 - self.y as usize;
 
