@@ -2385,8 +2385,8 @@ fn apply_spectral_albedo_correction(
 
         pub texel_count: u32,
         pub combined_sh: u32,
+        pub albedo_offset: u32,
         pub pad0: u32,
-        pub pad1: u32,
 
         pub lightmap: vk::DeviceAddress,
         pub reflected: vk::DeviceAddress,
@@ -2419,8 +2419,8 @@ fn apply_spectral_albedo_correction(
         rt: app.rt_data(),
         texel_count: texels_count as u32,
         combined_sh: (app.config.lightmap_mode == LightmapMode::CombinedSH) as u32,
+        albedo_offset: app.config.spectral_albedo_offset as u32,
         pad0: 0,
-        pad1: 0,
         lightmap: lightmap.gpu_address,
         reflected: reflected.gpu_address,
     };

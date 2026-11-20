@@ -118,6 +118,9 @@ Affects lightmaps, light probes and light volumes.")]
         [Tooltip("Multiply colors spectrally instead of per RGB channel where light interacts with colored surfaces (bounces off albedo, passes through tinted transparency). More accurate color bleeding, adds a little color noise.")]
         public bool spectralRendering = true;
 
+        [Tooltip("Bake lightmaps for shaders that multiply them by albedo plus a small offset (GlimSpectralLightmapAlbedo in GlimSpectral.hlsl, used by the Glim/Unlit Spectral Lightmap shader). Lets colored surfaces match the spectral result exactly, including colors the plain RGB albedo can't reproduce. Leave off for shaders without it.")]
+        public bool spectralAlbedoOffset = false;
+
         [Space]
         [Tooltip("Number of samples per light probe")]
         public uint lightProbeSamples = 4096;

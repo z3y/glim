@@ -288,12 +288,32 @@ float3 SpectralMultiply(float3 emitter, float3 reflectance, float u, uint spectr
     return s.ToRGB(e * a);
 }
 
+// Spectral albedo offset, shaders that support it multiply the lightmap by
+// albedo + SpectralAlbedoOffset(albedo) instead of the albedo.
+// must match GLIM_SPECTRAL_ALBEDO_OFFSET in unity/Shaders/GlimSpectral.hlsl
+static const float SPECTRAL_ALBEDO_OFFSET = 0.1;
+
+// 0 for gray albedos, so those stay exactly as without the offset
+float SpectralAlbedoOffset(float3 albedo)
+{
+    float saturation = max(albedo.x, max(albedo.y, albedo.z)) - min(albedo.x, min(albedo.y, albedo.z));
+    return SPECTRAL_ALBEDO_OFFSET * saturation;
+}
+
 // Lightmaps store irradiance and the albedo is multiplied in at runtime, per RGB channel.
 // reflected is the irradiance times the texel's albedo, multiplied spectrally (accumulated by
 // the bake passes next to the irradiance). Returns per channel factors f so that
 // albedo * (irradiance * f) equals reflected, which is what the spectral preview shows.
-float3 SpectralAlbedoCorrection(float3 irradiance, float3 reflected, float3 albedo)
+// With albedoOffset the runtime multiplies by albedo + SpectralAlbedoOffset(albedo) instead.
+// That is never 0 in a channel of a colored albedo, so colors the plain albedo multiply can't
+// reproduce (e.g. the red a cyan surface reflects of an orange light) match too.
+float3 SpectralAlbedoCorrection(float3 irradiance, float3 reflected, float3 albedo, bool albedoOffset)
 {
+    if (albedoOffset)
+    {
+        albedo += SpectralAlbedoOffset(albedo);
+    }
+
     irradiance = max(irradiance, 0.0);
     // a narrow spectrum can be outside the sRGB gamut, negative in a channel that can't be shown
     reflected = max(reflected, 0.0);
@@ -303,9 +323,10 @@ float3 SpectralAlbedoCorrection(float3 irradiance, float3 reflected, float3 albe
         return 1.0;
     }
 
-    // dark albedo channels contribute little at runtime anyway, don't blow the irradiance up for them
+    // dark albedo channels contribute little at runtime anyway, don't blow the irradiance up for them.
+    // The offset keeps the runtime albedo of colored surfaces away from 0, larger factors are fine then
     const float MIN_ALBEDO = 0.02;
-    const float MAX_FACTOR = 4.0;
+    float MAX_FACTOR = albedoOffset ? 16.0 : 4.0;
     float threshold = max(1e-4 * max(irradiance.x, max(irradiance.y, irradiance.z)), 1e-12);
 
     float3 factor = 1.0;

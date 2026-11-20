@@ -57,6 +57,7 @@ namespace Glim
             [MarshalAs(UnmanagedType.I1)] public readonly bool antialiasing;
             [MarshalAs(UnmanagedType.I1)] public readonly bool leak_detection;
             [MarshalAs(UnmanagedType.I1)] public readonly bool spectral_rendering;
+            [MarshalAs(UnmanagedType.I1)] public readonly bool spectral_albedo_offset;
 
             public GlimConfig(CoordinateSystem coordinate_system,
                                uint direct_light_samples,
@@ -83,7 +84,8 @@ namespace Glim
                                float coverage_min_threshold,
                                bool antialiasing,
                                bool leak_detection,
-                               bool spectral_rendering
+                               bool spectral_rendering,
+                               bool spectral_albedo_offset
                                )
             {
                 this.coordinate_system = coordinate_system;
@@ -122,6 +124,7 @@ namespace Glim
                 this.antialiasing = antialiasing;
                 this.leak_detection = leak_detection;
                 this.spectral_rendering = spectral_rendering;
+                this.spectral_albedo_offset = spectral_albedo_offset;
 
                 var currentPipeline = GraphicsSettings.currentRenderPipeline;
                 uint autoFalloff = 0;

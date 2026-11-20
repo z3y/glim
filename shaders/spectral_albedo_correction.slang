@@ -15,8 +15,9 @@ struct PushConstants
 
     uint texelCount;
     uint combinedSH;
+    // 1: the lightmap is shaded with albedo + SpectralAlbedoOffset(albedo), see GlimSpectral.hlsl
+    uint albedoOffset;
     uint pad0;
-    uint pad1;
 
     float *lightmap;
     // irradiance times the texel's albedo, multiplied spectrally
@@ -54,7 +55,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     // moved texels only store a position, their surface is unknown
     if (TexelAlbedo(index, albedo))
     {
-        factor = SpectralAlbedoCorrection(irradiance, LoadTexel(Push.reflected, index), albedo);
+        factor = SpectralAlbedoCorrection(irradiance, LoadTexel(Push.reflected, index), albedo, Push.albedoOffset != 0);
     }
 
     StoreTexel(index, irradiance * factor);

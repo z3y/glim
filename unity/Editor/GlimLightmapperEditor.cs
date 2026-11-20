@@ -106,7 +106,8 @@ namespace Glim
                     lightmapper.coverageMinThreshold,
                     lightmapper.antiAliasing,
                     lightmapper.leakDetection,
-                    lightmapper.spectralRendering
+                    lightmapper.spectralRendering,
+                    lightmapper.spectralAlbedoOffset
                 );
                 Bake.Start(lightmapper, config);
             };
@@ -146,7 +147,8 @@ namespace Glim
                     lightmapper.coverageMinThreshold,
                     lightmapper.antiAliasing,
                     lightmapper.leakDetection,
-                    lightmapper.spectralRendering
+                    lightmapper.spectralRendering,
+                    lightmapper.spectralAlbedoOffset
                 );
 
                 Bake.Start(lightmapper, config);

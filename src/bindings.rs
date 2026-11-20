@@ -59,6 +59,8 @@ pub struct GlimConfig {
     pub leak_detection: bool,
     /// spectral products of colors (bounce albedo, tinted transparency), see spectral.rs
     pub spectral_rendering: bool,
+    /// lightmaps are shaded with albedo + offset, see SpectralAlbedoOffset in spectral.slang
+    pub spectral_albedo_offset: bool,
 }
 
 #[repr(u32)]

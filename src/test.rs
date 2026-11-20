@@ -85,6 +85,7 @@ mod tests {
             antialiasing: true,
             leak_detection: true,
             spectral_rendering: true,
+            spectral_albedo_offset: false,
         };
         config
     }
