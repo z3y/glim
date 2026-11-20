@@ -6,10 +6,6 @@
   - Drawn as a full screen quad before post processing, so the Scene view post processing (bloom, tonemapping, color grading) applies to it
   - Frames are now linear HDR (RGBA16F) instead of 8 bit sRGB
   - Follows the Scene view camera exactly: position, rotation, field of view and orthographic mode, moving the Scene view camera restarts the preview
-  - Removed the preview window and its free fly controls (right mouse look, WASD)
-  - Render resolution follows the Scene view size, the resolution scale option is still remembered
-  - Stats, samples, bounces, resolution scale and a Stop button are in a Scene view overlay that is only shown while the preview is running, Esc in the Scene view also stops it
-  - The Preview button on the Glim Lightmapper component now toggles the preview
 
 # v0.13.0
 
