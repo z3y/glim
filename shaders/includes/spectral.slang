@@ -284,10 +284,21 @@ float3 SpectralAlbedoCorrection(float3 irradiance, float3 albedo)
     {
         if (reconstructed[c] > threshold)
         {
-            factor[c] = clamp(product[c] / (reconstructed[c] * max(albedo[c], MIN_ALBEDO)), 0.0, MAX_FACTOR);
+            factor[c] = max(product[c] / (reconstructed[c] * max(albedo[c], MIN_ALBEDO)), 0.0);
         }
     }
-    return factor;
+
+    // A channel the albedo zeroes out can't be restored by the runtime multiply, the hue stays off
+    // there (e.g. no red for a cyan albedo). At least match the brightness of the spectral result.
+    const float3 LUMINANCE = float3(0.2126, 0.7152, 0.0722);
+    float targetLuminance = dot(product * (irradiance / max(reconstructed, threshold)), LUMINANCE);
+    float runtimeLuminance = dot(albedo * irradiance * factor, LUMINANCE);
+    if (runtimeLuminance > 0.0)
+    {
+        factor *= targetLuminance / runtimeLuminance;
+    }
+
+    return clamp(factor, 0.0, MAX_FACTOR);
 }
 
 // Hero wavelength u for estimates driven by a 2D light sample
