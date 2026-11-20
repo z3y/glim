@@ -10,8 +10,9 @@ use std::{
 
 use crate::{
     Glim, LOG_CALLBACK, LightmapGroup, PreviewBackend, initialize_render,
-    lights::Light,
+    lights::{LIGHT_SPECTRUM_NONE, Light},
     mesh::{FfiMesh, Mesh},
+    spectral::LightSpectrum,
     sh::SHProbeL2,
     skybox::Skybox,
 };
@@ -335,6 +336,20 @@ pub extern "C" fn app_add_light(app: *mut Glim, mut light: Light) {
 
         light.direction = Vec3::ZERO - light.direction; // ??
         light.shadow_radius_or_angle = light.shadow_radius_or_angle.max(0.0);
+
+        // a spectrum sets the hue, the light color only its brightness (luminance)
+        let spectrum_rgb = app
+            .light_spectra
+            .get(light.spectrum as usize)
+            .and_then(|spectrum| spectrum.rgb);
+        match spectrum_rgb {
+            Some(rgb) => {
+                let luminance = light.color.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+                light.color = Vec3::from(rgb) * luminance;
+            }
+            None => light.spectrum = LIGHT_SPECTRUM_NONE,
+        }
+
         app.cpu_lights.push(light);
     }));
 
@@ -442,6 +457,26 @@ pub extern "C" fn app_add_light_cookie(
     let result = catch_unwind(AssertUnwindSafe(|| {
         let pixels = unsafe { slice::from_raw_parts(pixels, pixels_length as usize) };
         app.add_light_cookie(pixels, width, height);
+    }));
+
+    if let Err(err) = result {
+        handle_unwind_error(app.config.log_callback, err);
+    }
+}
+
+/// Relative spectral power of a light, samples evenly spaced over [360, 830] nm.
+/// Lights reference it by the order it was added in (Light::spectrum), add spectra before lights.
+#[unsafe(no_mangle)]
+pub extern "C" fn app_add_light_spectrum(app: *mut Glim, samples: *const f32, samples_length: u32) {
+    if app.is_null() || samples.is_null() {
+        return;
+    }
+
+    let app = unsafe { &mut *app };
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let samples = unsafe { slice::from_raw_parts(samples, samples_length as usize) };
+        app.light_spectra.push(LightSpectrum::from_samples(samples));
     }));
 
     if let Err(err) = result {

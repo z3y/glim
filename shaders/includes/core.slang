@@ -170,14 +170,14 @@ struct Transmittance
         spectral = 0.0;
     }
 
-    // Light of an RGB emitter after passing, spectral product if a tinted surface was crossed
-    float3 Apply(float3 color, SpectralSample s)
+    // Light of an emitter after passing, spectral product if a tinted surface was crossed
+    float3 Apply(float3 color, SpectralSample s, uint spectrum = LIGHT_SPECTRUM_NONE)
     {
         if (!tinted)
         {
             return color * rgb;
         }
-        return s.ToRGB(EvalEmissionSpectrum(color, s.phase) * spectral);
+        return s.ToRGB(EvalEmitter(color, spectrum, s) * spectral);
     }
 };
 
@@ -1354,7 +1354,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     {
         terminator.OffsetShadowRay(shadowRay, normalWS, L);
         SpectralSample spectralSample = SpectralSample::Create(SpectralUFromSample(xi, light.data0));
-        color = TraceShadowRay(shadowRay, spectralSample).Apply(color, spectralSample);
+        color = TraceShadowRay(shadowRay, spectralSample).Apply(color, spectralSample, light.spectrum);
     }
 
     return color;
@@ -1373,7 +1373,7 @@ float3 ShadeLightDirectSpectral(Light light, float3 positionWS, float3 normalWS,
         return 0.0;
     }
 
-    float4 spectrum = EvalEmissionSpectrum(color, s.phase) * throughput;
+    float4 spectrum = EvalEmitter(color, light.spectrum, s) * throughput;
 
     [branch]
     if (traceShadow)

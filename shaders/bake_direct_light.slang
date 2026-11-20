@@ -14,8 +14,8 @@ struct PushConstants
     uint mixed;
 
     float *lightmap;
-    uint pad0;
-    uint pad1;
+    // SPECTRAL_BINS per texel, irradiance from lights with a spectrum, see SpectralBins
+    float *spectralBins;
 
     Light *lights;
     uint lightsStart;
@@ -52,6 +52,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
+    SpectralBins spectralBins = SpectralBins::Zero();
 
     Light *lights = Push.lights;
     for (uint lightIndex = lightsStart; lightIndex < lightsEnd; lightIndex++)
@@ -64,9 +65,21 @@ void main(uint3 threadID: SV_DispatchThreadID)
         color.rgb += current * NoL;
         dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
+
+        float spectralLuminance = Luminance(current * NoL * sampleScale);
+        if (HasLightSpectrum(light.spectrum) && isfinite(spectralLuminance) && spectralLuminance > 0.0)
+        {
+            spectralBins.AddLight(light.spectrum, spectralLuminance);
+        }
     }
 
     ValidateSampleColor(color);
+
+    // mixed lights go to the bounce buffer, their direct light is realtime
+    if (LIGHT_SPECTRA_COUNT > 0 && !mixed)
+    {
+        spectralBins.Add(Push.spectralBins, index);
+    }
 
     float *lightmap = Push.lightmap;
 

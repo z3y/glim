@@ -19,6 +19,8 @@ struct PushConstants
     uint pad1;
 
     float *lightmap;
+    // direct irradiance from lights with a spectrum, see SpectralBins
+    float *spectralBins;
 };
 
 float3 LoadTexel(uint index)
@@ -60,7 +62,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 albedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
 
     float3 irradiance = LoadTexel(index);
-    float3 factor = SpectralAlbedoCorrection(irradiance, albedo);
+    SpectralBins bins = SpectralBins::Load(Push.spectralBins, index);
+    float3 factor = SpectralAlbedoCorrection(irradiance, bins, albedo);
 
     if (any(factor != 1.0))
     {

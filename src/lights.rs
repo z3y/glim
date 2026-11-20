@@ -32,7 +32,13 @@ pub struct Light {
 
     pub up: Vec3,
     pub cookie: u32,
+
+    /// index into the light spectra (app_add_light_spectrum), u32::MAX = RGB light
+    pub spectrum: u32,
+    pub pad: [u32; 3],
 }
+
+pub const LIGHT_SPECTRUM_NONE: u32 = u32::MAX;
 
 impl Hash for Light {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -62,6 +68,7 @@ impl Hash for Light {
 
         self.cast_shadows.hash(state);
         self.ty.hash(state);
+        self.spectrum.hash(state);
     }
 }
 
@@ -87,6 +94,8 @@ impl Default for Light {
             cast_shadows: true,
             occlusion_channel: u8::MAX,
             area_or_cookie_size: Vec2::new(0.5, 0.5),
+            spectrum: LIGHT_SPECTRUM_NONE,
+            pad: [0; 3],
         }
     }
 }

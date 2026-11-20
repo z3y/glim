@@ -202,6 +202,10 @@ namespace Glim
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static unsafe extern void app_add_light_cookie(IntPtr app, Color32* pixels, uint pixels_length, uint width, uint height);
 
+        // samples of the relative spectral power, evenly spaced over [360, 830] nm, add before the lights
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static unsafe extern void app_add_light_spectrum(IntPtr app, float* samples, uint samples_length);
+
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static unsafe extern void app_add_alpha_texture(IntPtr app, byte* pixels, uint pixels_length, uint width, uint height);
 
@@ -350,6 +354,12 @@ namespace Glim
 
             public Vector3 up;
             public uint cookie;
+
+            // index into the spectra added with app_add_light_spectrum, uint.MaxValue = RGB light
+            public uint spectrum;
+            public uint pad0;
+            public uint pad1;
+            public uint pad2;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 16)]

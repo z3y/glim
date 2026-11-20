@@ -113,6 +113,8 @@ namespace Glim
         public List<Bindings.Light> bakeLights = new();
         public List<Light> unityLights = new();
         public List<CookiePixelsData> cookies = new();
+        // sampled spectra of lights with a spectrum, Bindings.Light.spectrum indexes into this
+        public List<float[]> lightSpectra = new();
         public List<AlphaPixelsData> alphas = new();
         public List<Glim.MeshData> sceneMesh = new();
         public List<BakeContextGroup> groups = new();
@@ -256,6 +258,7 @@ namespace Glim
                     shadow_radius_or_angle = radiusOrAngle,
                     mixed = light.lightmapBakeType == LightmapBakeType.Mixed ? (byte)1 : (byte)0,
                     cookie = uint.MaxValue,
+                    spectrum = uint.MaxValue,
                     cast_shadows = light.shadows == LightShadows.None ? (byte)0 : (byte)1,
                     occlusion_channel = -1,
                 };
@@ -325,6 +328,12 @@ namespace Glim
                             uniqueCookies.Add(glimLight.areaCookie);
                             l.cookie = (uint)uniqueCookies.Count - 1;
                         }
+                    }
+
+                    if (glimLight.useSpectrum && glimLight.spectrum != null && glimLight.spectrum.length > 0)
+                    {
+                        l.spectrum = (uint)lightSpectra.Count;
+                        lightSpectra.Add(LightSpectra.Sample(glimLight.spectrum));
                     }
                 }
 

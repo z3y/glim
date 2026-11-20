@@ -46,8 +46,9 @@ const float AO_RANGE;
 [vk::constant_id(14)]
 const uint BACKFACE_TEXEL_START;
 
+// number of light spectra, 0 if there are none or spectral rendering is off
 [vk::constant_id(15)]
-const float CONSTANT_PAD1;
+const uint LIGHT_SPECTRA_COUNT;
 
 [vk::constant_id(16)]
 const uint GEOMETRIES_0_OFFSET;

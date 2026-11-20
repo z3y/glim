@@ -27,6 +27,12 @@ struct Light
     float3 up;
     uint cookie;
 
+    // index into the light spectra, LIGHT_SPECTRUM_NONE for RGB lights
+    uint spectrum;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+
     LightType Type()
     {
         return (LightType)(this.data0 & 0x000000FF);

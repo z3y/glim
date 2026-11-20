@@ -13,10 +13,16 @@
 //!   p(lambda) ~ (|r(lambda)| + |g(lambda)| + |b(lambda)|) * D65(lambda)
 //! which is tabulated as 1024 entries of (r * D65 / p, g * D65 / p, b * D65 / p, phase).
 //!
+//! Lights can also have a measured spectrum (sodium, fluorescent, ...). Those are stored relative
+//! to D65 and the sampling density is mixed with them per scene, so their lines get sampled.
+//!
 //! GPU buffer layout (float4):
 //!   [0, SAMPLING_ENTRIES)                          wavelength sampling table
 //!   [SAMPLING_ENTRIES, SAMPLING_ENTRIES + RES^3)   sRGB -> Fourier sRGB moments (c0, c1, c2, 0),
 //!                                                  indexed by sRGB encoded coordinates, x = red
+//!   [.., + BINS)                                   rgb weight of each bin (rgb, 0)
+//!   [.., + LIGHT_SPECTRUM_STRIDE * lights)         per light spectrum: value at every sampling
+//!                                                  entry (4 per float4), then each bin's mean
 
 use std::f64::consts::PI;
 use std::sync::OnceLock;
@@ -27,6 +33,12 @@ use rayon::prelude::*;
 pub const SAMPLING_ENTRIES: usize = 1024;
 /// must match spectral.slang
 pub const LUT_RESOLUTION: usize = 32;
+/// Spectral irradiance of lights with a spectrum is stored per texel in this many bins,
+/// each a contiguous range of sampling entries. must match spectral.slang
+pub const BINS: usize = 16;
+const ENTRIES_PER_BIN: usize = SAMPLING_ENTRIES / BINS;
+/// float4s per light spectrum: values at the sampling entries, then the bin means
+const LIGHT_SPECTRUM_STRIDE: usize = SAMPLING_ENTRIES / 4 + BINS / 4;
 /// Reflectances are solved for `DELTA + (1 - 2 * DELTA) * rgb` to stay away from the
 /// singular boundary of the moment space (constant 0 or 1 spectra). The shader undoes it.
 /// must match spectral.slang
@@ -151,21 +163,118 @@ pub struct SpectralSample {
     pub lambda: f64,
 }
 
-fn build_sampling(n: usize) -> Vec<SpectralSample> {
-    let pdf = Cdf::new(|lambda| {
-        let rgb = cie_rgb(lambda);
-        (rgb[0].abs() + rgb[1].abs() + rgb[2].abs()) * d65(lambda)
-    });
+fn cmf_abs_sum(lambda: f64) -> f64 {
+    let rgb = cie_rgb(lambda);
+    rgb[0].abs() + rgb[1].abs() + rgb[2].abs()
+}
+
+/// Integral over [LAMBDA_MIN, LAMBDA_MAX] in 1 nm steps
+fn integrate(f: impl Fn(f64) -> f64) -> f64 {
+    let mut sum = 0.0;
+    let mut lambda = LAMBDA_MIN + 0.5;
+    while lambda < LAMBDA_MAX {
+        sum += f(lambda);
+        lambda += 1.0;
+    }
+    sum
+}
+
+/// Spectral power distribution of a light, given relative to D65 so it plugs into the same
+/// estimators as RGB emitters (whose D65 part lives in the sampling weights).
+pub struct LightSpectrum {
+    /// relative power in 1 nm steps from LAMBDA_MIN
+    power: Vec<f64>,
+    /// linear sRGB with luminance 1, None if the spectrum has no visible power
+    pub rgb: Option<[f32; 3]>,
+    /// normalizes the luminance to 1
+    scale: f64,
+}
+
+impl LightSpectrum {
+    /// samples evenly spaced over [LAMBDA_MIN, LAMBDA_MAX]
+    pub fn from_samples(samples: &[f32]) -> Self {
+        let count = ((LAMBDA_MAX - LAMBDA_MIN) as usize) + 1;
+        let power: Vec<f64> = (0..count)
+            .map(|i| {
+                if samples.len() < 2 {
+                    return samples.first().copied().unwrap_or(0.0).max(0.0) as f64;
+                }
+                let t = i as f64 / (count - 1) as f64 * (samples.len() - 1) as f64;
+                let j = (t as usize).min(samples.len() - 2);
+                let f = t - j as f64;
+                (samples[j] as f64 * (1.0 - f) + samples[j + 1] as f64 * f).max(0.0)
+            })
+            .collect();
+
+        let mut spectrum = Self {
+            power,
+            rgb: None,
+            scale: 0.0,
+        };
+
+        // sRGB of the light, white balanced like the sampling table so D65 maps to (1, 1, 1)
+        let mut rgb = [0.0; 3];
+        for c in 0..3 {
+            let light = integrate(|lambda| spectrum.power_at(lambda) * cie_rgb(lambda)[c]);
+            let white = integrate(|lambda| d65(lambda) * cie_rgb(lambda)[c]);
+            rgb[c] = light / white;
+        }
+        let luminance = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+        if luminance > 0.0 && luminance.is_finite() {
+            spectrum.scale = 1.0 / luminance;
+            spectrum.rgb = Some(rgb.map(|v| (v * spectrum.scale) as f32));
+        }
+        spectrum
+    }
+
+    fn power_at(&self, lambda: f64) -> f64 {
+        let t = (lambda - LAMBDA_MIN).clamp(0.0, (self.power.len() - 1) as f64);
+        let i = (t as usize).min(self.power.len() - 2);
+        let f = t - i as f64;
+        self.power[i] * (1.0 - f) + self.power[i + 1] * f
+    }
+
+    /// emitter value in the units of the sampling weights (relative to D65), luminance 1
+    fn relative(&self, lambda: f64) -> f64 {
+        let d = d65(lambda);
+        if d > 0.0 { self.power_at(lambda) / d * self.scale } else { 0.0 }
+    }
+}
+
+/// Importance samples a mix of D65 (all RGB emitters) and the light spectra of the scene,
+/// so narrow emission lines (sodium, mercury) get enough samples, see part 2 of the article.
+fn build_sampling(n: usize, lights: &[LightSpectrum]) -> Vec<SpectralSample> {
+    let lights: Vec<&LightSpectrum> = lights.iter().filter(|l| l.rgb.is_some()).collect();
+
+    let base_norm = integrate(|lambda| cmf_abs_sum(lambda) * d65(lambda));
+    let light_norms: Vec<f64> = lights
+        .iter()
+        .map(|l| integrate(|lambda| cmf_abs_sum(lambda) * l.power_at(lambda)).max(1e-30))
+        .collect();
+
+    // half D65, the other half split between the light spectra, each part normalized
+    let density = |lambda: f64| -> f64 {
+        let base = cmf_abs_sum(lambda) * d65(lambda) / base_norm;
+        if lights.is_empty() {
+            return base;
+        }
+        let mut mix = 0.0;
+        for (l, norm) in lights.iter().zip(&light_norms) {
+            mix += cmf_abs_sum(lambda) * l.power_at(lambda) / norm;
+        }
+        0.5 * base + 0.5 * mix / lights.len() as f64
+    };
+    let pdf = Cdf::new(density);
 
     let mut samples: Vec<SpectralSample> = (0..n)
         .map(|i| {
             let u = (i as f64 + 0.5) / n as f64;
             let lambda = pdf.invert(u);
             let rgb = cie_rgb(lambda);
-            let sum = rgb[0].abs() + rgb[1].abs() + rgb[2].abs();
-            // rgb * D65 / p, D65 and the normalization of p cancel out after normalizing below
-            let weight = if sum > 0.0 {
-                [rgb[0] / sum, rgb[1] / sum, rgb[2] / sum]
+            let p = density(lambda);
+            // rgb * D65 / p, the normalization of p cancels out after white balancing below
+            let weight = if p > 0.0 {
+                rgb.map(|v| v * d65(lambda) / p)
             } else {
                 [0.0; 3]
             };
@@ -444,14 +553,15 @@ fn moments_to_lagrange(c: [f64; 3]) -> [f64; 3] {
 }
 
 pub struct SpectralTables {
+    /// D65 only, the per scene table additionally samples the light spectra
     pub sampling: Vec<SpectralSample>,
     /// moments (c0, c1, c2) for each grid point, x = red fastest
     pub moments: Vec<[f64; 3]>,
 }
 
 fn build_tables() -> SpectralTables {
-    let sampling = build_sampling(SAMPLING_ENTRIES);
-    let solver_samples = build_sampling(256);
+    let sampling = build_sampling(SAMPLING_ENTRIES, &[]);
+    let solver_samples = build_sampling(256, &[]);
 
     let n = LUT_RESOLUTION;
     let moments: Vec<[f64; 3]> = (0..n * n * n)
@@ -478,16 +588,49 @@ pub fn tables() -> &'static SpectralTables {
     TABLES.get_or_init(build_tables)
 }
 
-/// GPU buffer contents, see the module documentation for the layout.
-pub fn gpu_data() -> Vec<[f32; 4]> {
+/// GPU buffer contents for a scene, see the module documentation for the layout.
+pub fn gpu_data(lights: &[LightSpectrum]) -> Vec<[f32; 4]> {
     let tables = tables();
-    let mut data = Vec::with_capacity(SAMPLING_ENTRIES + tables.moments.len());
-    for s in &tables.sampling {
+    let sampling = build_sampling(SAMPLING_ENTRIES, lights);
+
+    let mut data = Vec::with_capacity(
+        SAMPLING_ENTRIES + tables.moments.len() + BINS + lights.len() * LIGHT_SPECTRUM_STRIDE,
+    );
+
+    for s in &sampling {
         data.push([s.weight[0] as f32, s.weight[1] as f32, s.weight[2] as f32, s.phase as f32]);
     }
+
     for m in &tables.moments {
         data.push([m[0] as f32, m[1] as f32, m[2] as f32, 0.0]);
     }
+
+    // rgb weight of each bin, rgb = sum over bins of value * weight for a binned spectrum
+    for bin in sampling.chunks(ENTRIES_PER_BIN) {
+        let mut weight = [0.0f64; 3];
+        for s in bin {
+            for c in 0..3 {
+                weight[c] += s.weight[c] / SAMPLING_ENTRIES as f64;
+            }
+        }
+        data.push([weight[0] as f32, weight[1] as f32, weight[2] as f32, 0.0]);
+    }
+
+    // per light: value at each sampling entry (4 per float4), then the mean of each bin
+    for light in lights {
+        let values: Vec<f32> = sampling.iter().map(|s| light.relative(s.lambda) as f32).collect();
+        for v in values.chunks(4) {
+            data.push([v[0], v[1], v[2], v[3]]);
+        }
+        let means: Vec<f32> = values
+            .chunks(ENTRIES_PER_BIN)
+            .map(|bin| bin.iter().sum::<f32>() / bin.len() as f32)
+            .collect();
+        for m in means.chunks(4) {
+            data.push([m[0], m[1], m[2], m[3]]);
+        }
+    }
+
     data
 }
 
@@ -512,8 +655,44 @@ mod tests {
     }
 
     #[test]
+    fn spectral_light_spectrum_round_trip() {
+        // narrow line at 589 nm, like low pressure sodium, plus a broad band
+        let samples: Vec<f32> = (0..=470)
+            .map(|i| {
+                let lambda = LAMBDA_MIN as f32 + i as f32;
+                let line = (-0.5 * ((lambda - 589.0) / 1.5).powi(2)).exp();
+                let band = 0.05 * (-0.5 * ((lambda - 500.0) / 60.0).powi(2)).exp();
+                line + band
+            })
+            .collect();
+        let light = LightSpectrum::from_samples(&samples);
+        let rgb = light.rgb.expect("visible spectrum");
+
+        // the per scene table must reproduce the light's rgb from its per entry values
+        let sampling = build_sampling(SAMPLING_ENTRIES, std::slice::from_ref(&light));
+        let mut estimate = [0.0f64; 3];
+        for s in &sampling {
+            let e = light.relative(s.lambda);
+            for c in 0..3 {
+                estimate[c] += s.weight[c] * e / SAMPLING_ENTRIES as f64;
+            }
+        }
+        for c in 0..3 {
+            assert!((estimate[c] - rgb[c] as f64).abs() < 0.02 * (1.0 + rgb[c].abs() as f64), "{estimate:?} vs {rgb:?}");
+        }
+        // orange
+        assert!(rgb[0] > rgb[1] && rgb[1] > rgb[2], "{rgb:?}");
+
+        // the mixed table still maps a constant spectrum to white
+        let white = spectrum_to_rgb(&sampling, [1e9, 0.0, 0.0]);
+        for c in 0..3 {
+            assert!((white[c] - 1.0).abs() < 1e-6, "{white:?}");
+        }
+    }
+
+    #[test]
     fn spectral_sampling_white() {
-        let samples = build_sampling(SAMPLING_ENTRIES);
+        let samples = build_sampling(SAMPLING_ENTRIES, &[]);
         let rgb = spectrum_to_rgb(&samples, [1e9, 0.0, 0.0]);
         for c in 0..3 {
             assert!((rgb[c] - 1.0).abs() < 1e-6, "{rgb:?}");
@@ -547,7 +726,7 @@ mod tests {
 
     #[test]
     fn spectral_round_trip() {
-        let samples = build_sampling(SAMPLING_ENTRIES);
+        let samples = build_sampling(SAMPLING_ENTRIES, &[]);
         let colors = [
             [0.5, 0.5, 0.5],
             [0.8, 0.2, 0.1],

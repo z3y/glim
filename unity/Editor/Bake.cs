@@ -986,6 +986,18 @@ namespace Glim
                     // free
                     ctx.sceneMesh = new();
 
+                    // spectra first, app_add_light looks them up
+                    foreach (var samples in ctx.lightSpectra)
+                    {
+                        unsafe
+                        {
+                            fixed (float* ptr = samples)
+                            {
+                                Bindings.app_add_light_spectrum(app, ptr, (uint)samples.Length);
+                            }
+                        }
+                    }
+
                     foreach (var light in ctx.bakeLights)
                     {
                         Bindings.app_add_light(app, light);

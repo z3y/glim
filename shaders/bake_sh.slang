@@ -212,7 +212,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
                     float NoL = saturate(dot(L, normalWS));
                     current *= NoL;
                     // own wavelengths per light, the shared ones above would correlate the lights
-                    AccumulateL2(probe, sampleIndex, SpectralMultiply(current, bounceAlbedo, SpectralU(hash_uint2(probeIndex, lightIndex), sampleIndex)) * 4 * sampleScale, ray.D);
+                    AccumulateL2(probe, sampleIndex, SpectralMultiply(current, bounceAlbedo, SpectralU(hash_uint2(probeIndex, lightIndex), sampleIndex), light.spectrum) * 4 * sampleScale, ray.D);
                 }
             }
         }

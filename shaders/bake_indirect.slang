@@ -19,6 +19,9 @@ struct PushConstants
 
     LightmapInfo *lightmapsInfo;
     float *lightmap;
+
+    // direct irradiance from lights with a spectrum, see SpectralBins
+    float *spectralBins;
 };
 
 [shader("compute")]
@@ -101,8 +104,14 @@ void main(uint3 threadID: SV_DispatchThreadID)
             if (all(isfinite(previousDiffuse)))
             {
                 // spectral product of the incoming irradiance and the albedo it bounces off
+                // the first bounce reflects direct light, which still has the light spectra in its bins
+                SpectralBins bins = SpectralBins::Zero();
+                if (bounceIndex == 0)
+                {
+                    bins = SpectralBins::Load(Push.spectralBins, compactIndex);
+                }
                 float spectralU = SpectralU(hash_uint2(index, bounceIndex), sampleIndex);
-                float3 current = SpectralMultiply(previousDiffuse, bounceAlbedo, spectralU) * color.a;
+                float3 current = SpectralMultiply(previousDiffuse, bins, bounceAlbedo, spectralU) * color.a;
                 current *= lerp(1.0, ao, AO_INTENSITY);
                 color.rgb += current;
 
