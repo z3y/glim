@@ -24,12 +24,22 @@ Shader "Hidden/Glim/Scene Preview"
             #pragma vertex vert
             #pragma fragment frag
             #pragma target 3.5
+            // URP global keyword, set while Screen Space Ambient Occlusion is active (not in After Opaque mode)
+            #pragma multi_compile _ _SCREEN_SPACE_OCCLUSION
 
             #include "UnityCG.cginc"
 
             Texture2D _MainTex;
             SamplerState sampler_MainTex;
             float _ZWrite;
+
+            #ifdef _SCREEN_SPACE_OCCLUSION
+            // URP globals, same as URP's AmbientOcclusion.hlsl
+            Texture2D _ScreenSpaceOcclusionTexture;
+            SamplerState sampler_ScreenSpaceOcclusionTexture;
+            float4 _AmbientOcclusionParam;
+            float4 _ScaledScreenParams;
+            #endif
 
             struct Attributes
             {
@@ -63,6 +73,14 @@ Shader "Hidden/Glim/Scene Preview"
 
                 // a single NaN or inf would spread over the whole screen with bloom
                 color = any(isnan(color)) ? 0.0 : min(color, 65000.0);
+
+                #ifdef _SCREEN_SPACE_OCCLUSION
+                // URP lit shaders apply SSAO themselves, the path traced image doesn't separate direct
+                // and indirect light so it's applied to everything, like the After Opaque mode does
+                float2 screenUV = input.positionCS.xy / _ScaledScreenParams.xy;
+                float ao = _ScreenSpaceOcclusionTexture.SampleLevel(sampler_ScreenSpaceOcclusionTexture, screenUV, 0).x;
+                color *= saturate(ao + (1.0 - _AmbientOcclusionParam.x));
+                #endif
 
                 #ifdef UNITY_COLORSPACE_GAMMA
                 color = LinearToGammaSpace(color);
