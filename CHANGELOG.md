@@ -10,8 +10,6 @@
 - Added a progress bar for the UV packer
 - Environment lighting now follows the Source set in the lighting window instead of always using the skybox material
   - Skybox, Gradient and Color are supported, Gradient is generated from the sky, equator and ground colors
-  - The intensity multiplier only applies to the Skybox source, same as Unity
-  - The skybox reflection still uses the skybox material
 
 # v0.13.0
 
