@@ -243,7 +243,11 @@ namespace Glim
                 }
 
                 float radiusOrAngle = light.type == LightType.Directional ?
+#if UNITY_6000_6_OR_NEWER
+                    Mathf.Deg2Rad * light.shadowAngle : light.shapeRadius;
+#else
                     Mathf.Deg2Rad * light.shadowAngle : light.shadowRadius;
+#endif
 
                 var l = new Bindings.Light
                 {

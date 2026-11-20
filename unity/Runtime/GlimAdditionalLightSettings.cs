@@ -47,10 +47,15 @@ namespace Glim
                 Gizmos.DrawLine(Vector3.zero, new Vector3(0f, -radius, range));
             }
 
-            if ((light.type == LightType.Spot || light.type == LightType.Point) && light.shadowRadius > 0.0f)
+#if UNITY_6000_6_OR_NEWER
+            float shapeRadius = light.shapeRadius;
+#else
+            float shapeRadius = light.shadowRadius;
+#endif
+            if ((light.type == LightType.Spot || light.type == LightType.Point) && shapeRadius > 0.0f)
             {
                 Gizmos.color = Color.gray;
-                Gizmos.DrawWireSphere(transform.position, light.shadowRadius);
+                Gizmos.DrawWireSphere(transform.position, shapeRadius);
             }
 
         }

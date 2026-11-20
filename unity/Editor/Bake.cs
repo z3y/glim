@@ -227,7 +227,11 @@ namespace Glim
                 l.up = ul.transform.up;
                 l.cast_shadows = ul.shadows == LightShadows.None ? (byte)0 : (byte)1;
 
+#if UNITY_6000_6_OR_NEWER
+                float radiusOrAngle = ul.type == LightType.Directional ? Mathf.Deg2Rad * ul.shadowAngle : ul.shapeRadius;
+#else
                 float radiusOrAngle = ul.type == LightType.Directional ? Mathf.Deg2Rad * ul.shadowAngle : ul.shadowRadius;
+#endif
                 l.shadow_radius_or_angle = radiusOrAngle;
 
                 if (ul.type == LightType.Spot)

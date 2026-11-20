@@ -4,6 +4,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using UnityEditor;
 using UnityEditor.Overlays;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Glim
 {
@@ -18,6 +19,7 @@ namespace Glim
         const double ResizeDelay = 0.15;
         const string ScalePrefKey = "Glim.PreviewWindow.Scale";
         const string ShaderPath = "Packages/io.github.z3y.glim/Editor/ScenePreview.shader";
+        static readonly int ZWriteId = Shader.PropertyToID("_ZWrite");
 
         internal static readonly float[] Scales = { 1f, 0.75f, 0.5f, 0.25f };
         internal static readonly string[] ScaleNames = { "100%", "75%", "50%", "25%" };
@@ -306,6 +308,15 @@ namespace Glim
             }
 
             _material.mainTexture = _texture;
+
+            // Built-in: last opaque queue. Post Processing v2 composites forward AO after the opaques and skybox,
+            // before transparents, so the quad has to be drawn before that. Near depth hides the skybox and scene
+            // transparents that would otherwise draw over it, the camera depth texture (AO, DoF) is already
+            // rendered by then (forward depth pass, deferred G-buffer copy) so it keeps the scene depth.
+            // SRPs: overlay queue without depth, URP can copy the depth texture after the opaques.
+            bool builtIn = GraphicsSettings.currentRenderPipeline == null;
+            _material.renderQueue = builtIn ? (int)RenderQueue.GeometryLast : (int)RenderQueue.Overlay;
+            _material.SetFloat(ZWriteId, builtIn ? 1f : 0f);
 
             // queued for this camera's next render only, which happens right after this callback
             Graphics.DrawMesh(_quad, Matrix4x4.identity, _material, 0, sceneView.camera, 0, null, false, false, false);

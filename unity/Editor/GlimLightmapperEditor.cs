@@ -384,7 +384,11 @@ namespace Glim
                     mpb.SetColor("_LightColor", l.color);//todo temperature
                     mpb.SetFloat("_LightIntensity", l.intensity);
 
+#if UNITY_6000_6_OR_NEWER
+                    float r = Mathf.Max(l.shapeRadius, 0.002f) * 2.0f;
+#else
                     float r = Mathf.Max(l.shadowRadius, 0.002f) * 2.0f;
+#endif
 
                     if (l.type == LightType.Point)
                     {
