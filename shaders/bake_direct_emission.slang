@@ -17,6 +17,9 @@ struct PushConstants
     float *lightmap;
     float4 *lightTree;
     uint *primitiveToLeaf;
+
+    // spectral rendering: irradiance times the texel's albedo, see SpectralAlbedoCorrection
+    float *reflected;
 };
 
 [shader("compute")]
@@ -127,6 +130,20 @@ void main(uint3 threadID: SV_DispatchThreadID)
     }
 
     ValidateSampleColor(color);
+
+    if (SpectralEnabled())
+    {
+        float3 albedo = 0.0;
+        bool hasAlbedo = TexelAlbedo(index, albedo);
+        float u = SpectralU(hash_uint2(index, 0x9e3779b9u), sampleIndex);
+        float3 reflected = ReflectedAtTexel(color.rgb, hasAlbedo, albedo, u) * sampleScale;
+        if (all(isfinite(reflected)))
+        {
+            Push.reflected[index * 3 + 0] += reflected.x;
+            Push.reflected[index * 3 + 1] += reflected.y;
+            Push.reflected[index * 3 + 2] += reflected.z;
+        }
+    }
 
     float *lightmap = Push.lightmap;
 

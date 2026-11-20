@@ -1849,7 +1849,12 @@ fn init_samples(app: &Glim, visibility_texels_count: usize) {
     shader.destroy(&app.vk);
 }
 
-fn bake_direct_emission(app: &mut Glim, visibility_texels_count: usize, lightmap: &Buffer) {
+fn bake_direct_emission(
+    app: &mut Glim,
+    visibility_texels_count: usize,
+    lightmap: &Buffer,
+    reflected: &Buffer,
+) {
     if is_cancelled() {
         return;
     }
@@ -1873,6 +1878,8 @@ fn bake_direct_emission(app: &mut Glim, visibility_texels_count: usize, lightmap
         pub lightmap: vk::DeviceAddress,
         pub light_tree: vk::DeviceAddress,
         pub primitive_to_leaf: vk::DeviceAddress,
+
+        pub reflected: vk::DeviceAddress,
     }
 
     let shader_bindings = ShaderBindings {
@@ -1907,6 +1914,7 @@ fn bake_direct_emission(app: &mut Glim, visibility_texels_count: usize, lightmap
         lightmap: lightmap.gpu_address,
         light_tree: app.light_tree_nodes.gpu_address,
         primitive_to_leaf: app.primitive_to_leaf.gpu_address,
+        reflected: reflected.gpu_address,
     };
 
     let groups_x = (visibility_texels_count as u32 + 63) / 64;
@@ -1964,7 +1972,7 @@ fn bake_direct_lights(
     samples: u32,
     mixed: bool,
     lightmap: &Buffer,
-    spectral_bins: &Buffer,
+    reflected: &Buffer,
 ) {
     if lights_count == 0 {
         return;
@@ -1984,7 +1992,7 @@ fn bake_direct_lights(
         pub mixed: u32,
 
         pub lightmap: vk::DeviceAddress,
-        pub spectral_bins: vk::DeviceAddress,
+        pub reflected: vk::DeviceAddress,
 
         pub lights: vk::DeviceAddress,
         pub lights_start: u32,
@@ -2022,7 +2030,7 @@ fn bake_direct_lights(
         max_samples: samples,
         mixed: mixed as u32,
         lightmap: lightmap.gpu_address,
-        spectral_bins: spectral_bins.gpu_address,
+        reflected: reflected.gpu_address,
         lights: app.gpu_lights.gpu_address,
         lights_start: lights_start as u32,
         lights_end: (lights_start + lights_count) as u32,
@@ -2082,7 +2090,7 @@ fn bake_indirect(
     mixed_count: usize,
     compaction_buffer: &Buffer,
     lightmaps_info: &Buffer,
-    spectral_bins: &Buffer,
+    reflected: &Buffer,
 ) {
     if app.config.bounce_count == 0 {
         return;
@@ -2126,7 +2134,7 @@ fn bake_indirect(
         app.config.direct_light_samples,
         true,
         &indirect_buffer,
-        spectral_bins,
+        reflected,
     );
 
     #[repr(C, align(16))]
@@ -2143,8 +2151,6 @@ fn bake_indirect(
 
         pub lightmaps_info: vk::DeviceAddress,
         pub lightmap: vk::DeviceAddress,
-
-        pub spectral_bins: vk::DeviceAddress,
     }
 
     let shader_bindings = ShaderBindings {
@@ -2182,7 +2188,6 @@ fn bake_indirect(
         compaction: compaction_buffer.gpu_address,
         lightmaps_info: lightmaps_info.gpu_address,
         lightmap: lightmap.gpu_address,
-        spectral_bins: spectral_bins.gpu_address,
     };
 
     let bounce_samples: Vec<u32> = (0..app.config.bounce_count)
@@ -2245,13 +2250,130 @@ fn bake_indirect(
     indirect_buffer.destroy(&app.vk);
 }
 
+/// Indirect light with spectral rendering, path traced per texel with hero wavelengths
+/// (bake_indirect_spectral.slang) instead of the RGB bounce buffer. Mixed lights are part of the paths.
+fn bake_indirect_spectral(
+    app: &mut Glim,
+    lightmap: &Buffer,
+    reflected: &Buffer,
+    visibility_texels_count: usize,
+) {
+    if app.config.bounce_count == 0 || app.config.indirect_samples == 0 {
+        return;
+    }
+
+    #[repr(C, align(16))]
+    pub struct PushConstants {
+        pub rt: RayTracingData,
+
+        pub compacted_count: u32,
+        pub sample_index: u32,
+        pub sample_count: u32,
+        pub bounce_count: u32,
+
+        pub light_count: u32,
+        pub pad0: u32,
+
+        pub lightmap: vk::DeviceAddress,
+        pub reflected: vk::DeviceAddress,
+
+        pub lights: vk::DeviceAddress,
+        pub light_tree: vk::DeviceAddress,
+        pub primitive_to_leaf: vk::DeviceAddress,
+    }
+
+    let shader_bindings = ShaderBindings {
+        tlas: app.tlas.acceleration_structure,
+        albedos: &app.albedo_array.views(),
+        emissions: &app.emission_array.views(),
+        skybox: app.skybox.view(),
+        skybox_sampler: app.skybox.sampler(),
+        visibility: vk::ImageView::null(),
+        preview_diffuse: vk::ImageView::null(),
+        cookies: &app.cookie_array.views(),
+        alphas: &app.alphas_array.views(),
+        linear_sampler: app.linear_sampler,
+        spectral: app.spectral_tables.buffer,
+    };
+
+    let mut shader = load_compute_shader(
+        &app.vk,
+        ShaderName::BakeIndirectSpectral,
+        &app.constants,
+        &shader_bindings,
+        size_of::<PushConstants>(),
+    );
+    update_compute_shader(&app.vk, &shader, &shader_bindings);
+
+    let samples = app.config.indirect_samples;
+    let mut push = PushConstants {
+        rt: app.rt_data(),
+        compacted_count: visibility_texels_count as u32,
+        sample_index: 0,
+        sample_count: samples,
+        bounce_count: app.config.bounce_count,
+        light_count: app.cpu_lights.len() as u32,
+        pad0: 0,
+        lightmap: lightmap.gpu_address,
+        reflected: reflected.gpu_address,
+        lights: app.gpu_lights.gpu_address,
+        light_tree: app.light_tree_nodes.gpu_address,
+        primitive_to_leaf: app.primitive_to_leaf.gpu_address,
+    };
+
+    Log::msg(&format!(
+        "Baking Indirect, path traced spectral ({} bounces, {} samples)",
+        app.config.bounce_count, samples
+    ));
+
+    let groups_x = (visibility_texels_count as u32 + 63) / 64;
+    let start = Instant::now();
+
+    for sample_index in 0..samples {
+        if is_cancelled() {
+            break;
+        }
+        push.sample_index = sample_index;
+        Log::progress(sample_index as f32 / samples as f32);
+
+        let push_bytes = as_bytes(&push);
+        let vk = &app.vk.device;
+        let cmd = app.vk.begin_single_use_cmd();
+        unsafe {
+            vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+            vk.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                shader.pipeline_layout,
+                0,
+                &[shader.descriptor_set],
+                &[],
+            );
+            vk.cmd_push_constants(
+                cmd,
+                shader.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &push_bytes,
+            );
+            vk.cmd_dispatch(cmd, groups_x, 1, 1);
+        };
+        app.vk.end_single_use_cmd(cmd);
+    }
+
+    app.benchmarks
+        .push(("Indirect Spectral Bake", start.elapsed().as_secs_f32()));
+
+    shader.destroy(&app.vk);
+}
+
 /// Rescales the baked irradiance so Unity's runtime `albedo * lightmap` (per RGB channel)
 /// gives the spectral product of irradiance and albedo, see spectral_albedo_correction.slang.
 fn apply_spectral_albedo_correction(
     app: &mut Glim,
     texels_count: usize,
     lightmap: &Buffer,
-    spectral_bins: &Buffer,
+    reflected: &Buffer,
 ) {
     if !app.config.spectral_rendering || texels_count == 0 || is_cancelled() {
         return;
@@ -2267,7 +2389,7 @@ fn apply_spectral_albedo_correction(
         pub pad1: u32,
 
         pub lightmap: vk::DeviceAddress,
-        pub spectral_bins: vk::DeviceAddress,
+        pub reflected: vk::DeviceAddress,
     }
 
     let shader_bindings = ShaderBindings {
@@ -2300,7 +2422,7 @@ fn apply_spectral_albedo_correction(
         pad0: 0,
         pad1: 0,
         lightmap: lightmap.gpu_address,
-        spectral_bins: spectral_bins.gpu_address,
+        reflected: reflected.gpu_address,
     };
     let push_bytes = as_bytes(&push);
     let groups_x = (texels_count as u32 + 63) / 64;
@@ -2715,25 +2837,26 @@ fn render_lightmaps(app: &mut Glim) {
     );
     zero_buffer(&app.vk, &lightmap_texels);
 
-    // direct irradiance from lights with a spectrum, spectral::BINS per texel, see SpectralBins.
-    // A single dummy bin without light spectra, the shaders don't touch it then.
-    let spectral_bins_count = if app.constants.light_spectra_count > 0 {
-        texels_count * spectral::BINS
+    // Spectral rendering: the lightmap irradiance times each texel's albedo, multiplied spectrally,
+    // RGB per texel, for the albedo correction. A single dummy texel without spectral rendering,
+    // the shaders don't touch it then.
+    let reflected_count = if app.config.spectral_rendering {
+        texels_count * 3
     } else {
-        1
+        3
     };
-    let mut spectral_bins = Buffer::empty(
+    let mut reflected = Buffer::empty(
         &app.vk,
-        "Spectral Bins".to_owned(),
-        (spectral_bins_count * mem::size_of::<f32>()) as u64,
+        "Spectral Reflected".to_owned(),
+        (reflected_count * mem::size_of::<f32>()) as u64,
         vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     );
-    zero_buffer(&app.vk, &spectral_bins);
+    zero_buffer(&app.vk, &reflected);
 
     init_samples(app, texels_count);
 
-    bake_direct_emission(app, texels_count, &lightmap_texels);
+    bake_direct_emission(app, texels_count, &lightmap_texels, &reflected);
 
     let export_debug_textures = false;
 
@@ -2770,7 +2893,7 @@ fn render_lightmaps(app: &mut Glim) {
         app.config.direct_light_samples,
         false,
         &lightmap_texels,
-        &spectral_bins,
+        &reflected,
     );
 
     Log::msg(&format!("Baking {} Area Lights", area_count));
@@ -2782,19 +2905,23 @@ fn render_lightmaps(app: &mut Glim) {
         app.config.direct_emission_samples,
         false,
         &lightmap_texels,
-        &spectral_bins,
+        &reflected,
     );
 
-    bake_indirect(
-        app,
-        &lightmap_texels,
-        texels_count,
-        mixed_start,
-        mixed_count,
-        &compaction_buffer,
-        &lightmaps_info,
-        &spectral_bins,
-    );
+    if app.config.spectral_rendering {
+        bake_indirect_spectral(app, &lightmap_texels, &reflected, texels_count);
+    } else {
+        bake_indirect(
+            app,
+            &lightmap_texels,
+            texels_count,
+            mixed_start,
+            mixed_count,
+            &compaction_buffer,
+            &lightmaps_info,
+            &reflected,
+        );
+    }
 
     let mut readback_buffer = Buffer::empty(
         &app.vk,
@@ -2826,9 +2953,9 @@ fn render_lightmaps(app: &mut Glim) {
     }
 
     // only the exported copy, light probes still bounce off the physical irradiance
-    apply_spectral_albedo_correction(app, texels_count, &readback_buffer, &spectral_bins);
-    spectral_bins.destroy(&app.vk);
-    drop(spectral_bins);
+    apply_spectral_albedo_correction(app, texels_count, &readback_buffer, &reflected);
+    reflected.destroy(&app.vk);
+    drop(reflected);
 
     let readback_buffer_slice: &[f32] = unsafe {
         std::slice::from_raw_parts(

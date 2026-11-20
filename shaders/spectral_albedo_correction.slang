@@ -2,9 +2,9 @@
 
 // Lightmaps store irradiance and Unity multiplies the albedo in at runtime, per RGB channel.
 // This rescales each texel's irradiance so that the runtime RGB multiply gives the spectral
-// product of the irradiance and the texel's albedo (like the spectral preview), see
-// SpectralAlbedoCorrection. Runs on the readback copy, the bake buffer keeps the physical
-// irradiance for light probe bounces.
+// product of the irradiance and the texel's albedo (like the spectral preview). The bake passes
+// accumulate that product next to the lightmap, see SpectralAlbedoCorrection.
+// Runs on the readback copy, the bake buffer keeps the physical irradiance for light probe bounces.
 
 [[vk::push_constant]]
 PushConstants Push;
@@ -19,13 +19,13 @@ struct PushConstants
     uint pad1;
 
     float *lightmap;
-    // direct irradiance from lights with a spectrum, see SpectralBins
-    float *spectralBins;
+    // irradiance times the texel's albedo, multiplied spectrally
+    float *reflected;
 };
 
-float3 LoadTexel(uint index)
+float3 LoadTexel(float *buffer, uint index)
 {
-    return float3(Push.lightmap[index * 3 + 0], Push.lightmap[index * 3 + 1], Push.lightmap[index * 3 + 2]);
+    return float3(buffer[index * 3 + 0], buffer[index * 3 + 1], buffer[index * 3 + 2]);
 }
 
 void StoreTexel(uint index, float3 value)
@@ -46,34 +46,23 @@ void main(uint3 threadID: SV_DispatchThreadID)
         return;
     }
 
-    float4 visibility = Push.rt.visibility[index];
-    bool moved = asuint(visibility.w) != 0u;
-    if (moved)
+    // per sample out of gamut values can leave a slightly negative average
+    float3 irradiance = max(LoadTexel(Push.lightmap, index), 0.0);
+
+    float3 albedo = 0.0;
+    float3 factor = 1.0;
+    // moved texels only store a position, their surface is unknown
+    if (TexelAlbedo(index, albedo))
     {
-        // only a position is stored for moved texels, their surface is unknown
-        return;
+        factor = SpectralAlbedoCorrection(irradiance, LoadTexel(Push.reflected, index), albedo);
     }
 
-    float2 bary = visibility.xy;
-    uint primitiveID = asuint(visibility.z);
-    bool frontFace = index < BACKFACE_TEXEL_START;
+    StoreTexel(index, irradiance * factor);
 
-    Surface surface = Surface::Get(primitiveID, bary, frontFace);
-    float3 albedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
-
-    float3 irradiance = LoadTexel(index);
-    SpectralBins bins = SpectralBins::Load(Push.spectralBins, index);
-    float3 factor = SpectralAlbedoCorrection(irradiance, bins, albedo);
-
-    if (any(factor != 1.0))
+    if (Push.combinedSH != 0)
     {
-        StoreTexel(index, irradiance * factor);
-
-        if (Push.combinedSH != 0)
-        {
-            // L0 of the SH lightmap, L1 is stored as luminance and stays as is
-            uint indexL0 = index + Push.texelCount;
-            StoreTexel(indexL0, LoadTexel(indexL0) * factor);
-        }
+        // L0 of the SH lightmap, L1 is stored as luminance and stays as is
+        uint indexL0 = index + Push.texelCount;
+        StoreTexel(indexL0, max(LoadTexel(Push.lightmap, indexL0), 0.0) * factor);
     }
 }

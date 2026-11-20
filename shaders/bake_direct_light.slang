@@ -14,8 +14,8 @@ struct PushConstants
     uint mixed;
 
     float *lightmap;
-    // SPECTRAL_BINS per texel, irradiance from lights with a spectrum, see SpectralBins
-    float *spectralBins;
+    // spectral rendering: irradiance times the texel's albedo, see SpectralAlbedoCorrection
+    float *reflected;
 
     Light *lights;
     uint lightsStart;
@@ -52,7 +52,12 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
-    SpectralBins spectralBins = SpectralBins::Zero();
+
+    // mixed lights only feed the RGB bounce buffer, their direct light is realtime
+    bool spectral = SpectralEnabled() && !mixed;
+    float3 reflected = 0.0;
+    float3 albedo = 0.0;
+    bool hasAlbedo = spectral && TexelAlbedo(index, albedo);
 
     Light *lights = Push.lights;
     for (uint lightIndex = lightsStart; lightIndex < lightsEnd; lightIndex++)
@@ -66,19 +71,21 @@ void main(uint3 threadID: SV_DispatchThreadID)
         dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
 
-        float spectralLuminance = Luminance(current * NoL * sampleScale);
-        if (HasLightSpectrum(light.spectrum) && isfinite(spectralLuminance) && spectralLuminance > 0.0)
+        if (spectral)
         {
-            spectralBins.AddLight(light.spectrum, spectralLuminance);
+            // same wavelengths as the shadow ray in ShadeLightDirect
+            float u = SpectralUFromSample(xi, light.data0);
+            reflected += ReflectedAtTexel(current * NoL, hasAlbedo, albedo, u, light.spectrum);
         }
     }
 
     ValidateSampleColor(color);
 
-    // mixed lights go to the bounce buffer, their direct light is realtime
-    if (LIGHT_SPECTRA_COUNT > 0 && !mixed)
+    if (spectral && all(isfinite(reflected)))
     {
-        spectralBins.Add(Push.spectralBins, index);
+        Push.reflected[index * 3 + 0] += reflected.x * sampleScale;
+        Push.reflected[index * 3 + 1] += reflected.y * sampleScale;
+        Push.reflected[index * 3 + 2] += reflected.z * sampleScale;
     }
 
     float *lightmap = Push.lightmap;

@@ -20,9 +20,8 @@
 //!   [0, SAMPLING_ENTRIES)                          wavelength sampling table
 //!   [SAMPLING_ENTRIES, SAMPLING_ENTRIES + RES^3)   sRGB -> Fourier sRGB moments (c0, c1, c2, 0),
 //!                                                  indexed by sRGB encoded coordinates, x = red
-//!   [.., + BINS)                                   rgb weight of each bin (rgb, 0)
 //!   [.., + LIGHT_SPECTRUM_STRIDE * lights)         per light spectrum: value at every sampling
-//!                                                  entry (4 per float4), then each bin's mean
+//!                                                  entry (4 per float4)
 
 use std::f64::consts::PI;
 use std::sync::OnceLock;
@@ -33,12 +32,8 @@ use rayon::prelude::*;
 pub const SAMPLING_ENTRIES: usize = 1024;
 /// must match spectral.slang
 pub const LUT_RESOLUTION: usize = 32;
-/// Spectral irradiance of lights with a spectrum is stored per texel in this many bins,
-/// each a contiguous range of sampling entries. must match spectral.slang
-pub const BINS: usize = 16;
-const ENTRIES_PER_BIN: usize = SAMPLING_ENTRIES / BINS;
-/// float4s per light spectrum: values at the sampling entries, then the bin means
-const LIGHT_SPECTRUM_STRIDE: usize = SAMPLING_ENTRIES / 4 + BINS / 4;
+/// float4s per light spectrum, its value at each sampling entry. must match spectral.slang
+const LIGHT_SPECTRUM_STRIDE: usize = SAMPLING_ENTRIES / 4;
 /// Reflectances are solved for `DELTA + (1 - 2 * DELTA) * rgb` to stay away from the
 /// singular boundary of the moment space (constant 0 or 1 spectra). The shader undoes it.
 /// must match spectral.slang
@@ -241,30 +236,37 @@ impl LightSpectrum {
     }
 }
 
-/// Importance samples a mix of D65 (all RGB emitters) and the light spectra of the scene,
-/// so narrow emission lines (sodium, mercury) get enough samples, see part 2 of the article.
-fn build_sampling(n: usize, lights: &[LightSpectrum]) -> Vec<SpectralSample> {
-    let lights: Vec<&LightSpectrum> = lights.iter().filter(|l| l.rgb.is_some()).collect();
-
+/// Density the sampling table follows: D65 for all RGB emitters, mixed with the
+/// light spectra of the scene by light_share
+fn emitter_density(lights: &[&LightSpectrum], light_share: f64) -> impl Fn(f64) -> f64 {
     let base_norm = integrate(|lambda| cmf_abs_sum(lambda) * d65(lambda));
     let light_norms: Vec<f64> = lights
         .iter()
         .map(|l| integrate(|lambda| cmf_abs_sum(lambda) * l.power_at(lambda)).max(1e-30))
         .collect();
+    let light_share = if lights.is_empty() { 0.0 } else { light_share };
 
-    // half D65, the other half split between the light spectra, each part normalized
-    let density = |lambda: f64| -> f64 {
+    move |lambda: f64| -> f64 {
         let base = cmf_abs_sum(lambda) * d65(lambda) / base_norm;
-        if lights.is_empty() {
-            return base;
-        }
         let mut mix = 0.0;
         for (l, norm) in lights.iter().zip(&light_norms) {
             mix += cmf_abs_sum(lambda) * l.power_at(lambda) / norm;
         }
-        0.5 * base + 0.5 * mix / lights.len() as f64
-    };
-    let pdf = Cdf::new(density);
+        if !lights.is_empty() {
+            mix /= lights.len() as f64;
+        }
+        (1.0 - light_share) * base + light_share * mix
+    }
+}
+
+/// Importance samples a mix of D65 (all RGB emitters) and the light spectra of the scene,
+/// so narrow emission lines (sodium, mercury) get enough samples, see part 2 of the article.
+fn build_sampling(n: usize, lights: &[LightSpectrum]) -> Vec<SpectralSample> {
+    let lights: Vec<&LightSpectrum> = lights.iter().filter(|l| l.rgb.is_some()).collect();
+
+    // half D65, the other half split between the light spectra
+    let density = emitter_density(&lights, 0.5);
+    let pdf = Cdf::new(&density);
 
     let mut samples: Vec<SpectralSample> = (0..n)
         .map(|i| {
@@ -594,7 +596,7 @@ pub fn gpu_data(lights: &[LightSpectrum]) -> Vec<[f32; 4]> {
     let sampling = build_sampling(SAMPLING_ENTRIES, lights);
 
     let mut data = Vec::with_capacity(
-        SAMPLING_ENTRIES + tables.moments.len() + BINS + lights.len() * LIGHT_SPECTRUM_STRIDE,
+        SAMPLING_ENTRIES + tables.moments.len() + lights.len() * LIGHT_SPECTRUM_STRIDE,
     );
 
     for s in &sampling {
@@ -605,29 +607,11 @@ pub fn gpu_data(lights: &[LightSpectrum]) -> Vec<[f32; 4]> {
         data.push([m[0] as f32, m[1] as f32, m[2] as f32, 0.0]);
     }
 
-    // rgb weight of each bin, rgb = sum over bins of value * weight for a binned spectrum
-    for bin in sampling.chunks(ENTRIES_PER_BIN) {
-        let mut weight = [0.0f64; 3];
-        for s in bin {
-            for c in 0..3 {
-                weight[c] += s.weight[c] / SAMPLING_ENTRIES as f64;
-            }
-        }
-        data.push([weight[0] as f32, weight[1] as f32, weight[2] as f32, 0.0]);
-    }
-
-    // per light: value at each sampling entry (4 per float4), then the mean of each bin
+    // per light: value at each sampling entry (4 per float4)
     for light in lights {
         let values: Vec<f32> = sampling.iter().map(|s| light.relative(s.lambda) as f32).collect();
         for v in values.chunks(4) {
             data.push([v[0], v[1], v[2], v[3]]);
-        }
-        let means: Vec<f32> = values
-            .chunks(ENTRIES_PER_BIN)
-            .map(|bin| bin.iter().sum::<f32>() / bin.len() as f32)
-            .collect();
-        for m in means.chunks(4) {
-            data.push([m[0], m[1], m[2], m[3]]);
         }
     }
 
@@ -687,6 +671,86 @@ mod tests {
         let white = spectrum_to_rgb(&sampling, [1e9, 0.0, 0.0]);
         for c in 0..3 {
             assert!((white[c] - 1.0).abs() < 1e-6, "{white:?}");
+        }
+    }
+
+    /// exact sRGB of a D65 lit product of spectra given relative to D65, white balanced like the table
+    fn exact_rgb(f: impl Fn(f64) -> f64) -> [f64; 3] {
+        let mut rgb = [0.0; 3];
+        for c in 0..3 {
+            let white = integrate(|lambda| cie_rgb(lambda)[c] * d65(lambda));
+            rgb[c] = integrate(|lambda| f(lambda) * cie_rgb(lambda)[c] * d65(lambda)) / white;
+        }
+        rgb
+    }
+
+    fn saturated_colors() -> Vec<[f64; 3]> {
+        vec![
+            [0.0, srgb_to_linear(0xBE as f64 / 255.0), 1.0], // #00BEFF
+            [0.05, 0.9, 0.05],
+            [0.9, 0.05, 0.02],
+            [0.9, 0.35, 0.02],
+            [0.02, 0.05, 0.8],
+            [0.6, 0.6, 0.6],
+        ]
+    }
+
+    /// What the hero wavelength estimator converges to: the mean over all table entries
+    fn table_rgb(samples: &[SpectralSample], f: impl Fn(&SpectralSample) -> f64) -> [f64; 3] {
+        let mut rgb = [0.0; 3];
+        for s in samples {
+            let v = f(s);
+            for c in 0..3 {
+                rgb[c] += s.weight[c] * v / samples.len() as f64;
+            }
+        }
+        rgb
+    }
+
+    /// white light bouncing off two colored surfaces, the sampling table against exact integration
+    #[test]
+    fn spectral_table_bounce_accuracy() {
+        let samples = build_sampling(SAMPLING_ENTRIES, &[]);
+
+        let lagranges: Vec<[f64; 3]> = saturated_colors()
+            .iter()
+            .map(|rgb| solve_lagrange(&samples, rgb.map(|v| DELTA + (1.0 - 2.0 * DELTA) * v)))
+            .collect();
+
+        for (i, a) in lagranges.iter().enumerate() {
+            for (j, b) in lagranges.iter().enumerate() {
+                let exact = exact_rgb(|lambda| {
+                    let phase = wavelength_to_phase(lambda);
+                    bounded_mese(*a, phase) * bounded_mese(*b, phase)
+                });
+                let table = table_rgb(&samples, |s| bounded_mese(*a, s.phase) * bounded_mese(*b, s.phase));
+                for c in 0..3 {
+                    assert!((table[c] - exact[c]).abs() < 0.01, "colors {i} x {j}: table {table:?} exact {exact:?}");
+                }
+            }
+        }
+    }
+
+    /// sodium like line light on colored surfaces, with the line mixed into the sampling table
+    #[test]
+    fn spectral_table_line_light() {
+        let line: Vec<f32> = (0..=470)
+            .map(|i| {
+                let lambda = LAMBDA_MIN as f32 + i as f32;
+                (-0.5 * ((lambda - 589.3) / 2.0).powi(2)).exp()
+            })
+            .collect();
+        let lights = [LightSpectrum::from_samples(&line)];
+        let light = &lights[0];
+        let samples = build_sampling(SAMPLING_ENTRIES, &lights);
+
+        for color in saturated_colors() {
+            let a = solve_lagrange(&build_sampling(SAMPLING_ENTRIES, &[]), color.map(|v| DELTA + (1.0 - 2.0 * DELTA) * v));
+            let exact = exact_rgb(|lambda| light.relative(lambda) * bounded_mese(a, wavelength_to_phase(lambda)));
+            let table = table_rgb(&samples, |s| light.relative(s.lambda) * bounded_mese(a, s.phase));
+            for c in 0..3 {
+                assert!((table[c] - exact[c]).abs() < 0.02, "{color:?}: table {table:?} exact {exact:?}");
+            }
         }
     }
 

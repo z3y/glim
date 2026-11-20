@@ -46,6 +46,11 @@ fn main() {
     });
 
     shaders.push(Shader {
+        src: "bake_indirect_spectral.slang".into(),
+        dst: "bake_indirect_spectral.spv".into(),
+    });
+
+    shaders.push(Shader {
         src: "adjust_probes.slang".into(),
         dst: "adjust_probes.spv".into(),
     });

@@ -9,25 +9,22 @@
 // into Lagrange multipliers in closed form and the reflectance at phase phi in [-pi, 0] is
 //   a(phi) = atan(L0 + 2 L1 cos(phi) + 2 L2 cos(2 phi)) / pi + 1/2
 //
-// RGB emitters (lights, emission, skybox, the irradiance carried between bounces) are
-// scale * reflectance * D65. Lights can instead have a spectrum (sodium, fluorescent, ...),
-// stored relative to D65. All emitters share the D65 part, so one wavelength sampling table stores
-// (r, g, b) * D65 / pdf next to the phase. Its density mixes D65 with the light spectra of the scene
-// so emission lines get sampled. 4 stratified hero wavelengths are used per estimate, results are
-// accumulated as RGB.
+// RGB emitters (lights, emission, skybox) are scale * reflectance * D65. Lights can instead have
+// a spectrum (sodium, fluorescent, ...), stored relative to D65. All emitters share the D65 part,
+// so one wavelength sampling table stores (r, g, b) * D65 / pdf next to the phase. Its density
+// mixes D65 with the light spectra of the scene so emission lines get sampled. 4 stratified hero
+// wavelengths are used per estimate, results are accumulated as RGB.
 //
-// The lightmap is RGB and so is the bounce buffer, spectral products only happen where two
-// colors are multiplied: irradiance with albedo at a bounce and light with tinted transparency.
-// Products where one side is gray are exact in RGB and skip the spectral path, which also avoids
-// adding color noise there. Direct light from lights with a spectrum is additionally kept per
-// texel in SPECTRAL_BINS bins, so the first bounce and the albedo correction still see their lines.
+// Baking with spectral rendering: direct light is RGB except where colors multiply (tinted
+// transparency), indirect light is path traced with hero wavelengths (bake_indirect_spectral).
+// Lightmaps store irradiance and Unity multiplies the albedo in RGB at runtime, so every pass
+// also accumulates the irradiance times the texel's own albedo, spectrally, and
+// SpectralAlbedoCorrection rescales the lightmap so the runtime product matches it.
 //
 // Tables are built in spectral.rs, the layout must match:
-//   [0, SPECTRAL_SAMPLING_ENTRIES)    (r, g, b weight, phase)
-//   [SPECTRAL_LUT_BASE, + RES^3)      moments (c0, c1, c2, 0), sRGB encoded coordinates, x = red
-//   [SPECTRAL_BIN_WEIGHTS_BASE, + 16) rgb weight of each bin
-//   [SPECTRAL_LIGHT_SPECTRA_BASE, ..) per light spectrum: value at each sampling entry
-//                                     (4 per float4), then the mean of each bin
+//   [0, SPECTRAL_SAMPLING_ENTRIES)      (r, g, b weight, phase)
+//   [SPECTRAL_LUT_BASE, + RES^3)        moments (c0, c1, c2, 0), sRGB encoded coordinates, x = red
+//   [SPECTRAL_LIGHT_SPECTRA_BASE, ..)   per light spectrum: value at each sampling entry (4 per float4)
 
 #include "constants.slang"
 #include "util.slang"
@@ -39,13 +36,10 @@ static const uint SPECTRAL_SAMPLING_ENTRIES = 1024;
 static const uint SPECTRAL_LUT_RESOLUTION = 32;
 static const float SPECTRAL_DELTA = 0.002;
 static const uint SPECTRAL_WAVELENGTHS = 4;
-static const uint SPECTRAL_BINS = 16;
-static const uint SPECTRAL_ENTRIES_PER_BIN = SPECTRAL_SAMPLING_ENTRIES / SPECTRAL_BINS;
 
 static const uint SPECTRAL_LUT_BASE = SPECTRAL_SAMPLING_ENTRIES;
-static const uint SPECTRAL_BIN_WEIGHTS_BASE = SPECTRAL_LUT_BASE + SPECTRAL_LUT_RESOLUTION * SPECTRAL_LUT_RESOLUTION * SPECTRAL_LUT_RESOLUTION;
-static const uint SPECTRAL_LIGHT_SPECTRA_BASE = SPECTRAL_BIN_WEIGHTS_BASE + SPECTRAL_BINS;
-static const uint SPECTRAL_LIGHT_SPECTRUM_STRIDE = SPECTRAL_SAMPLING_ENTRIES / 4 + SPECTRAL_BINS / 4;
+static const uint SPECTRAL_LIGHT_SPECTRA_BASE = SPECTRAL_LUT_BASE + SPECTRAL_LUT_RESOLUTION * SPECTRAL_LUT_RESOLUTION * SPECTRAL_LUT_RESOLUTION;
+static const uint SPECTRAL_LIGHT_SPECTRUM_STRIDE = SPECTRAL_SAMPLING_ENTRIES / 4;
 
 // must match lights.rs
 static const uint LIGHT_SPECTRUM_NONE = 0xFFFFFFFFu;
@@ -261,12 +255,6 @@ float LightSpectrumAt(uint spectrum, uint entry)
     return values[entry % 4];
 }
 
-// Mean of the light spectrum over bins 4 * k to 4 * k + 3
-float4 LightSpectrumBinMeans(uint spectrum, uint k)
-{
-    return SpectralTables[SPECTRAL_LIGHT_SPECTRA_BASE + spectrum * SPECTRAL_LIGHT_SPECTRUM_STRIDE + SPECTRAL_SAMPLING_ENTRIES / 4 + k];
-}
-
 // An emitter at the wavelengths of s. The color of a light with a spectrum has the spectrum's hue
 // with the light's brightness as luminance (see app_add_light), its spectrum has luminance 1.
 float4 EvalEmitter(float3 rgb, uint spectrum, SpectralSample s)
@@ -282,96 +270,6 @@ float4 EvalEmitter(float3 rgb, uint spectrum, SpectralSample s)
         LightSpectrumAt(spectrum, s.index.z),
         LightSpectrumAt(spectrum, s.index.w));
     return dot(rgb, SPECTRAL_LUMINANCE) * values;
-}
-
-// Irradiance from lights with a spectrum, binned over ranges of the sampling table.
-// Stored per texel next to the RGB lightmap, see bake_direct_light.
-struct SpectralBins
-{
-    float4 bins[SPECTRAL_BINS / 4];
-
-    static SpectralBins Zero()
-    {
-        SpectralBins b = {};
-        return b;
-    }
-
-    static SpectralBins Load(float *buffer, uint texel)
-    {
-        SpectralBins b = {};
-        if (LIGHT_SPECTRA_COUNT == 0)
-        {
-            return b;
-        }
-
-        [unroll]
-        for (uint i = 0; i < SPECTRAL_BINS; i++)
-        {
-            b.bins[i / 4][i % 4] = buffer[texel * SPECTRAL_BINS + i];
-        }
-        return b;
-    }
-
-    void Add(float *buffer, uint texel)
-    {
-        [unroll]
-        for (uint i = 0; i < SPECTRAL_BINS; i++)
-        {
-            buffer[texel * SPECTRAL_BINS + i] += bins[i / 4][i % 4];
-        }
-    }
-
-    // light with a spectrum and the given luminance
-    [mutating]
-    void AddLight(uint spectrum, float luminance)
-    {
-        [unroll]
-        for (uint k = 0; k < SPECTRAL_BINS / 4; k++)
-        {
-            bins[k] += luminance * LightSpectrumBinMeans(spectrum, k);
-        }
-    }
-
-    bool IsZero()
-    {
-        float4 sum = 0.0;
-        [unroll]
-        for (uint k = 0; k < SPECTRAL_BINS / 4; k++)
-        {
-            sum += bins[k];
-        }
-        return all(sum <= 0.0);
-    }
-
-    float At(uint entry)
-    {
-        uint bin = entry / SPECTRAL_ENTRIES_PER_BIN;
-        return bins[bin / 4][bin % 4];
-    }
-
-    float4 At(uint4 entries)
-    {
-        return float4(At(entries.x), At(entries.y), At(entries.z), At(entries.w));
-    }
-
-    float3 ToRGB()
-    {
-        float3 rgb = 0.0;
-        [unroll]
-        for (uint i = 0; i < SPECTRAL_BINS; i++)
-        {
-            rgb += bins[i / 4][i % 4] * SpectralTables[SPECTRAL_BIN_WEIGHTS_BASE + i].xyz;
-        }
-        return rgb;
-    }
-};
-
-// Irradiance spectrum at the wavelengths of s: the binned light spectra plus the rest
-// (RGB lights, emission, sky, bounces) upsampled from RGB.
-float4 EvalIrradiance(float3 irradiance, SpectralBins bins, SpectralSample s)
-{
-    float3 remainder = max(irradiance - bins.ToRGB(), 0.0);
-    return EvalEmissionSpectrum(remainder, s.phase) + bins.At(s.index);
 }
 
 // Spectral product of an emitter and an RGB reflectance, returned as RGB.
@@ -390,84 +288,50 @@ float3 SpectralMultiply(float3 emitter, float3 reflectance, float u, uint spectr
     return s.ToRGB(e * a);
 }
 
-// Same for irradiance that has binned light spectra in it
-float3 SpectralMultiply(float3 irradiance, SpectralBins bins, float3 reflectance, float u)
-{
-    if (bins.IsZero())
-    {
-        return SpectralMultiply(irradiance, reflectance, u);
-    }
-    if (!SpectralEnabled() || IsGray(reflectance))
-    {
-        return irradiance * reflectance;
-    }
-
-    SpectralSample s = SpectralSample::Create(u);
-    float4 e = EvalIrradiance(irradiance, bins, s);
-    float4 a = Reflectance::Create(reflectance).Eval(s.phase);
-    return s.ToRGB(e * a);
-}
-
 // Lightmaps store irradiance and the albedo is multiplied in at runtime, per RGB channel.
-// Returns per channel factors f so that albedo * (irradiance * f) equals the spectral product
-// of the irradiance and albedo spectra, which is what the spectral preview shows.
-// Deterministic quadrature over every 4th entry of the sampling table, no color noise.
-float3 SpectralAlbedoCorrection(float3 irradiance, SpectralBins bins, float3 albedo)
+// reflected is the irradiance times the texel's albedo, multiplied spectrally (accumulated by
+// the bake passes next to the irradiance). Returns per channel factors f so that
+// albedo * (irradiance * f) equals reflected, which is what the spectral preview shows.
+float3 SpectralAlbedoCorrection(float3 irradiance, float3 reflected, float3 albedo)
 {
-    bool binned = !bins.IsZero();
-    if (!SpectralEnabled() || (!binned && IsGray(irradiance)) || IsGray(albedo) || !any(irradiance > 0.0))
+    irradiance = max(irradiance, 0.0);
+    // a narrow spectrum can be outside the sRGB gamut, negative in a channel that can't be shown
+    reflected = max(reflected, 0.0);
+
+    if (!SpectralEnabled() || !any(irradiance > 0.0))
     {
         return 1.0;
-    }
-
-    float3 remainder = max(irradiance - bins.ToRGB(), 0.0);
-    float scale = 2.0 * max(remainder.x, max(remainder.y, remainder.z));
-    Reflectance e = Reflectance::Create(scale > 0.0 ? remainder / scale : float3(0.0));
-    Reflectance a = Reflectance::Create(albedo);
-
-    float3 product = 0.0;
-    float3 reconstructed = 0.0;
-
-    const uint STRIDE = 4;
-    [loop]
-    for (uint i = STRIDE / 2; i < SPECTRAL_SAMPLING_ENTRIES; i += STRIDE * 4)
-    {
-        uint4 entries = uint4(i, i + STRIDE, i + STRIDE * 2, i + STRIDE * 3);
-        float4 s0 = SpectralTables[entries.x];
-        float4 s1 = SpectralTables[entries.y];
-        float4 s2 = SpectralTables[entries.z];
-        float4 s3 = SpectralTables[entries.w];
-        float4 phase = float4(s0.w, s1.w, s2.w, s3.w);
-
-        float4 ev = (scale > 0.0 ? scale * e.Eval(phase) : float4(0.0)) + bins.At(entries);
-        float4 ea = ev * a.Eval(phase);
-
-        reconstructed += s0.xyz * ev.x + s1.xyz * ev.y + s2.xyz * ev.z + s3.xyz * ev.w;
-        product += s0.xyz * ea.x + s1.xyz * ea.y + s2.xyz * ea.z + s3.xyz * ea.w;
     }
 
     // dark albedo channels contribute little at runtime anyway, don't blow the irradiance up for them
     const float MIN_ALBEDO = 0.02;
     const float MAX_FACTOR = 4.0;
-    float threshold = 1e-4 * max(reconstructed.x, max(reconstructed.y, reconstructed.z));
+    float threshold = max(1e-4 * max(irradiance.x, max(irradiance.y, irradiance.z)), 1e-12);
 
     float3 factor = 1.0;
     [unroll]
     for (uint c = 0; c < 3; c++)
     {
-        if (reconstructed[c] > threshold)
+        if (irradiance[c] > threshold)
         {
-            factor[c] = max(product[c] / (reconstructed[c] * max(albedo[c], MIN_ALBEDO)), 0.0);
+            factor[c] = reflected[c] / (irradiance[c] * max(albedo[c], MIN_ALBEDO));
         }
     }
 
     // A channel the albedo zeroes out can't be restored by the runtime multiply, the hue stays off
     // there (e.g. no red for a cyan albedo). At least match the brightness of the spectral result.
-    float targetLuminance = dot(product * (irradiance / max(reconstructed, threshold)), SPECTRAL_LUMINANCE);
+    float targetLuminance = dot(reflected, SPECTRAL_LUMINANCE);
     float runtimeLuminance = dot(albedo * irradiance * factor, SPECTRAL_LUMINANCE);
-    if (runtimeLuminance > 0.0)
+    float rescale = targetLuminance / runtimeLuminance;
+    if (rescale > 0.0 && isfinite(rescale))
     {
-        factor *= targetLuminance / runtimeLuminance;
+        factor *= rescale;
+    }
+
+    // never darken a texel to black because of a degenerate case, leave it uncorrected instead
+    if (any(!isfinite(factor)) || dot(factor, SPECTRAL_LUMINANCE) <= 0.0)
+    {
+        return 1.0;
     }
 
     return clamp(factor, 0.0, MAX_FACTOR);

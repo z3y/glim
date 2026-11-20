@@ -1360,9 +1360,9 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     return color;
 }
 
-// Spectral radiance of a light at the wavelengths of s times the spectral path throughput,
-// returned as RGB. Used by the spectral preview path tracer.
-float3 ShadeLightDirectSpectral(Light light, float3 positionWS, float3 normalWS, float2 xi, SpectralSample s, float4 throughput, out float3 L, ShadowTerminator terminator)
+// Light at the wavelengths of s times the spectral path throughput, with spectral shadows.
+// Used by the spectral path tracers (preview, bake_indirect_spectral).
+float4 ShadeLightDirectSpectral(Light light, float3 positionWS, float3 normalWS, float2 xi, SpectralSample s, float4 throughput, out float3 L, ShadowTerminator terminator)
 {
     Ray shadowRay;
     bool traceShadow;
@@ -1383,7 +1383,36 @@ float3 ShadeLightDirectSpectral(Light light, float3 positionWS, float3 normalWS,
         spectrum *= TraceShadowRay(shadowRay, s).spectral;
     }
 
-    return s.ToRGB(spectrum);
+    return spectrum;
+}
+
+// Albedo of a baked texel, false for texels moved by leak detection (they only store a position)
+bool TexelAlbedo(uint index, out float3 albedo)
+{
+    albedo = 0.0;
+    float4 visibility = Push.rt.visibility[index];
+    if (asuint(visibility.w) != 0u)
+    {
+        return false;
+    }
+
+    uint primitiveID = asuint(visibility.z);
+    bool frontFace = index < BACKFACE_TEXEL_START;
+    Surface surface = Surface::Get(primitiveID, visibility.xy, frontFace);
+    albedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
+    return true;
+}
+
+// Irradiance at a texel times the texel's own albedo, multiplied spectrally, for SpectralAlbedoCorrection.
+// The irradiance is an RGB emitter (or a light with a spectrum), u picks the wavelengths.
+float3 ReflectedAtTexel(float3 irradiance, bool hasAlbedo, float3 albedo, float u, uint spectrum = LIGHT_SPECTRUM_NONE)
+{
+    if (!hasAlbedo)
+    {
+        // moved texels, the correction skips them
+        return 0.0;
+    }
+    return SpectralMultiply(irradiance, albedo, u, spectrum);
 }
 
 // terminator is only set up for jittered samples, fixed samples (moved by leak detection,

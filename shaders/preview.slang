@@ -93,7 +93,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
             float3 current;
             if (spectral)
             {
-                current = ShadeLightDirectSpectral(light, positionWS, normalWS, xi, spectralSample, spectralThroughput, L, terminator);
+                current = spectralSample.ToRGB(ShadeLightDirectSpectral(light, positionWS, normalWS, xi, spectralSample, spectralThroughput, L, terminator));
             }
             else
             {
