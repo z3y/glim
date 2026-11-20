@@ -282,7 +282,20 @@ namespace Glim
 
         static void BeforeSceneGui(SceneView sceneView)
         {
-            if (Event.current.type != EventType.Repaint || sceneView != Target || !_texture)
+            if (sceneView != Target)
+            {
+                return;
+            }
+
+            var e = Event.current;
+            if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
+            {
+                e.Use();
+                Stop();
+                return;
+            }
+
+            if (e.type != EventType.Repaint || !_texture)
             {
                 return;
             }
@@ -416,22 +429,20 @@ namespace Glim
 
             var stats = ScenePreview.Stats;
 
+            if (ScenePreview.HasFrame)
+            {
+                GUILayout.Label(
+                    // sample last so changing digits don't shift the other stats
+                    $"{stats.width}x{stats.height}  |  Lights {stats.light_count}  |  Hardware RT: {stats.hardware_rt}  |  Sample {stats.sample_index}/{stats.sample_count}",
+                    Label);
+            }
+            else
+            {
+                GUILayout.Label("Starting preview...", Label);
+            }
+
             using (new GUILayout.HorizontalScope())
             {
-                if (ScenePreview.HasFrame)
-                {
-                    GUILayout.Label(
-                        // sample last so changing digits don't shift the other stats
-                        $"{stats.width}x{stats.height}  |  Lights {stats.light_count}  |  Hardware RT: {stats.hardware_rt}  |  Sample {stats.sample_index}/{stats.sample_count}",
-                        Label);
-                }
-                else
-                {
-                    GUILayout.Label("Starting preview...", Label);
-                }
-
-                GUILayout.Space(8);
-
                 GUILayout.Label(new GUIContent("Samples", "Preview sample count, restarts the preview"), Label);
                 ScenePreview.Samples = (uint)Mathf.Clamp(EditorGUILayout.DelayedIntField((int)ScenePreview.Samples, Field, GUILayout.Width(50)), 1, 65536);
 
@@ -447,7 +458,9 @@ namespace Glim
                     ScenePreview.Scale = ScenePreview.Scales[selected];
                 }
 
-                if (GUILayout.Button(new GUIContent("Stop", "Stops the preview"), EditorStyles.toolbarButton, GUILayout.Width(40)))
+                GUILayout.FlexibleSpace();
+
+                if (GUILayout.Button(new GUIContent("Stop", "Stops the preview (Esc)"), EditorStyles.toolbarButton, GUILayout.Width(40)))
                 {
                     ScenePreview.Stop();
                 }
