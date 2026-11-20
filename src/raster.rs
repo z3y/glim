@@ -208,7 +208,7 @@ pub fn decompact_diffuse(
     lightmap_texels: &[f32],
     mesh: &Mesh,
     group: &LightmapGroup,
-    l0: bool,
+    block: usize,
 ) {
     let texels = &all.visibility;
     let coverage = &all.coverage;
@@ -220,8 +220,9 @@ pub fn decompact_diffuse(
     let buffer = &mut buffer[0..count];
     buffer.fill(Vec4::ZERO);
 
-    // offsets are in units of all texels, back faces included
-    let diffuse_offset = if l0 { texels.len() } else { 0 };
+    // the lightmap texels are blocks of 3 channels for all texels, back faces included
+    // block 0 is the diffuse, the following blocks depend on the lightmap mode
+    let diffuse_offset = texels.len() * block;
 
     for compacted_index in 0..all.front_count {
         let texel = &texels[compacted_index];

@@ -14,13 +14,14 @@ use crate::buffer::Buffer;
 use crate::camera::InitializePreviewPushConstants;
 use crate::lights::LightType;
 use crate::mesh::GEOMETRIES_VARIANTS;
-use crate::meta::{MetaType, write_unity_texture_meta};
+use crate::meta::{MetaType, patch_unity_texture_meta_size, write_unity_texture_meta};
 use crate::raster::{
     Texels, block_average_fill, build_compaction, decompact_combined_sh, decompact_diffuse,
     decompact_directional, decompact_shadowmask, dilate_shadowmask, dilate_texture,
     encode_directional, luminance, rasterize_texels, render_normals,
 };
 use crate::seams::{Seam, fix_seams};
+use crate::sg::{SG_LOBE_COUNT, SG_TILES, solve_sg_texels};
 use crate::sh::SHProbeL2;
 use glam::{Vec2, Vec3, Vec4};
 
@@ -58,6 +59,7 @@ mod preview;
 mod preview_external;
 mod raster;
 mod seams;
+mod sg;
 mod sh;
 mod shader;
 mod skybox;
@@ -1429,6 +1431,31 @@ impl Glim {
     }
 }
 
+/// Copies a resolution x resolution lightmap into its tile of the Spherical Gaussian lightmap.
+/// Tiles are laid out row by row starting at uv (0, 0), so tile 0 is what lightmapST / SG_TILES points at.
+fn copy_sg_tile(composite: &mut [[half::f16; 3]], tile: &[Vec4], resolution: usize, tile_index: usize) {
+    use half::f16;
+
+    let size = resolution * SG_TILES;
+    let ox = (tile_index % SG_TILES) * resolution;
+    let oy = (tile_index / SG_TILES) * resolution;
+
+    let encode = |v: f32| {
+        if v.is_finite() {
+            f16::from_f32(v.max(0.0))
+        } else {
+            f16::ZERO
+        }
+    };
+
+    for y in 0..resolution {
+        for x in 0..resolution {
+            let p = tile[x + y * resolution];
+            composite[(ox + x) + (oy + y) * size] = [encode(p.x), encode(p.y), encode(p.z)];
+        }
+    }
+}
+
 fn save_tga(path: &PathBuf, w: usize, h: usize, pixels: &[Vec4], alpha: bool) -> io::Result<()> {
     use std::fs::File;
     use std::io::BufWriter;
@@ -2563,6 +2590,7 @@ fn render_lightmaps(app: &mut Glim) {
         LightmapMode::NonDirectional => 3,
         LightmapMode::DominantDirection => 6,
         LightmapMode::CombinedSH => 9,
+        LightmapMode::SphericalGaussian => 3 * (1 + SG_LOBE_COUNT),
     };
 
     let mut lightmap_texels = Buffer::empty(
@@ -2674,6 +2702,18 @@ fn render_lightmaps(app: &mut Glim) {
         )
     };
 
+    let sg_mode = app.config.lightmap_mode == LightmapMode::SphericalGaussian;
+    // projections replaced with the fitted lobe amplitudes, same layout as the lightmap texels
+    let sg_texels: Vec<f32> = if sg_mode {
+        let start = Instant::now();
+        let mut data = readback_buffer_slice.to_vec();
+        solve_sg_texels(&mut data, &texels, &app.gpu_mesh.merged_mesh);
+        app.benchmarks.push(("SG Solve", start.elapsed().as_secs_f32()));
+        data
+    } else {
+        Vec::new()
+    };
+
     let oidn = Oidn::load();
     let mut oidn = if oidn.is_err() {
         let err = oidn.err();
@@ -2734,7 +2774,7 @@ fn render_lightmaps(app: &mut Glim) {
             &readback_buffer_slice,
             &app.gpu_mesh.merged_mesh,
             &group,
-            app.config.lightmap_mode == LightmapMode::CombinedSH,
+            if app.config.lightmap_mode == LightmapMode::CombinedSH { 1 } else { 0 },
         );
         let elapsed = start.elapsed().as_secs_f32();
         app.benchmarks.push(("Diffuse Decompact", elapsed));
@@ -2798,6 +2838,91 @@ fn render_lightmaps(app: &mut Glim) {
         let full_path = app
             .output_dir
             .join(format!("Lightmap-{}_Diffuse.exr", group_index));
+
+        if sg_mode {
+            // tile 0 is the diffuse lightmap, tile 1 + k is the amplitude of lobe k
+            let size = resolution * SG_TILES;
+            if size > 16384 {
+                Log::msg(&format!(
+                    "<color=red>Lightmap {} is {}px with Spherical Gaussian tiles, above the 16384 texture limit. Lower the group resolution.</color>",
+                    group_index, size
+                ));
+            }
+
+            let mut composite = vec![[f16::ZERO; 3]; size * size];
+            copy_sg_tile(&mut composite, &buffer, resolution, 0);
+
+            for lobe in 0..SG_LOBE_COUNT {
+                if is_cancelled() {
+                    break;
+                }
+
+                decompact_diffuse(
+                    &mut buffer,
+                    &texels,
+                    &sg_texels,
+                    &app.gpu_mesh.merged_mesh,
+                    &group,
+                    1 + lobe,
+                );
+
+                if settings.denoise {
+                    if settings.dilate {
+                        dilate_texture(&mut buffer, &mut mask, resolution, DILATE_DENOISE);
+                    }
+                    if let Some(oidn) = &oidn {
+                        oidn.denoise(&mut buffer, resolution, resolution, false);
+                    }
+                }
+
+                if settings.dilate {
+                    dilate_texture(&mut buffer, &mut mask, resolution, DILATE_FINAL);
+                }
+
+                if settings.fix_seams {
+                    fix_seams(
+                        &mut buffer,
+                        resolution as u32,
+                        resolution as u32,
+                        &app.seams,
+                        app.config.seams_debug,
+                        group_index as u32,
+                        3,
+                    );
+                }
+
+                if BLOCK_FILL {
+                    block_average_fill(&mut buffer, &mut buffer_copy, &mask, resolution);
+                }
+
+                copy_sg_tile(&mut composite, &buffer, resolution, 1 + lobe);
+            }
+
+            let start = Instant::now();
+            let channels = SpecificChannels::rgb(|pos: Vec2<usize>| {
+                let flipped_y = size - 1 - pos.y();
+                let [r, g, b] = composite[pos.x() + flipped_y * size];
+                (r, g, b)
+            });
+
+            let layer = Layer::new(
+                (size, size),
+                LayerAttributes::named("diffuse"),
+                Encoding::FAST_LOSSLESS,
+                channels,
+            );
+
+            Image::from_layer(layer)
+                .write()
+                .to_file(&full_path)
+                .unwrap();
+
+            write_unity_texture_meta(MetaType::Diffuse, &full_path, &group.diffuse_guid);
+            patch_unity_texture_meta_size(&full_path, size as u32);
+
+            app.benchmarks.push(("SG Save", start.elapsed().as_secs_f32()));
+            continue;
+        }
 
         let start = Instant::now();
         let channels = SpecificChannels::rgb(|pos: Vec2<usize>| {

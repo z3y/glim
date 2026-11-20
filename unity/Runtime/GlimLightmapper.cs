@@ -20,6 +20,7 @@ namespace Glim
         NonDirectional = 0,
         DominantDirection = 1,
         MonoSH = 3,
+        SphericalGaussian = 4,
     }
 
     public enum MixedLightMode : uint
@@ -39,7 +40,10 @@ Bakes a single diffuse lightmap texture.
 Bakes an additional directional lightmap that stores the dominant incoming light direction. Supports normal maps and improves directional lighting.
 
 - Mono SH
-Bakes two textures (L0 and Monochromatic luminance of L1). Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it."
+Bakes two textures (L0 and Monochromatic luminance of L1). Produces higher-quality directional lighting than Dominant Direction, but requires a shader that supports it.
+
+- Spherical Gaussian
+Bakes the incoming light as 8 RGB Spherical Gaussian lobes, for diffuse with normal maps and baked specular. The lightmap becomes a 3x3 grid of tiles (9x the memory): the regular lightmap and one tile per lobe. Shaders without support still show the regular lightmap, a supporting shader is needed for the lobes (Packages/io.github.z3y.glim/ShaderLibrary/GlimSGLightmap.hlsl)."
 )]
         public LightmapMode lightmapMode = LightmapMode.NonDirectional;
 

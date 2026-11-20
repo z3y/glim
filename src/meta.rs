@@ -135,3 +135,49 @@ TextureImporter:
 
     let _ = std::fs::write(&path, yaml);
   }
+
+/// Lets Unity import textures that are not a power of two and larger than the default max size,
+/// without rescaling them. Keeps the other import settings of an existing meta file.
+pub fn patch_unity_texture_meta_size(texture_path: &PathBuf, size: u32) {
+    let mut os = texture_path.as_os_str().to_owned();
+    os.push(".meta");
+    let path = PathBuf::from(os);
+
+    let Ok(meta) = std::fs::read_to_string(&path) else {
+        return;
+    };
+
+    let max_size = size.next_power_of_two().min(16384);
+    let mut changed = false;
+
+    let patched: Vec<String> = meta
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            let indent = &line[..line.len() - trimmed.len()];
+
+            if let Some(value) = trimmed.strip_prefix("maxTextureSize:") {
+                if let Ok(current) = value.trim().parse::<u32>() {
+                    if current < max_size {
+                        changed = true;
+                        return format!("{indent}maxTextureSize: {max_size}");
+                    }
+                }
+            } else if let Some(value) = trimmed.strip_prefix("nPOTScale:") {
+                if value.trim() != "0" {
+                    changed = true;
+                    return format!("{indent}nPOTScale: 0");
+                }
+            }
+            line.to_string()
+        })
+        .collect();
+
+    if changed {
+        let mut out = patched.join("\n");
+        if meta.ends_with('\n') {
+            out.push('\n');
+        }
+        let _ = std::fs::write(&path, out);
+    }
+}

@@ -141,6 +141,21 @@ namespace Glim
         // environment lighting source (skybox, gradient or color), used for baking
         public Color[] ambientPixels;
 
+        // Number of tiles per side of the lightmap texture, must match SG_TILES in src/sg.rs
+        public const int SphericalGaussianTiles = 3;
+
+        // Spherical Gaussian lightmaps are a grid of tiles with the regular lightmap in the first tile at uv (0, 0).
+        // Scaling the scale offset makes every shader sample the regular lightmap, a supporting shader offsets into the lobe tiles.
+        // Only the LightingData lightmapST is scaled, the renderer scale offset stays in full lightmap space for the next bake.
+        public static Vector4 LightmapTileScaleOffset(Vector4 scaleOffset, LightmapMode mode)
+        {
+            if (mode != LightmapMode.SphericalGaussian)
+            {
+                return scaleOffset;
+            }
+            return scaleOffset / SphericalGaussianTiles;
+        }
+
         private static int GetDepth(Transform t)
         {
             int depth = 0;
@@ -741,7 +756,7 @@ namespace Glim
                         ids.longValue = soi.PrefabLFID;
 
                         lmData.FindPropertyRelative("lightmapIndex").intValue = (int)groupIndex;
-                        lmData.FindPropertyRelative("lightmapST").vector4Value = scaleOffset;
+                        lmData.FindPropertyRelative("lightmapST").vector4Value = LightmapTileScaleOffset(scaleOffset, lightmapMode);
                         lmData.FindPropertyRelative("lightmapSTDynamic").vector4Value = new Vector4(1, 1, 0, 0);
 
                         lmData.FindPropertyRelative("terrainDynamicUVST").vector4Value = scaleOffset;
@@ -844,7 +859,7 @@ namespace Glim
                     ids.longValue = soi.PrefabLFID;
 
                     lmData.FindPropertyRelative("lightmapIndex").intValue = (int)groupIndex;
-                    lmData.FindPropertyRelative("lightmapST").vector4Value = scaleOffset;
+                    lmData.FindPropertyRelative("lightmapST").vector4Value = LightmapTileScaleOffset(scaleOffset, lightmapMode);
                     lmData.FindPropertyRelative("lightmapSTDynamic").vector4Value = scaleOffset;
                     lmData.FindPropertyRelative("terrainDynamicUVST").vector4Value = scaleOffset;
                     lmData.FindPropertyRelative("terrainChunkDynamicUVST").vector4Value = scaleOffset;

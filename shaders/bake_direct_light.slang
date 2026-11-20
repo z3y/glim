@@ -1,4 +1,5 @@
 #include "includes/core.slang"
+#include "includes/sg.slang"
 #include "includes/sobol_burley.slang"
 
 [[vk::push_constant]]
@@ -53,6 +54,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
+    SGProjection sg = SGProjection::zero();
 
     Light *lights = Push.lights;
     for (uint lightIndex = lightsStart; lightIndex < lightsEnd; lightIndex++)
@@ -65,6 +67,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
         color.rgb += current * NoL;
         dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
         AccumulateL1LightmapDirect(sh, current, L, normalWS);
+        if (LIGHTMAP_MODE == LightmapMode::SphericalGaussian)
+        {
+            AccumulateSG(sg, current * NoL, L);
+        }
     }
 
     ValidateSampleColor(color);
@@ -102,6 +108,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
             lightmap[index * 3 + 0] += dominantDirection.x;
             lightmap[index * 3 + 1] += dominantDirection.y;
             lightmap[index * 3 + 2] += dominantDirection.z;
+        }
+        else if (LIGHTMAP_MODE == LightmapMode::SphericalGaussian)
+        {
+            WriteSG(lightmap, index, Push.texelCount, sg, sampleScale);
         }
     }
 }

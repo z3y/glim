@@ -1,4 +1,5 @@
 #include "includes/core.slang"
+#include "includes/sg.slang"
 #include "includes/sobol_burley.slang"
 #include "includes/light_tree.slang"
 
@@ -46,6 +47,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
+    SGProjection sg = SGProjection::zero();
+    bool bakeSG = LIGHTMAP_MODE == LightmapMode::SphericalGaussian;
 
     float2 xiBounce = SobolBurleySample2D(indexing.x, DIMENSION_BOUNCE, indexing.y, indexing.z);
 
@@ -79,6 +82,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
                 color.rgb += current * NoL;
                 dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
                 AccumulateL1LightmapDirect(sh, current, L, normalWS);
+                if (bakeSG)
+                {
+                    AccumulateSG(sg, current * NoL, L);
+                }
             }
         }
     }
@@ -126,6 +133,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
                 color.rgb += emission;
                 dominantDirection.xyz += ray.D * Luminance(emission * sampleScale);
                 AccumulateL1LightmapIndirect(sh, emission, ray.D, normalWS);
+                if (bakeSG)
+                {
+                    AccumulateSG(sg, emission, ray.D);
+                }
             }
         }
     }
@@ -135,6 +146,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
         color.rgb += current;
         dominantDirection.xyz += ray.D * Luminance(current * sampleScale);
         AccumulateL1LightmapIndirect(sh, current, ray.D, normalWS);
+        if (bakeSG)
+        {
+            AccumulateSG(sg, current, ray.D);
+        }
     }
 
     ValidateSampleColor(color);
@@ -168,5 +183,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
         lightmap[indexDir * 3 + 0] += dominantDirection.x;
         lightmap[indexDir * 3 + 1] += dominantDirection.y;
         lightmap[indexDir * 3 + 2] += dominantDirection.z;
+    }
+    else if (LIGHTMAP_MODE == LightmapMode::SphericalGaussian)
+    {
+        WriteSG(lightmap, index, Push.compactedCount, sg, sampleScale);
     }
 }

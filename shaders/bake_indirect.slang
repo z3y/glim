@@ -1,5 +1,6 @@
 #include "includes/compaction.slang"
 #include "includes/core.slang"
+#include "includes/sg.slang"
 #include "includes/sobol_burley.slang"
 
 [[vk::push_constant]]
@@ -57,6 +58,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 throughput = float3(1.0);
     float4 dominantDirection = 0.0;
     SHProbeL2 sh = SHProbeL2::zero();
+    SGProjection sg = SGProjection::zero();
 
     uint currentOffset;
     uint previousOffset;
@@ -110,6 +112,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
                 dominantDirection.xyz += ray.D * Luminance(scaled * sampleScale);
 
                 AccumulateL1LightmapIndirect(sh, scaled, ray.D, normalWS);
+                if (LIGHTMAP_MODE == LightmapMode::SphericalGaussian)
+                {
+                    AccumulateSG(sg, scaled, ray.D);
+                }
             }
         }
         else
@@ -157,6 +163,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
         lightmap[indexDir * 3 + 0] += dominantDirection.x;
         lightmap[indexDir * 3 + 1] += dominantDirection.y;
         lightmap[indexDir * 3 + 2] += dominantDirection.z;
+    }
+    else if (LIGHTMAP_MODE == LightmapMode::SphericalGaussian)
+    {
+        WriteSG(lightmap, index, Push.compactedCount, sg, sampleScale);
     }
 
     bool last = Push.sampleIndex == (Push.maxSamples - 1);
