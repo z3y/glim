@@ -32,6 +32,16 @@ namespace Glim
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool uvpacker_pack(IntPtr handle);
 
+        // Called on the thread that called uvpacker_pack_progress at the start of every iteration. Return true to cancel.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public delegate bool ProgressCallback(uint iteration, uint iterationCount);
+
+        // Same as uvpacker_pack with progress reporting. Returns false if packing failed or was cancelled.
+        [DllImport(DLL)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool uvpacker_pack_progress(IntPtr handle, ProgressCallback callback);
+
         // Only valid for meshes packed as a single chart (added without splitting).
         // x,y = scale, z,w = offset
         [DllImport(DLL)]

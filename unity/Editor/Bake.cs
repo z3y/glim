@@ -871,9 +871,24 @@ namespace Glim
 
             ResetBake();
 
-            EditorApplication.update += PollBakeComplete;
+            BakeContext ctx;
+            try
+            {
+                ctx = new BakeContext(baker, config);
+            }
+            catch (OperationCanceledException)
+            {
+                ResetBake();
+                Debug.Log("Glim: bake cancelled");
+                return;
+            }
+            catch
+            {
+                ResetBake();
+                throw;
+            }
 
-            var ctx = new BakeContext(baker, config);
+            EditorApplication.update += PollBakeComplete;
 
 #if VRC_LIGHT_VOLUMES
             AddLightProbeVolumes(baker, ctx);

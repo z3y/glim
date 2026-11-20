@@ -554,101 +554,125 @@ namespace Glim
                         float worldScaleExponent = lightmapGroup.scaleExponent;
                         bool split = lightmapGroup.packingType == UVPackingType.SplitCharts;
                         var packer = UVPacking.uvpacker_create(lightmapGroup.Width, lightmapGroup.Height, lightmapGroup.packingIterations, bruteForce, holeFilling, split, worldScaleExponent);
-                        // per renderer: true = split charts (uv mesh), false = scale offset
-                        var rendererSplit = new bool[renderers.Count];
-                        for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
+                        string progressTitle = $"Packing UVs (group {groupIndex + 1}/{groupMap.Count})";
+                        try
                         {
-                            Renderer r = renderers[rendererIndex];
-                            // lower LODs reuse the LOD0 scale offset, so LOD0 can't be split
-                            rendererSplit[rendererIndex] = !(r is MeshRenderer lodMr && lowerLods.ContainsKey(lodMr)) && Glim.UseSplitCharts(r, split);
-                            var mf = r.GetComponent<MeshFilter>();
-                            var t = r.GetComponent<Transform>();
-
-                            var mesh = mf.sharedMesh;
-
-                            bool hasUv0 = mesh.HasVertexAttribute(VertexAttribute.TexCoord0);
-                            bool hasUv1 = mesh.HasVertexAttribute(VertexAttribute.TexCoord1);
-
-                            var positions = mesh.vertices;
-                            t.TransformPoints(positions); // todo slow, verts are transformed again later
-                            var uvs = hasUv1 ? mesh.uv2 : mesh.uv;
-                            var indices = mesh.triangles;
-                            float scale = 1.0f;
-                            if (r is MeshRenderer mr)
+                            // per renderer: true = split charts (uv mesh), false = scale offset
+                            var rendererSplit = new bool[renderers.Count];
+                            for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
                             {
-                                scale = mr.scaleInLightmap;
-                            }
-
-                            unsafe
-                            {
-                                fixed (Vector3* p = positions)
-                                fixed (Vector2* uv = uvs)
-                                fixed (int* i = indices)
+                                Renderer r = renderers[rendererIndex];
+                                if (EditorUtility.DisplayCancelableProgressBar(progressTitle, $"Adding {r.name}", (float)rendererIndex / renderers.Count))
                                 {
-                                    var splitMode = rendererSplit[rendererIndex] ? UVPacking.SplitMode.Split : UVPacking.SplitMode.ScaleOffset;
-                                    UVPacking.uvpacker_add_mesh_ex(packer, p, (uint)positions.Length, uv, (uint)uvs.Length, i, (uint)indices.Length, scale, (uint)rendererIndex, splitMode);
+                                    throw new OperationCanceledException("UV packing cancelled");
+                                }
+                                // lower LODs reuse the LOD0 scale offset, so LOD0 can't be split
+                                rendererSplit[rendererIndex] = !(r is MeshRenderer lodMr && lowerLods.ContainsKey(lodMr)) && Glim.UseSplitCharts(r, split);
+                                var mf = r.GetComponent<MeshFilter>();
+                                var t = r.GetComponent<Transform>();
+
+                                var mesh = mf.sharedMesh;
+
+                                bool hasUv0 = mesh.HasVertexAttribute(VertexAttribute.TexCoord0);
+                                bool hasUv1 = mesh.HasVertexAttribute(VertexAttribute.TexCoord1);
+
+                                var positions = mesh.vertices;
+                                t.TransformPoints(positions); // todo slow, verts are transformed again later
+                                var uvs = hasUv1 ? mesh.uv2 : mesh.uv;
+                                var indices = mesh.triangles;
+                                float scale = 1.0f;
+                                if (r is MeshRenderer mr)
+                                {
+                                    scale = mr.scaleInLightmap;
+                                }
+
+                                unsafe
+                                {
+                                    fixed (Vector3* p = positions)
+                                    fixed (Vector2* uv = uvs)
+                                    fixed (int* i = indices)
+                                    {
+                                        var splitMode = rendererSplit[rendererIndex] ? UVPacking.SplitMode.Split : UVPacking.SplitMode.ScaleOffset;
+                                        UVPacking.uvpacker_add_mesh_ex(packer, p, (uint)positions.Length, uv, (uint)uvs.Length, i, (uint)indices.Length, scale, (uint)rendererIndex, splitMode);
+                                    }
                                 }
                             }
-                        }
 
-                        bool success = UVPacking.uvpacker_pack(packer);
-
-                        if (!success)
-                        {
-                            throw new Exception("UV Packing failed, try increasing lightmap resolution, packing iteration count or brute force mode or disable ensure padding");
-                        }
-
-                        sw.Stop();
-                        var elapsed = sw.ElapsedMilliseconds;
-
-                        for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
-                        {
-                            Renderer r = renderers[rendererIndex];
-
-                            if (r is MeshRenderer mr)
+                            bool cancelled = false;
+                            UVPacking.ProgressCallback progressCallback = (iteration, iterationCount) =>
                             {
-                                if (rendererSplit[rendererIndex])
+                                cancelled = EditorUtility.DisplayCancelableProgressBar(progressTitle, $"Iteration {iteration + 1}/{iterationCount}", (float)iteration / iterationCount);
+                                return cancelled;
+                            };
+
+                            bool success = UVPacking.uvpacker_pack_progress(packer, progressCallback);
+                            GC.KeepAlive(progressCallback);
+
+                            if (cancelled)
+                            {
+                                throw new OperationCanceledException("UV packing cancelled");
+                            }
+
+                            if (!success)
+                            {
+                                throw new Exception("UV Packing failed, try increasing lightmap resolution, packing iteration count or brute force mode or disable ensure padding");
+                            }
+
+                            sw.Stop();
+                            var elapsed = sw.ElapsedMilliseconds;
+
+                            for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
+                            {
+                                Renderer r = renderers[rendererIndex];
+
+                                if (r is MeshRenderer mr)
                                 {
-                                    var uvs = UVPacking.GetMeshUvs(packer, (uint)rendererIndex);
-                                    if (uvs != null)
+                                    if (rendererSplit[rendererIndex])
                                     {
-                                        var mf = r.GetComponent<MeshFilter>();
-                                        var clone = Object.Instantiate(mf.sharedMesh);
-                                        if (uvs.Length != clone.vertexCount)
+                                        var uvs = UVPacking.GetMeshUvs(packer, (uint)rendererIndex);
+                                        if (uvs != null)
+                                        {
+                                            var mf = r.GetComponent<MeshFilter>();
+                                            var clone = Object.Instantiate(mf.sharedMesh);
+                                            if (uvs.Length != clone.vertexCount)
+                                            {
+                                                Debug.LogError($"Uv packing failed for renderer {r.name}", r);
+                                            }
+                                            clone.name = "GlimUV_" + clone.name;
+                                            clone.uv2 = uvs;
+                                            mr.enlightenVertexStream = clone;
+                                            mr.additionalVertexStreams = null;
+                                            r.lightmapScaleOffset = new Vector4(1, 1, 0, 0);
+                                        }
+                                        else
                                         {
                                             Debug.LogError($"Uv packing failed for renderer {r.name}", r);
                                         }
-                                        clone.name = "GlimUV_" + clone.name;
-                                        clone.uv2 = uvs;
-                                        mr.enlightenVertexStream = clone;
-                                        mr.additionalVertexStreams = null;
-                                        r.lightmapScaleOffset = new Vector4(1, 1, 0, 0);
                                     }
                                     else
                                     {
-                                        Debug.LogError($"Uv packing failed for renderer {r.name}", r);
-                                    }
-                                }
-                                else
-                                {
-                                    mr.enlightenVertexStream = null;
-                                    mr.additionalVertexStreams = null;
+                                        mr.enlightenVertexStream = null;
+                                        mr.additionalVertexStreams = null;
 
-                                    var so = UVPacking.uvpacker_get_scale_offset(packer, (uint)rendererIndex);
-                                    mr.lightmapScaleOffset = so;
+                                        var so = UVPacking.uvpacker_get_scale_offset(packer, (uint)rendererIndex);
+                                        mr.lightmapScaleOffset = so;
+                                    }
+                                    EditorUtility.SetDirty(mr);
                                 }
-                                EditorUtility.SetDirty(mr);
+
                             }
 
+                            float coverage = UVPacking.uvpacker_get_coverage(packer);
+                            Bake.bakeMessages.AppendLine($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
+
+                            // lightmapGroup.lightmapUVHash = newHash;
+                            EditorUtility.SetDirty(lightmapper);
                         }
-
-                        float coverage = UVPacking.uvpacker_get_coverage(packer);
-                        Bake.bakeMessages.AppendLine($"Group {groupIndex} UVs packed in {elapsed}ms with {coverage * 100.0f}% coverage");
-
-                        // lightmapGroup.lightmapUVHash = newHash;
-                        EditorUtility.SetDirty(lightmapper);
-
-                        UVPacking.uvpacker_destroy(packer);
+                        finally
+                        {
+                            EditorUtility.ClearProgressBar();
+                            UVPacking.uvpacker_destroy(packer);
+                        }
                     }
                     else
                     {

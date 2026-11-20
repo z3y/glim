@@ -401,6 +401,12 @@ impl UVPacker {
     }
 
     pub fn pack(&mut self) -> bool {
+        self.pack_with_progress(&mut |_, _| false)
+    }
+
+    /// `progress(iteration, iteration_count)` is called at the start of every iteration and
+    /// returns true to cancel. Returns false if packing failed or was cancelled.
+    pub fn pack_with_progress(&mut self, progress: &mut dyn FnMut(u32, u32) -> bool) -> bool {
         if self.charts.is_empty() {
             self.charts_lookup = Some(HashMap::new());
             return true;
@@ -441,7 +447,12 @@ impl UVPacker {
         let mut best_scale = 0.0_f32;
         let mut best_placements: Option<Vec<(u32, u32)>> = None;
 
-        for _ in 0..self.iterations {
+        let iterations = self.iterations;
+        for iteration in 0..iterations {
+            if progress(iteration, iterations) {
+                return false;
+            }
+
             if let Some(placements) = self.try_pack_at_scale(scale_guess) {
                 if scale_guess > best_scale {
                     best_scale = scale_guess;
@@ -1057,6 +1068,23 @@ pub unsafe extern "C" fn uvpacker_add_mesh_ex(
 pub unsafe extern "C" fn uvpacker_pack(handle: *mut UVPacker) -> bool {
     let packer = unsafe { &mut *handle };
     packer.pack()
+}
+
+/// Called on the calling thread at the start of every iteration. Return true to cancel.
+pub type UVPackerProgressCallback = extern "C" fn(iteration: u32, iteration_count: u32) -> bool;
+
+/// Same as `uvpacker_pack`, reporting progress through `callback` (may be null).
+/// Returns false if packing failed or was cancelled by the callback.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn uvpacker_pack_progress(
+    handle: *mut UVPacker,
+    callback: Option<UVPackerProgressCallback>,
+) -> bool {
+    let packer = unsafe { &mut *handle };
+    match callback {
+        Some(callback) => packer.pack_with_progress(&mut |i, ic| callback(i, ic)),
+        None => packer.pack(),
+    }
 }
 
 #[repr(C)]
