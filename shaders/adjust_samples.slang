@@ -70,9 +70,13 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float3 dPdU = (edge1 * duv2.y - edge2 * duv1.y) * invDetSigned;
     float3 dPdV = (edge2 * duv1.x - edge1 * duv2.x) * invDetSigned;
 
-    float3 u = normalize(dPdU - dot(dPdU, surface.Ng) * surface.Ng);
-    float3 v = normalize(dPdV - dot(dPdV, surface.Ng) * surface.Ng);
-    float3 rayDirs[4] = { u, -u, v, -v };
+    float3 tU = dPdU - dot(dPdU, surface.Ng) * surface.Ng;
+    float3 tV = dPdV - dot(dPdV, surface.Ng) * surface.Ng;
+    float3 u = normalize(tU);
+    float3 v = normalize(tV);
+    float3 d0 = normalize(tU + tV); // jitterUV = (1, 1)
+    float3 d1 = normalize(tU - tV); // jitterUV = (1, -1)
+    float3 rayDirs[8] = { u, -u, v, -v, d0, -d0, d1, -d1 };
 
     float texelSize = 1.0 / float(resolution);
     float3 worldTexelU = dPdU * texelSize;
@@ -83,8 +87,15 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float2 baryPerU = float2(duv2.y, -duv1.y) * invDetSigned; // jitterUV = (1, 0)
     float2 baryPerV = float2(-duv2.x, duv1.x) * invDetSigned; // jitterUV = (0, 1)
 
-    float2 baryDirs[4] = { baryPerU, -baryPerU, baryPerV, -baryPerV };
-    float worldPerUV[4] = { length(dPdU), length(dPdU), length(dPdV), length(dPdV) };
+    float2 baryDiag0 = baryPerU + baryPerV;
+    float2 baryDiag1 = baryPerU - baryPerV;
+    float2 baryDirs[8] = { baryPerU, -baryPerU, baryPerV, -baryPerV, baryDiag0, -baryDiag0, baryDiag1, -baryDiag1 };
+
+    float lenU = length(dPdU);
+    float lenV = length(dPdV);
+    float lenD0 = length(dPdU + dPdV);
+    float lenD1 = length(dPdU - dPdV);
+    float worldPerUV[8] = { lenU, lenU, lenV, lenV, lenD0, lenD0, lenD1, lenD1 };
 
     float uvReach = 0.5 / float(resolution); // max jitter per axis, in UV
 
@@ -102,7 +113,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     if (Push.leakDetection > 0)
     {
         [loop]
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 8; i++)
         {
             ray.D = rayDirs[i];
 
