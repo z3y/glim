@@ -126,7 +126,7 @@ Automatically applied to light volumes based on texel size."
 )]
         public float lightProbeRadius = 0.0f;
 
-        [Tooltip("Applies Lanczos windowing function to light probes to reduce ringing")]
+        [Tooltip("Applies Lanczos windowing function to the direct light in light probes to reduce ringing")]
         public bool lightProbeDeringing = false;
 
         [Tooltip("Strength of the deringing, only used when Light Probe Deringing is enabled")]

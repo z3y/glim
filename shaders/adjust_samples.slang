@@ -160,10 +160,15 @@ void main(uint3 threadID: SV_DispatchThreadID)
         positionWS = RayOffset(hitSurf.P, hitSurf.Ng);
     }
 
-    if (moved || !canJitter || JITTER_BARYCENTRICS == 0)
+    if (moved)
     {
         visibility.xyz = positionWS;
         visibility.w = PackNormalOctahedron(normalWS);
+    }
+    else if (!canJitter || JITTER_BARYCENTRICS == 0)
+    {
+        // keeps the triangle and barycentrics so the geometric normal stays available
+        visibility.w = asfloat(SAMPLE_FIXED_IN_PLACE);
     }
     else
     {

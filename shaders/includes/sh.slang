@@ -77,18 +77,12 @@ float SHLanczos(float l, float w)
     return pow(sin(v) / v, 4.0);
 }
 
-void DeringSHProbeL2(inout SHProbeL2 probe, float w)
+// Lanczos window for bands 1 and 2, w <= 0 disables it
+float2 SHWindowL2(float w)
 {
-    float w1 = SHLanczos(1.0, w);
-    float w2 = SHLanczos(2.0, w);
-
-    probe.sh[1].xyz *= w1;
-    probe.sh[2].xyz *= w1;
-    probe.sh[3].xyz *= w1;
-
-    probe.sh[4].xyz *= w2;
-    probe.sh[5].xyz *= w2;
-    probe.sh[6].xyz *= w2;
-    probe.sh[7].xyz *= w2;
-    probe.sh[8].xyz *= w2;
+    if (w <= 0.0)
+    {
+        return 1.0;
+    }
+    return float2(SHLanczos(1.0, w), SHLanczos(2.0, w));
 }

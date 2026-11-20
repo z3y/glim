@@ -58,6 +58,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float3 positionWS = RayOffset(surface.P, surface.Ng);
     float3 normalWS = surface.N;
+    float3 geometricNormalWS = surface.Ng;
     ShadowTerminator terminator = ShadowTerminator::Create(primitiveID, bary, surface.Ng, frontFace, surface.shadowTerminator);
 
     for (uint bounceIndex = 0; bounceIndex < (Push.bounceCount + 1); bounceIndex++)
@@ -82,12 +83,18 @@ void main(uint3 threadID: SV_DispatchThreadID)
         ray.P = positionWS;
         ray.D = RandomDirectionInHemisphereCosine(normalWS, xiBounce);
 
+        if (!IsAboveSurface(ray.D, geometricNormalWS))
+        {
+            break;
+        }
+
         Hit bounceHit;
         if (TraceRay(ray, bounceHit))
         {
             Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
             positionWS = RayOffset(surface.P, surface.Ng);
             normalWS = surface.N;
+            geometricNormalWS = surface.Ng;
             terminator = ShadowTerminator::Create(bounceHit.primitiveID, bounceHit.bary, surface.Ng, bounceHit.frontFace, surface.shadowTerminator);
 
             if (!bounceHit.frontFace)

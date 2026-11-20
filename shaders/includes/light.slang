@@ -136,9 +136,7 @@ float3 RandomPointOnOrientedDisk(float3 center, float radius, float3 positionWS,
     }
     float3 lightUp = cross(lightForward, lightRight);
 
-    float r = sqrt(xi.x);
-    float phi = 2.0 * float.getPi() * xi.y;
-    float2 diskPoint = float2(r * cos(phi), r * sin(phi));
+    float2 diskPoint = SampleDiskConcentric(xi);
 
     return center + (lightRight * diskPoint.x + lightUp * diskPoint.y) * radius;
 }

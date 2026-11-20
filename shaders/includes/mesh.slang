@@ -29,6 +29,9 @@ float2 EncodeNormalOctahedron(float3 n)
     return e;
 }
 
+// bit pattern PackNormalOctahedron never returns, free to use as a flag
+static const uint PACKED_NORMAL_UNUSED = 0xFFFFFFFEu;
+
 float PackNormalOctahedron(float3 normalWS)
 {
     float2 oct = EncodeNormalOctahedron(normalWS) * 0.5 + 0.5;
@@ -41,6 +44,13 @@ float PackNormalOctahedron(float3 normalWS)
     // so this changes nothing about the decoded normal
     // adds an extra bit pattern that can be used as a flag
     if (bits == 0u)
+    {
+        bits = 0xFFFFFFFFu;
+    }
+
+    // (65535,65534) is 1/65535 away from the -Z corner, snapping it there keeps
+    // PACKED_NORMAL_UNUSED free as a flag
+    if (bits == PACKED_NORMAL_UNUSED)
     {
         bits = 0xFFFFFFFFu;
     }

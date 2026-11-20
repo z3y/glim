@@ -87,6 +87,11 @@ void main(uint3 threadID: SV_DispatchThreadID)
         xiOcclusionBase = SobolBurleySample2D(occlusionIndexing.x, DIMENSION_LIGHT, occlusionIndexing.y, occlusionIndexing.z);
     }
 
+    // Ringing comes from the sharp punctual lights, only they get windowed.
+    // Indirect light is already smooth and would only get blurred.
+    // Windowing is linear, so applying it per sample equals windowing their sum.
+    float2 directWindow = SHWindowL2(LIGHTPROBE_DERINGING);
+
     Light *lights = Push.lights;
     for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
     {
@@ -114,7 +119,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
         float3 L;
         float2 xi = DecorrelateSample2D(xiLight, lightIndex);
         float3 color = ShadeLightDirect(light, probePosition, 0.0, xi, throughput, L, true, ShadowTerminator::None());
-        AccumulateL2(probe, sampleIndex, color * sampleScale, L);
+        AccumulateL2(probe, sampleIndex, color * sampleScale, L, directWindow);
     }
 
     occlusion /= float(occlusionSampleCount);
@@ -219,15 +224,6 @@ void main(uint3 threadID: SV_DispatchThreadID)
     else
     {
         AccumulateL2(probe, sampleIndex, SampleSkybox(ray.D) * 4 * sampleScale, ray.D);
-    }
-
-    if (LIGHTPROBE_DERINGING > 0.0)
-    {
-        bool lastSample = sampleIndex == (sampleCount - 1);
-        if (lastSample)
-        {
-            DeringSHProbeL2(probe, LIGHTPROBE_DERINGING);
-        }
     }
 
     probes[probeIndex] = probe;

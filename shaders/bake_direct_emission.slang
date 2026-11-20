@@ -37,9 +37,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float3 positionWS;
     float3 normalWS;
+    float3 geometricNormalWS;
     uint3 indexing;
     ShadowTerminator terminator;
-    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing, terminator);
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, geometricNormalWS, indexing, terminator);
 
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0);
@@ -69,17 +70,27 @@ void main(uint3 threadID: SV_DispatchThreadID)
             float3 current = ShadeTriangleLight(emissivePrimitiveID, positionWS, normalWS, xiLight, throughput, selectionPmf, pdf, L, false, terminator);
             float NoL = saturate(dot(L, normalWS));
 
-            float bsdfPdfL = NoL * invPi;
+            // zero below the triangle for both strategies, keeps the MIS weights consistent
+            if (IsAboveSurface(L, geometricNormalWS))
+            {
+                float bsdfPdfL = NoL * invPi;
 
-            current *= MISWeight(pdf, bsdfPdfL);
-            color.rgb += current * NoL;
-            dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
-            AccumulateL1LightmapDirect(sh, current, L, normalWS);
+                current *= MISWeight(pdf, bsdfPdfL);
+                color.rgb += current * NoL;
+                dominantDirection.xyz += L * Luminance(current * NoL * sampleScale);
+                AccumulateL1LightmapDirect(sh, current, L, normalWS);
+            }
         }
     }
 
+    bool rayAboveSurface = IsAboveSurface(ray.D, geometricNormalWS);
+
     Hit hit;
-    if (TraceRay(ray, hit))
+    if (!rayAboveSurface)
+    {
+        // no contribution, see IsAboveSurface
+    }
+    else if (TraceRay(ray, hit))
     {
         Surface surface = Surface::Get(hit.primitiveID, hit.bary, hit.frontFace);
 

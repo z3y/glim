@@ -39,9 +39,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float3 positionWS;
     float3 normalWS;
+    float3 geometricNormalWS;
     uint3 indexing;
     ShadowTerminator terminator; // bounce rays are not shadow rays, unused
-    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing, terminator);
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, geometricNormalWS, indexing, terminator);
 
     uint dimension = DIMENSION_INDIRECT_BOUNCE + bounceIndex;
     float2 xiBounce = SobolBurleySample2D(indexing.x, dimension, indexing.y, indexing.z);
@@ -76,7 +77,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float *bounceBuffer = Push.bounceBuffer;
 
     Hit bounceHit;
-    if (TraceRay(ray, bounceHit))
+    if (IsAboveSurface(ray.D, geometricNormalWS) && TraceRay(ray, bounceHit))
     {
         Surface surface = Surface::Get(bounceHit.primitiveID, bounceHit.bary, bounceHit.frontFace);
 

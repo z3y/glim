@@ -42,9 +42,10 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
     float3 positionWS;
     float3 normalWS;
+    float3 geometricNormalWS;
     uint3 indexing;
     ShadowTerminator terminator;
-    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, indexing, terminator);
+    CreateSample(index, sampleIndex, sampleCount, positionWS, normalWS, geometricNormalWS, indexing, terminator);
 
     float2 xiLight = SobolBurleySample2D(indexing.x, DIMENSION_LIGHT, indexing.y, indexing.z);
 

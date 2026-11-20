@@ -547,13 +547,10 @@ float3 RandomDirectionInSphere(float2 xi)
 
 float3 RandomDirectionInHemisphereCosine(float3 normal, float2 rand)
 {
-    // rand.x and rand.y are random numbers in [0,1)
-    float phi = 2.0 * float.getPi() * rand.x;
-    float cosTheta = sqrt(1.0 - rand.y); // cosine-weighted bias
-    float sinTheta = sqrt(rand.y);
-
-    // Local direction in tangent space
-    float3 localDir = float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    // Malley's method: project an area-uniform disk sample up to the hemisphere.
+    // The concentric disk mapping keeps the Sobol strata intact, polar mapping stretches them.
+    float2 d = SampleDiskConcentric(rand);
+    float3 localDir = float3(d, sqrt(saturate(1.0 - dot(d, d))));
 
     // Build tangent basis around the normal
     float3 up = abs(normal.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
@@ -578,22 +575,26 @@ void AccumulateColor(inout float4 previous, uint sampleIndex, float4 color)
     }
 }
 
-void AccumulateL2(inout SHProbeL2 previous, uint sampleIndex, float3 color, float3 wi)
+// window scales bands 1 and 2, see SHWindowL2
+void AccumulateL2(inout SHProbeL2 previous, uint sampleIndex, float3 color, float3 wi, float2 window = float2(1.0, 1.0))
 {
     // flip Z for Unity
     wi.z = -wi.z;
 
+    float3 color1 = color * window.x;
+    float3 color2 = color * window.y;
+
     previous.sh[0].xyz += color * Y0() * A_HAT_0 * L0_NORMALIZATION;
 
-    previous.sh[1].xyz += color * Y1_1(wi) * A_HAT_1 * L1_NORMALIZATION;
-    previous.sh[2].xyz += color * Y10(wi) * A_HAT_1 * L1_NORMALIZATION;
-    previous.sh[3].xyz += color * Y11(wi) * A_HAT_1 * L1_NORMALIZATION;
+    previous.sh[1].xyz += color1 * Y1_1(wi) * A_HAT_1 * L1_NORMALIZATION;
+    previous.sh[2].xyz += color1 * Y10(wi) * A_HAT_1 * L1_NORMALIZATION;
+    previous.sh[3].xyz += color1 * Y11(wi) * A_HAT_1 * L1_NORMALIZATION;
 
-    previous.sh[4].xyz += color * Y2_2(wi) * A_HAT_2 * L2_2_NORMALIZATION;
-    previous.sh[5].xyz += color * Y2_1(wi) * A_HAT_2 * L2_2_NORMALIZATION;
-    previous.sh[6].xyz += color * Y20(wi) * A_HAT_2 * L20_NORMALIZATION;
-    previous.sh[7].xyz += color * Y21(wi) * A_HAT_2 * L2_2_NORMALIZATION;
-    previous.sh[8].xyz += color * Y22(wi) * A_HAT_2 * L22_NORMALIZATION;
+    previous.sh[4].xyz += color2 * Y2_2(wi) * A_HAT_2 * L2_2_NORMALIZATION;
+    previous.sh[5].xyz += color2 * Y2_1(wi) * A_HAT_2 * L2_2_NORMALIZATION;
+    previous.sh[6].xyz += color2 * Y20(wi) * A_HAT_2 * L20_NORMALIZATION;
+    previous.sh[7].xyz += color2 * Y21(wi) * A_HAT_2 * L2_2_NORMALIZATION;
+    previous.sh[8].xyz += color2 * Y22(wi) * A_HAT_2 * L22_NORMALIZATION;
 }
 
 void AccumulateL1LightmapDirect(inout SHProbeL2 previous, float3 color, float3 wi, float3 normalWS)
@@ -1269,21 +1270,37 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
     return color;
 }
 
+// visibility.w of a sample, see adjust_samples.slang:
+// 0 jittered sample at (bary, primitive), SAMPLE_FIXED_IN_PLACE same but never jittered,
+// anything else is a sample moved by leak detection that stores (position, packed normal)
+static const uint SAMPLE_FIXED_IN_PLACE = PACKED_NORMAL_UNUSED;
+
+// The cosine lobe is built around the shading normal, with smooth normals part of it points
+// under the actual triangle. Light can't arrive from there, so those directions count as zero.
+bool IsAboveSurface(float3 direction, float3 geometricNormalWS)
+{
+    return dot(direction, geometricNormalWS) > 0.0;
+}
+
 // terminator is only set up for jittered samples, fixed samples (moved by leak detection,
-// no room to jitter or jitter disabled) only store a position and get ShadowTerminator::None()
-void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 positionWS, out float3 normalWS, out uint3 indexing, out ShadowTerminator terminator)
+// no room to jitter or jitter disabled) get ShadowTerminator::None()
+// moved samples have no triangle, their geometric normal is the shading normal
+void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 positionWS, out float3 normalWS, out float3 geometricNormalWS, out uint3 indexing, out ShadowTerminator terminator)
 {
     uint pixelSeed = RNGPixelInit1D(index);
     indexing = BlueNoiseIndexing(pixelSeed, sampleIndex, ~0u, sampleCount, SamplingPattern::BlueNoiseFirst);
 
     float4 visibility = Push.rt.visibility[index];
-    bool moved = asuint(visibility.w) != 0u;
+    uint flag = asuint(visibility.w);
+    bool inPlace = flag == SAMPLE_FIXED_IN_PLACE;
+    bool moved = flag != 0u && !inPlace;
 
     [branch]
-    if (moved || JITTER_BARYCENTRICS == 0)
+    if (moved)
     {
         positionWS = visibility.xyz;
         normalWS = UnpackNormalOctahedron(visibility.w);
+        geometricNormalWS = normalWS;
         terminator = ShadowTerminator::None();
         return;
     }
@@ -1291,24 +1308,22 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     float2 bary = visibility.xy;
     uint primitiveID = asuint(visibility.z);
 
-    Vertex[3] v = TriangleVertices(primitiveID);
-
-    float3 p0 = v[0].position;
-    float3 p1 = v[1].position;
-    float3 p2 = v[2].position;
-    float2 uv0 = v[0].uv;
-    float2 uv1 = v[1].uv;
-    float2 uv2 = v[2].uv;
-    uint resolution = v[0].Resolution();
-
-    float2 duv1 = uv1 - uv0;
-    float2 duv2 = uv2 - uv0;
-
-    float det = duv1.x * duv2.y - duv1.y * duv2.x;
-    float invDetSigned = abs(det) > 1e-12 ? 1.0 / det : 0.0;
-
-    if (JITTER_BARYCENTRICS > 0)
+    [branch]
+    if (JITTER_BARYCENTRICS > 0 && !inPlace)
     {
+        Vertex[3] v = TriangleVertices(primitiveID);
+
+        float2 uv0 = v[0].uv;
+        float2 uv1 = v[1].uv;
+        float2 uv2 = v[2].uv;
+        uint resolution = v[0].Resolution();
+
+        float2 duv1 = uv1 - uv0;
+        float2 duv2 = uv2 - uv0;
+
+        float det = duv1.x * duv2.y - duv1.y * duv2.x;
+        float invDetSigned = abs(det) > 1e-12 ? 1.0 / det : 0.0;
+
         float2 xiAA = SobolBurleySample2D(indexing.x, DIMENSION_AA, indexing.y, indexing.z);
         // inspired by cycles
         // https://projects.blender.org/blender/cycles/src/branch/main/src/kernel/integrator/init_from_bake.h
@@ -1342,7 +1357,8 @@ void CreateSample(uint index, uint sampleIndex, uint sampleCount, out float3 pos
     Surface surface = Surface::Get(primitiveID, bary, frontFace);
     positionWS = RayOffset(surface.P, surface.Ng);
     normalWS = surface.N;
-    terminator = ShadowTerminator::Create(primitiveID, bary, surface.Ng, frontFace, surface.shadowTerminator);
+    geometricNormalWS = surface.Ng;
+    terminator = inPlace ? ShadowTerminator::None() : ShadowTerminator::Create(primitiveID, bary, surface.Ng, frontFace, surface.shadowTerminator);
 }
 
 // Builds the shadowmask shadow ray, false if the position is outside the light range or spot cone.
