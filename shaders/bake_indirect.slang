@@ -100,7 +100,9 @@ void main(uint3 threadID: SV_DispatchThreadID)
 
             if (all(isfinite(previousDiffuse)))
             {
-                float3 current = previousDiffuse * bounceAlbedo * color.a;
+                // spectral product of the incoming irradiance and the albedo it bounces off
+                float spectralU = SpectralU(hash_uint2(index, bounceIndex), sampleIndex);
+                float3 current = SpectralMultiply(previousDiffuse, bounceAlbedo, spectralU) * color.a;
                 current *= lerp(1.0, ao, AO_INTENSITY);
                 color.rgb += current;
 

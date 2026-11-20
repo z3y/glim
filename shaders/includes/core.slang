@@ -3,6 +3,7 @@
 #include "shadow_terminator.slang"
 #include "sobol_burley.slang"
 #include "util.slang"
+#include "spectral.slang"
 
 // must match mesh.rs
 static const uint ALPHA_TEXTURE_NONE = 0xFFFFu;
@@ -93,24 +94,92 @@ bool TriangleVisible(uint primitiveID, float2 bary, bool stochastic, uint seed)
     return uint_to_float_incl(hash_uint2(seed, primitiveID)) < alpha;
 }
 
-// Light passing through a transparent triangle: the uncovered part (1 - alpha)
-// plus the transmitted part of the covered surface, tinted by its albedo.
-float3 TriangleTransmittance(uint primitiveID, float2 bary)
+// Fraction of light passing along a shadow ray, in RGB and, when a SpectralSample is given,
+// at its 4 wavelengths. The spectral values are only used if a tinted (non gray) surface was crossed.
+struct Transmittance
 {
-    TriangleAlpha a = TriangleAlpha::Get(primitiveID, bary);
+    float3 rgb;
+    float4 spectral;
+    float4 phase;
+    bool hasPhase;
+    bool tinted;
 
-    float3 transmittance = 1.0 - a.alpha;
-
-    [branch]
-    if (a.transmission > 0.0 && a.alpha > 0.0)
+    static Transmittance Create()
     {
-        Surface surface = Surface::Get(primitiveID, bary);
-        float3 albedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
-        transmittance += a.alpha * a.transmission * albedo;
+        Transmittance t = {};
+        t.rgb = 1.0;
+        t.spectral = 1.0;
+        t.phase = 0.0;
+        t.hasPhase = false;
+        t.tinted = false;
+        return t;
     }
 
-    return transmittance;
-}
+    static Transmittance Create(SpectralSample s)
+    {
+        Transmittance t = Create();
+        t.phase = s.phase;
+        t.hasPhase = SpectralEnabled();
+        return t;
+    }
+
+    // Light passing through a transparent triangle: the uncovered part (1 - alpha)
+    // plus the transmitted part of the covered surface, tinted by its albedo.
+    [mutating]
+    void Multiply(uint primitiveID, float2 bary)
+    {
+        TriangleAlpha a = TriangleAlpha::Get(primitiveID, bary);
+
+        float open = 1.0 - a.alpha;
+        float3 factor = open;
+        float4 spectralFactor = open;
+
+        [branch]
+        if (a.transmission > 0.0 && a.alpha > 0.0)
+        {
+            Surface surface = Surface::Get(primitiveID, bary);
+            float3 albedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
+            float covered = a.alpha * a.transmission;
+            factor += covered * albedo;
+
+            [branch]
+            if (hasPhase && !IsGray(albedo))
+            {
+                tinted = true;
+                spectralFactor += covered * Reflectance::Create(albedo).Eval(phase);
+            }
+            else
+            {
+                spectralFactor += covered * albedo.x;
+            }
+        }
+
+        rgb *= factor;
+        spectral *= spectralFactor;
+    }
+
+    bool Blocked()
+    {
+        return all(rgb <= SHADOW_TRANSMITTANCE_EPSILON) && (!tinted || all(spectral <= SHADOW_TRANSMITTANCE_EPSILON));
+    }
+
+    [mutating]
+    void SetBlocked()
+    {
+        rgb = 0.0;
+        spectral = 0.0;
+    }
+
+    // Light of an RGB emitter after passing, spectral product if a tinted surface was crossed
+    float3 Apply(float3 color, SpectralSample s)
+    {
+        if (!tinted)
+        {
+            return color * rgb;
+        }
+        return s.ToRGB(EvalEmissionSpectrum(color, s.phase) * spectral);
+    }
+};
 
 #pragma warning(disable: 41035)
 
@@ -133,10 +202,9 @@ float SafeDirComponent(float d)
 // Returns true if the ray is fully blocked, transmittance is 0 then.
 // Otherwise closest hit, transparent triangles are tested with TriangleVisible.
 [ForceInline]
-bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers, bool stochasticAlpha, uint alphaSeed, out float3 transmittance)
+bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers, bool stochasticAlpha, uint alphaSeed, inout Transmittance transmittance)
 {
     hit = {};
-    transmittance = 1.0;
 
     float3 O = ray.P;
     float3 D = float3(SafeDirComponent(ray.D.x), SafeDirComponent(ray.D.y), SafeDirComponent(ray.D.z));
@@ -284,10 +352,10 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers, boo
 
                                 if (shadowRay)
                                 {
-                                    transmittance *= TriangleTransmittance(primitiveID, float2(u, v));
-                                    if (all(transmittance <= SHADOW_TRANSMITTANCE_EPSILON))
+                                    transmittance.Multiply(primitiveID, float2(u, v));
+                                    if (transmittance.Blocked())
                                     {
-                                        transmittance = 0.0;
+                                        transmittance.SetBlocked();
                                         return true;
                                     }
                                     continue;
@@ -301,7 +369,7 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers, boo
 
                             if (shadowRay)
                             {
-                                transmittance = 0.0;
+                                transmittance.SetBlocked();
                                 return true;
                             }
 
@@ -389,10 +457,8 @@ void QueryHandleAlpha<let T : uint>(inout RayQuery<T> query, bool stochasticAlph
 // Transparent geometries are built with NO_DUPLICATE_ANY_HIT_INVOCATION so every triangle
 // is reported once. Opaque triangles commit on their own and end the search
 // (RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH), which means fully blocked.
-float3 QueryShadowTransmittance<let T : uint>(inout RayQuery<T> query)
+void QueryShadowTransmittance<let T : uint>(inout RayQuery<T> query, inout Transmittance transmittance)
 {
-    float3 transmittance = 1.0;
-
     while (query.Proceed())
     {
         if (query.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE)
@@ -403,21 +469,20 @@ float3 QueryShadowTransmittance<let T : uint>(inout RayQuery<T> query)
         uint primitiveID = CandidateGlobalPrimitiveID(query);
         float2 bary = query.CandidateTriangleBarycentrics();
 
-        transmittance *= TriangleTransmittance(primitiveID, bary);
+        transmittance.Multiply(primitiveID, bary);
 
-        if (all(transmittance <= SHADOW_TRANSMITTANCE_EPSILON))
+        if (transmittance.Blocked())
         {
             query.Abort();
-            return 0.0;
+            transmittance.SetBlocked();
+            return;
         }
     }
 
     if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
     {
-        return 0.0;
+        transmittance.SetBlocked();
     }
-
-    return transmittance;
 }
 
 bool TraceRayInternal(Ray ray, out Hit hit, bool stochasticAlpha)
@@ -459,7 +524,7 @@ bool TraceRayInternal(Ray ray, out Hit hit, bool stochasticAlpha)
     }
     else
     {
-        float3 transmittance;
+        Transmittance transmittance = Transmittance::Create();
         return BVHTraceRay(ray, hit, false, false, stochasticAlpha, alphaSeed, transmittance);
     }
 }
@@ -477,7 +542,7 @@ bool TraceRayAlphaTested(Ray ray, out Hit hit)
     return TraceRayInternal(ray, hit, false);
 }
 
-float3 TraceTransmittance(Ray ray, uint instanceMask, bool shadowRenderers)
+void TraceTransmittance(Ray ray, uint instanceMask, bool shadowRenderers, inout Transmittance transmittance)
 {
     if (HARDWARE_RT == 1)
     {
@@ -490,14 +555,12 @@ float3 TraceTransmittance(Ray ray, uint instanceMask, bool shadowRenderers)
         RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
         query.TraceRayInline(TopLevelAS, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, instanceMask, rayDesc);
 
-        return QueryShadowTransmittance(query);
+        QueryShadowTransmittance(query, transmittance);
     }
     else
     {
         Hit hit = {};
-        float3 transmittance;
         BVHTraceRay(ray, hit, true, shadowRenderers, false, 0u, transmittance);
-        return transmittance;
     }
 }
 
@@ -505,13 +568,25 @@ float3 TraceTransmittance(Ray ray, uint instanceMask, bool shadowRenderers)
 // Excludes renderers with no shadow casting.
 float3 TraceShadowRay(Ray ray)
 {
-    return TraceTransmittance(ray, 0x02, false);
+    Transmittance transmittance = Transmittance::Create();
+    TraceTransmittance(ray, 0x02, false, transmittance);
+    return transmittance.rgb;
+}
+
+// Same as TraceShadowRay, also evaluated at the wavelengths of s for tinted transparency.
+Transmittance TraceShadowRay(Ray ray, SpectralSample s)
+{
+    Transmittance transmittance = Transmittance::Create(s);
+    TraceTransmittance(ray, 0x02, false, transmittance);
+    return transmittance;
 }
 
 // Same as TraceShadowRay but includes renderers with no shadow casting.
-float3 TraceAnyHit(Ray ray)
+Transmittance TraceAnyHit(Ray ray, SpectralSample s)
 {
-    return TraceTransmittance(ray, 0x01, true);
+    Transmittance transmittance = Transmittance::Create(s);
+    TraceTransmittance(ray, 0x01, true, transmittance);
+    return transmittance;
 }
 
 float CalculateTriangleArea(uint primitiveID)
@@ -977,7 +1052,8 @@ float3 ShadeTriangleLight(uint primitiveID, float3 positionWS, float3 normalWS, 
     if (visible > 0.0)
     {
         terminator.OffsetShadowRay(shadowRay, normalWS, L);
-        color *= TraceAnyHit(shadowRay);
+        SpectralSample spectralSample = SpectralSample::Create(SpectralUFromSample(xi, primitiveID));
+        color = TraceAnyHit(shadowRay, spectralSample).Apply(color, spectralSample);
     }
 
     return color;
@@ -1073,9 +1149,12 @@ struct SphericalRectangle
     }
 };
 
-float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, out float3 L, bool isLightProbe, ShadowTerminator terminator)
+// Unshadowed light arriving at positionWS. traceShadow is set if the shadow ray needs to be traced,
+// the caller offsets it for the shadow terminator, only when it is actually traced.
+float3 SampleLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, out float3 L, bool isLightProbe, out Ray shadowRay, out bool traceShadow)
 {
-    Ray shadowRay;
+    shadowRay = {};
+    traceShadow = false;
     shadowRay.P = positionWS;
     shadowRay.tMin = 0;
 
@@ -1249,7 +1328,7 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
 
     shadowRay.D = L;
 
-    float3 color = falloff * light.color * cookieColor * throughput;
+    float3 color = falloff * light.color * cookieColor;
 
     float visible = any(color > 0.0) ? 1 : 0;
 
@@ -1259,14 +1338,52 @@ float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 
         visible *= NoL;
     }
 
+    traceShadow = visible > 0.0 && light.CastShadows();
+
+    return color;
+}
+
+float3 ShadeLightDirect(Light light, float3 positionWS, float3 normalWS, float2 xi, float3 throughput, out float3 L, bool isLightProbe, ShadowTerminator terminator)
+{
+    Ray shadowRay;
+    bool traceShadow;
+    float3 color = SampleLightDirect(light, positionWS, normalWS, xi, L, isLightProbe, shadowRay, traceShadow) * throughput;
+
     [branch]
-    if (visible > 0.0 && light.CastShadows())
+    if (traceShadow && any(color > 0.0))
     {
         terminator.OffsetShadowRay(shadowRay, normalWS, L);
-        color *= TraceShadowRay(shadowRay);
+        SpectralSample spectralSample = SpectralSample::Create(SpectralUFromSample(xi, light.data0));
+        color = TraceShadowRay(shadowRay, spectralSample).Apply(color, spectralSample);
     }
 
     return color;
+}
+
+// Spectral radiance of a light at the wavelengths of s times the spectral path throughput,
+// returned as RGB. Used by the spectral preview path tracer.
+float3 ShadeLightDirectSpectral(Light light, float3 positionWS, float3 normalWS, float2 xi, SpectralSample s, float4 throughput, out float3 L, ShadowTerminator terminator)
+{
+    Ray shadowRay;
+    bool traceShadow;
+    float3 color = SampleLightDirect(light, positionWS, normalWS, xi, L, false, shadowRay, traceShadow);
+
+    if (!any(color > 0.0) || !any(throughput > 0.0))
+    {
+        return 0.0;
+    }
+
+    float4 spectrum = EvalEmissionSpectrum(color, s.phase) * throughput;
+
+    [branch]
+    if (traceShadow)
+    {
+        terminator.OffsetShadowRay(shadowRay, normalWS, L);
+        // with spectral rendering on, the per wavelength transmittance is valid even when untinted
+        spectrum *= TraceShadowRay(shadowRay, s).spectral;
+    }
+
+    return s.ToRGB(spectrum);
 }
 
 // terminator is only set up for jittered samples, fixed samples (moved by leak detection,

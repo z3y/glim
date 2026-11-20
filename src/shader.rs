@@ -12,6 +12,7 @@ pub enum ShaderName {
     AdjustSamples,
     AdjustProbes,
     ShadowMask,
+    SpectralAlbedoCorrection,
 }
 
 pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
@@ -26,6 +27,7 @@ pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
         ShaderName::BakeDirectLight => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_light.spv")),
         ShaderName::BakeDirectEmission => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_emission.spv")),
         ShaderName::ShadowMask => include_bytes!(concat!(env!("OUT_DIR"), "/bake_shadowmask.spv")),
+        ShaderName::SpectralAlbedoCorrection => include_bytes!(concat!(env!("OUT_DIR"), "/spectral_albedo_correction.spv")),
     };
 
     let aligned = bytes
@@ -47,6 +49,8 @@ pub struct ShaderBindings<'a> {
     pub visibility: vk::ImageView,
     pub preview_diffuse: vk::ImageView,
     pub linear_sampler: vk::Sampler,
+    /// spectral.rs tables, read by spectral.slang
+    pub spectral: vk::Buffer,
 }
 
 impl<'a> Default for ShaderBindings<'a> {
@@ -62,6 +66,7 @@ impl<'a> Default for ShaderBindings<'a> {
             cookies: &[],
             alphas: &[],
             linear_sampler: vk::Sampler::null(),
+            spectral: vk::Buffer::null(),
         }
     }
 }
@@ -74,7 +79,7 @@ pub struct SpecializationConstants {
     pub jitter_barycentrics: u32,      // 2
     pub emissive_triangles_count: u32, // 3
 
-    pub pad0: u32,                 // 4
+    pub spectral_rendering: u32,   // 4
     pub lightmap_group_count: u32, // 5
     pub lightmap_mode: u32,        // 6
     pub coordinate_system: u32,    // 7
@@ -132,6 +137,7 @@ impl ShaderBindingID {
     pub const SKYBOX: u32 = 20;
     pub const SKYBOX_SAMPLER: u32 = 21;
     pub const LINEAR_SAMPLER: u32 = 7;
+    pub const SPECTRAL: u32 = 9;
 }
 
 pub fn load_compute_shader(
@@ -239,6 +245,16 @@ pub fn load_compute_shader(
         layout_bindings.push(vk::DescriptorSetLayoutBinding {
             binding: ShaderBindingID::LINEAR_SAMPLER,
             descriptor_type: vk::DescriptorType::SAMPLER,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            ..Default::default()
+        });
+    }
+
+    if !bindings.spectral.is_null() {
+        layout_bindings.push(vk::DescriptorSetLayoutBinding {
+            binding: ShaderBindingID::SPECTRAL,
+            descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
             descriptor_count: 1,
             stage_flags: vk::ShaderStageFlags::COMPUTE,
             ..Default::default()
@@ -456,6 +472,21 @@ pub fn update_compute_shader(
     };
     write = write.image_info(&info);
     if !bindings.preview_diffuse.is_null() {
+        descriptor_writes.push(write);
+    }
+
+    // SpectralTables
+    let info = [vk::DescriptorBufferInfo {
+        buffer: bindings.spectral,
+        offset: 0,
+        range: vk::WHOLE_SIZE,
+    }];
+    let write = vk::WriteDescriptorSet::default()
+        .dst_set(shader.descriptor_set)
+        .dst_binding(ShaderBindingID::SPECTRAL)
+        .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+        .buffer_info(&info);
+    if !bindings.spectral.is_null() {
         descriptor_writes.push(write);
     }
 

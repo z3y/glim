@@ -56,6 +56,8 @@ pub struct GlimConfig {
     pub coverage_min_threshold: f32,
     pub antialiasing: bool,
     pub leak_detection: bool,
+    /// spectral products of colors (bounce albedo, tinted transparency), see spectral.rs
+    pub spectral_rendering: bool,
 }
 
 #[repr(u32)]

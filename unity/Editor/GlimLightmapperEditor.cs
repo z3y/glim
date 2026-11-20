@@ -105,7 +105,8 @@ namespace Glim
                     lightmapper.coverageMaxSamples,
                     lightmapper.coverageMinThreshold,
                     lightmapper.antiAliasing,
-                    lightmapper.leakDetection
+                    lightmapper.leakDetection,
+                    lightmapper.spectralRendering
                 );
                 Bake.Start(lightmapper, config);
             };
@@ -144,7 +145,8 @@ namespace Glim
                     lightmapper.coverageMaxSamples,
                     lightmapper.coverageMinThreshold,
                     lightmapper.antiAliasing,
-                    lightmapper.leakDetection
+                    lightmapper.leakDetection,
+                    lightmapper.spectralRendering
                 );
 
                 Bake.Start(lightmapper, config);

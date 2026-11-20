@@ -335,7 +335,7 @@ impl Mesh {
             1.0
         };
         let transmission = if mesh.alpha_blend && mesh.transmission.is_finite() {
-            mesh.transmission.clamp(0.0, 1.0)
+            mesh.transmission.clamp(0.0, 10.0)
         } else {
             0.0
         };

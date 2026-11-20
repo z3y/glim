@@ -17,6 +17,16 @@ struct PushConstants
     Light *lights;
 };
 
+// RGB emitter seen through the path throughput
+float3 PathRadiance(float3 emitter, float3 throughput, float4 spectralThroughput, SpectralSample s)
+{
+    if (!SpectralEnabled() || !any(emitter > 0.0))
+    {
+        return emitter * throughput;
+    }
+    return s.ToRGB(EvalEmissionSpectrum(emitter, s.phase) * spectralThroughput);
+}
+
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void main(uint3 threadID: SV_DispatchThreadID)
@@ -51,10 +61,21 @@ void main(uint3 threadID: SV_DispatchThreadID)
     float4 color = float4(0.0, 0.0, 0.0, 1.0);
     float3 throughput = float3(1.0, 1.0, 1.0);
 
+    // Spectral path: 4 hero wavelengths per sample, throughput is kept per wavelength
+    // so repeated bounces multiply the albedo spectra, emitters are evaluated at the same wavelengths.
+    bool spectral = SpectralEnabled();
+    SpectralSample spectralSample = SpectralSample::Create(SpectralU(pixelSeed, sampleIndex));
+    float4 spectralThroughput = 1.0;
+
     float3 emission = SampleSurfaceEmission(surface);
     float3 albedo = SampleAlbedo(surface.coords, surface.lightmapGroup).rgb;
+    // seen directly, exact in RGB
     color.rgb += emission;
     throughput = albedo;
+    if (spectral)
+    {
+        spectralThroughput = Reflectance::Create(albedo).Eval(spectralSample.phase);
+    }
 
     float3 positionWS = RayOffset(surface.P, surface.Ng);
     float3 normalWS = surface.N;
@@ -69,7 +90,15 @@ void main(uint3 threadID: SV_DispatchThreadID)
             float3 L;
             Light light = Push.lights[lightIndex];
             float2 xi = DecorrelateSample2D(xiLight, lightIndex);
-            float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false, terminator);
+            float3 current;
+            if (spectral)
+            {
+                current = ShadeLightDirectSpectral(light, positionWS, normalWS, xi, spectralSample, spectralThroughput, L, terminator);
+            }
+            else
+            {
+                current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false, terminator);
+            }
             float NoL = saturate(dot(L, normalWS));
             color.rgb += current * NoL;
         }
@@ -102,14 +131,18 @@ void main(uint3 threadID: SV_DispatchThreadID)
             if (surface.emissive)
             {
                 float3 bounceEmission = SampleSurfaceEmission(surface);
-                color.rgb += bounceEmission * throughput;
+                color.rgb += PathRadiance(bounceEmission, throughput, spectralThroughput, spectralSample);
             }
 
             throughput *= bounceAlbedo;
+            if (spectral)
+            {
+                spectralThroughput *= Reflectance::Create(bounceAlbedo).Eval(spectralSample.phase);
+            }
         }
         else
         {
-            color.rgb += throughput * SampleSkybox(ray.D);
+            color.rgb += PathRadiance(SampleSkybox(ray.D), throughput, spectralThroughput, spectralSample);
             break;
         }
     }

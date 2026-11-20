@@ -342,8 +342,9 @@ impl VulkanContext {
             descriptor_count: 128,
             ty: vk::DescriptorType::SAMPLED_IMAGE,
         };
+        // every compute shader binds the spectral tables
         let storage_buffer_pool = vk::DescriptorPoolSize {
-            descriptor_count: 16,
+            descriptor_count: 64,
             ty: vk::DescriptorType::STORAGE_BUFFER,
         };
         let as_structure_pool = vk::DescriptorPoolSize {

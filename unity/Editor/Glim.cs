@@ -1174,7 +1174,7 @@ namespace Glim
                 var transform = mr.transform;
 
                 var rendererSettings = mr.GetComponent<GlimRendererSettings>();
-                float transmission = rendererSettings ? Mathf.Clamp01(rendererSettings.transmission) : 0.0f;
+                float transmission = rendererSettings ? rendererSettings.transmission : 0.0f;
                 float emissionMultiplier = rendererSettings ? Mathf.Max(0.0f, rendererSettings.emissionMultiplier) : 1.0f;
                 var doubleSidedGI = rendererSettings ? rendererSettings.doubleSidedGI : GlimDoubleSidedGI.Material;
                 bool shadowTerminator = rendererSettings ? rendererSettings.shadowTerminatorFix : true;

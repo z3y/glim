@@ -115,6 +115,9 @@ Affects lightmaps, light probes and light volumes.")]
         [Tooltip("Move starting ray positions of texels that can hit back faces to prevent leaks. This also disables anti aliasing for those texels.")]
         public bool leakDetection = true;
 
+        [Tooltip("Multiply colors spectrally instead of per RGB channel where light interacts with colored surfaces (bounces off albedo, passes through tinted transparency). More accurate color bleeding, adds a little color noise.")]
+        public bool spectralRendering = true;
+
         [Space]
         [Tooltip("Number of samples per light probe")]
         public uint lightProbeSamples = 4096;

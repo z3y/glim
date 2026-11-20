@@ -61,6 +61,7 @@ mod seams;
 mod sh;
 mod shader;
 mod skybox;
+mod spectral;
 mod test;
 mod texture2d;
 mod texture_array;
@@ -148,6 +149,9 @@ pub struct Glim {
 
     pub light_tree_nodes: Buffer,
     pub primitive_to_leaf: Buffer,
+
+    /// wavelength sampling and sRGB to Fourier sRGB tables, see spectral.rs
+    pub spectral_tables: Buffer,
 }
 
 impl Drop for Glim {
@@ -206,6 +210,9 @@ impl Drop for Glim {
         }
         if !self.primitive_to_leaf.buffer.is_null() {
             self.primitive_to_leaf.destroy(&self.vk);
+        }
+        if !self.spectral_tables.buffer.is_null() {
+            self.spectral_tables.destroy(&self.vk);
         }
 
         if !self.skybox.view().is_null() {
@@ -586,6 +593,33 @@ fn initialize_render(app: &mut Glim) {
     staging_buffer.destroy(&app.vk);
     drop(staging_buffer);
 
+    // always bound, shaders reference the tables even when spectral rendering is off (1 dummy entry then)
+    let dummy_spectral_tables = app.spectral_tables.bytes <= size_of::<[f32; 4]>() as u64;
+    if !app.spectral_tables.buffer.is_null() && app.config.spectral_rendering && dummy_spectral_tables {
+        app.spectral_tables.destroy(&app.vk);
+    }
+    if app.spectral_tables.buffer.is_null() {
+        let start = Instant::now();
+        let data = if app.config.spectral_rendering {
+            spectral::gpu_data()
+        } else {
+            vec![[0.0f32; 4]; 1]
+        };
+        if app.config.spectral_rendering {
+            Log::msg(&format!(
+                "Spectral tables ready in {:.2}s",
+                start.elapsed().as_secs_f32()
+            ));
+        }
+        app.spectral_tables = Buffer::new(
+            &app.vk,
+            String::from("Spectral Tables"),
+            &data,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+    }
+
     let config = &app.config;
 
     let mut geometries_offsets = [0; GEOMETRIES_VARIANTS];
@@ -601,7 +635,7 @@ fn initialize_render(app: &mut Glim) {
         light_falloff_type: config.light_falloff as u32,
         jitter_barycentrics: app.config.antialiasing as u32,
         emissive_triangles_count: app.emissive_triangles_count,
-        pad0: 0,
+        spectral_rendering: config.spectral_rendering as u32,
         lightmap_group_count: app.groups.len() as u32,
         lightmap_mode: config.lightmap_mode as u32,
         coordinate_system: app.config.coordinate_system as u32,
@@ -641,6 +675,7 @@ fn bind_preview_shader(app: &mut Glim) {
         cookies: &app.cookie_array.views(),
         alphas: &app.alphas_array.views(),
         linear_sampler: app.linear_sampler,
+        spectral: app.spectral_tables.buffer,
     };
 
     if app.preview_shader.pipeline.is_null() {
@@ -990,6 +1025,7 @@ fn update_render_target(app: &mut Glim, settings: &LightmapSettings) {
             alphas: &app.alphas_array.views(),
             cookies: &app.cookie_array.views(),
             linear_sampler: app.linear_sampler,
+            spectral: app.spectral_tables.buffer,
         };
 
         if app.init_from_camera_shader.pipeline.is_null() {
@@ -1321,6 +1357,7 @@ impl Glim {
             cpu_lights_hash: 0,
             light_tree_nodes: Buffer::null(),
             primitive_to_leaf: Buffer::null(),
+            spectral_tables: Buffer::null(),
         }
     }
 
@@ -1575,6 +1612,7 @@ fn bake_shadowmasks(app: &mut Glim, texels: &Texels, buffer: &mut Vec<Vec4>) {
         cookies: &cookies,
         alphas: &app.alphas_array.views(),
         linear_sampler: app.linear_sampler,
+        spectral: app.spectral_tables.buffer,
     };
 
     let mut shader = load_compute_shader(
@@ -1754,6 +1792,7 @@ fn init_samples(app: &Glim, visibility_texels_count: usize) {
         alphas: &app.alphas_array.views(),
         cookies: &app.cookie_array.views(),
         linear_sampler: app.linear_sampler,
+        spectral: app.spectral_tables.buffer,
     };
 
     let mut shader = load_compute_shader(
@@ -1840,6 +1879,7 @@ fn bake_direct_emission(app: &mut Glim, visibility_texels_count: usize, lightmap
         alphas: &app.alphas_array.views(),
         cookies: &app.cookie_array.views(),
         linear_sampler: app.linear_sampler,
+        spectral: app.spectral_tables.buffer,
     };
 
     let mut bake_direct_emission_shader = load_compute_shader(
@@ -1955,6 +1995,7 @@ fn bake_direct_lights(
         alphas: &app.alphas_array.views(),
         cookies: &app.cookie_array.views(),
         linear_sampler: app.linear_sampler,
+        spectral: app.spectral_tables.buffer,
     };
 
     // todo cache
@@ -2107,6 +2148,7 @@ fn bake_indirect(
         cookies: &app.cookie_array.views(),
         alphas: &app.alphas_array.views(),
         linear_sampler: app.linear_sampler,
+        spectral: app.spectral_tables.buffer,
     };
 
     let mut indirect_shader = load_compute_shader(
@@ -2190,6 +2232,90 @@ fn bake_indirect(
 
     indirect_shader.destroy(&app.vk);
     indirect_buffer.destroy(&app.vk);
+}
+
+/// Rescales the baked irradiance so Unity's runtime `albedo * lightmap` (per RGB channel)
+/// gives the spectral product of irradiance and albedo, see spectral_albedo_correction.slang.
+fn apply_spectral_albedo_correction(app: &mut Glim, texels_count: usize, lightmap: &Buffer) {
+    if !app.config.spectral_rendering || texels_count == 0 || is_cancelled() {
+        return;
+    }
+
+    #[repr(C, align(16))]
+    pub struct PushConstants {
+        pub rt: RayTracingData,
+
+        pub texel_count: u32,
+        pub combined_sh: u32,
+        pub pad0: u32,
+        pub pad1: u32,
+
+        pub lightmap: vk::DeviceAddress,
+    }
+
+    let shader_bindings = ShaderBindings {
+        tlas: app.tlas.acceleration_structure,
+        albedos: &app.albedo_array.views(),
+        emissions: &app.emission_array.views(),
+        skybox: app.skybox.view(),
+        skybox_sampler: app.skybox.sampler(),
+        visibility: vk::ImageView::null(),
+        preview_diffuse: vk::ImageView::null(),
+        cookies: &app.cookie_array.views(),
+        alphas: &app.alphas_array.views(),
+        linear_sampler: app.linear_sampler,
+        spectral: app.spectral_tables.buffer,
+    };
+
+    let mut shader = load_compute_shader(
+        &app.vk,
+        ShaderName::SpectralAlbedoCorrection,
+        &app.constants,
+        &shader_bindings,
+        size_of::<PushConstants>(),
+    );
+    update_compute_shader(&app.vk, &shader, &shader_bindings);
+
+    let push = PushConstants {
+        rt: app.rt_data(),
+        texel_count: texels_count as u32,
+        combined_sh: (app.config.lightmap_mode == LightmapMode::CombinedSH) as u32,
+        pad0: 0,
+        pad1: 0,
+        lightmap: lightmap.gpu_address,
+    };
+    let push_bytes = as_bytes(&push);
+    let groups_x = (texels_count as u32 + 63) / 64;
+
+    let start = Instant::now();
+
+    let vk = &app.vk.device;
+    let cmd = app.vk.begin_single_use_cmd();
+    unsafe {
+        vk.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, shader.pipeline);
+        vk.cmd_bind_descriptor_sets(
+            cmd,
+            vk::PipelineBindPoint::COMPUTE,
+            shader.pipeline_layout,
+            0,
+            &[shader.descriptor_set],
+            &[],
+        );
+        vk.cmd_push_constants(
+            cmd,
+            shader.pipeline_layout,
+            vk::ShaderStageFlags::COMPUTE,
+            0,
+            &push_bytes,
+        );
+        vk.cmd_dispatch(cmd, groups_x, 1, 1);
+    };
+    app.vk.end_single_use_cmd(cmd);
+
+    app.benchmarks
+        .push(("Spectral Albedo Correction", start.elapsed().as_secs_f32()));
+
+    shader.destroy(&app.vk);
 }
 
 /// Later bounces carry less energy and are lower frequency, so each one after the first
@@ -2350,6 +2476,7 @@ fn bake_light_probes(
         cookies: &app.cookie_array.views(),
         alphas: &app.alphas_array.views(),
         linear_sampler: app.linear_sampler,
+        spectral: app.spectral_tables.buffer,
     };
 
     let mut shader = load_compute_shader(
@@ -2660,6 +2787,9 @@ fn render_lightmaps(app: &mut Glim) {
 
         app.vk.end_single_use_cmd(cmd);
     }
+
+    // only the exported copy, light probes still bounce off the physical irradiance
+    apply_spectral_albedo_correction(app, texels_count, &readback_buffer);
 
     let readback_buffer_slice: &[f32] = unsafe {
         std::slice::from_raw_parts(

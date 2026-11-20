@@ -60,6 +60,11 @@ fn main() {
         dst: "bake_shadowmask.spv".into(),
     });
 
+    shaders.push(Shader {
+        src: "spectral_albedo_correction.slang".into(),
+        dst: "spectral_albedo_correction.spv".into(),
+    });
+
     for shader in shaders {
         let shader_path = shader_dir.join(shader.src);
         let spv_path = out_dir.join(shader.dst);

@@ -84,6 +84,7 @@ mod tests {
             coverage_min_threshold: 0.1,
             antialiasing: true,
             leak_detection: true,
+            spectral_rendering: true,
         };
         config
     }

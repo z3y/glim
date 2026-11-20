@@ -25,6 +25,14 @@ namespace Glim
     public class GlimRendererSettings : MonoBehaviour
     {
         [Tooltip(
+@"Overrides the lightmap group packing type for this renderer, so ScaleOffset and SplitCharts renderers can share one lightmap.
+Group: use the group packing type. In SplitCharts groups, renderers that aren't Batching Static or have a GPU instanced material automatically use ScaleOffset.
+ScaleOffset: pack the whole mesh as one chart. Required when the renderer can't use the generated UV mesh (e.g. GPU instancing).
+SplitCharts: split the mesh into UV islands. Only works with static batching.
+Ignored when the group packing type is None.")]
+        public GlimUVPackingOverride uvPacking = GlimUVPackingOverride.Group;
+
+        [Tooltip(
 @"Back faces receive and bounce light instead of being treated as black.
 Material uses the Double Sided Global Illumination setting of each material.")]
         public GlimDoubleSidedGI doubleSidedGI = GlimDoubleSidedGI.Material;
@@ -39,15 +47,8 @@ Only affects materials with baked emission. 0 removes it as a light source.")]
 0: shadows are only reduced by the material alpha (1 - alpha).
 1: the covered part transmits the full albedo color, giving colored shadows like tinted glass.
 Alpha tested (Cutout) and opaque materials are not affected.")]
-        [Range(0.0f, 1.0f)] public float transmission = 0.0f;
+        [Range(0.0f, 10.0f)] public float transmission = 0.0f;
 
-        [Tooltip(
-@"Overrides the lightmap group packing type for this renderer, so ScaleOffset and SplitCharts renderers can share one lightmap.
-Group: use the group packing type. In SplitCharts groups, renderers that aren't Batching Static or have a GPU instanced material automatically use ScaleOffset.
-ScaleOffset: pack the whole mesh as one chart. Required when the renderer can't use the generated UV mesh (e.g. GPU instancing).
-SplitCharts: split the mesh into UV islands. Only works with static batching.
-Ignored when the group packing type is None.")]
-        public GlimUVPackingOverride uvPacking = GlimUVPackingOverride.Group;
 
         [Tooltip(
 @"Fixes jagged shadows near the shadow terminator on low poly meshes with smooth normals,

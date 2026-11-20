@@ -189,7 +189,7 @@ void main(uint3 threadID: SV_DispatchThreadID)
                 float3 lightmapDiffuse = float3(lightmap[compactIndex * 3 + 0],
                                                 lightmap[compactIndex * 3 + 1],
                                                 lightmap[compactIndex * 3 + 2]);
-                AccumulateL2(probe, sampleIndex, lightmapDiffuse * bounceAlbedo * 4 * sampleScale, ray.D);
+                AccumulateL2(probe, sampleIndex, SpectralMultiply(lightmapDiffuse, bounceAlbedo, SpectralU(probeIndex, sampleIndex)) * 4 * sampleScale, ray.D);
             }
 
             // handle mixed lights that were not shaded directly
@@ -211,7 +211,8 @@ void main(uint3 threadID: SV_DispatchThreadID)
                     float3 current = ShadeLightDirect(light, positionWS, normalWS, xi, throughput, L, false, ShadowTerminator::None());
                     float NoL = saturate(dot(L, normalWS));
                     current *= NoL;
-                    AccumulateL2(probe, sampleIndex, current * bounceAlbedo * 4 * sampleScale, ray.D);
+                    // own wavelengths per light, the shared ones above would correlate the lights
+                    AccumulateL2(probe, sampleIndex, SpectralMultiply(current, bounceAlbedo, SpectralU(hash_uint2(probeIndex, lightIndex), sampleIndex)) * 4 * sampleScale, ray.D);
                 }
             }
         }

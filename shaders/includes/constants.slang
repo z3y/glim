@@ -12,8 +12,9 @@ const uint JITTER_BARYCENTRICS;
 [vk::constant_id(3)]
 const uint EMISSIVE_TRIANGLES_COUNT;
 
+// 1 = spectral products of colors (bounce albedo, tinted transparency), see spectral.slang
 [vk::constant_id(4)]
-const uint CONSTANT_PAD0;
+const uint SPECTRAL_RENDERING;
 
 [vk::constant_id(5)]
 const uint LIGHTMAP_GROUP_COUNT;
