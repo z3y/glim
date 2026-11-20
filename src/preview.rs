@@ -49,11 +49,26 @@ pub struct PreviewSettings {
     pub throttle_ms: u32,
 }
 
+/// Camera driven by the host (Unity scene view), in the host's coordinate system
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
+pub struct PreviewCamera {
+    pub position: Vec3,
+    pub forward: Vec3,
+    pub up: Vec3,
+    /// vertical field of view in degrees
+    pub fov: f32,
+    /// half of the vertical view size, orthographic when > 0
+    pub ortho_size: f32,
+}
+
 pub struct HostFrame {
     pub input: PreviewInput,
     pub close: bool,
     /// latest settings sent by the host, if any
     pub settings: Option<PreviewSettings>,
+    /// camera set by the host, replaces the free fly input when present
+    pub camera: Option<PreviewCamera>,
 }
 
 /// Where the preview gets its input from and where the rendered image goes.
@@ -100,6 +115,38 @@ pub trait PreviewHost {
     fn destroy(&mut self, vk: &mut VulkanContext);
 }
 
+/// Matches the host camera exactly, restarts the accumulation only when something changed
+pub fn apply_host_camera(app: &mut Glim, host_camera: &PreviewCamera) {
+    let system = app.config.coordinate_system;
+    let mut position = host_camera.position;
+    let mut forward = host_camera.forward;
+    let mut up = host_camera.up;
+    system.transform(&mut position);
+    system.transform(&mut forward);
+    system.transform(&mut up);
+
+    let camera = &mut app.camera;
+    let (old_position, old_forward, old_up) = (camera.position, camera.forward, camera.up);
+    let (old_fov, old_ortho) = (camera.fov, camera.ortho_size);
+
+    camera.position = position;
+    camera.set_basis(forward, up);
+    if host_camera.fov > 0.0 {
+        camera.fov = host_camera.fov.clamp(0.01, 179.0);
+    }
+    camera.ortho_size = host_camera.ortho_size.max(0.0);
+
+    let changed = camera.position != old_position
+        || camera.forward != old_forward
+        || camera.up != old_up
+        || camera.fov != old_fov
+        || camera.ortho_size != old_ortho;
+
+    if changed {
+        app.preview_initialized = false;
+    }
+}
+
 pub fn update_camera(app: &mut Glim, input: &PreviewInput, delta_time: f32) {
     let camera = &mut app.camera;
     let held = |k: u32| input.keys & k != 0;
@@ -122,8 +169,9 @@ pub fn update_camera(app: &mut Glim, input: &PreviewInput, delta_time: f32) {
         let dy = -input.look_delta_y * mouse_sensitivity;
 
         if dx != 0.0 || dy != 0.0 {
-            camera.yaw -= dx;
-            camera.pitch = (camera.pitch + dy).clamp(-1.55334, 1.55334);
+            let yaw = camera.yaw() - dx;
+            let pitch = (camera.pitch() + dy).clamp(-1.55334, 1.55334);
+            camera.set_yaw_pitch(yaw, pitch);
             camera_moved = true;
         }
     }

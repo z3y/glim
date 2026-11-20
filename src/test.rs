@@ -102,7 +102,7 @@ mod tests {
     /// Runs the preview the way Unity does: render thread + polling frames and sending input
     #[test]
     fn test_preview_external() {
-        use crate::preview::{PreviewInput, PreviewStats, keys};
+        use crate::preview::{PreviewCamera, PreviewStats};
         use crate::preview_external::*;
         use std::time::{Duration, Instant};
 
@@ -139,10 +139,13 @@ mod tests {
                     let bytes = unsafe {
                         std::slice::from_raw_parts(
                             frame.pixels,
-                            (frame.width * frame.height * 4) as usize,
+                            (frame.width * frame.height * 8) as usize,
                         )
                     };
                     let sum: u64 = bytes.iter().map(|&b| b as u64).sum();
+                    // RGBA16F, alpha of the first pixel is 1.0
+                    let alpha = u16::from_le_bytes([bytes[6], bytes[7]]);
+                    assert_eq!(alpha, 0x3C00);
                     app_preview_release_frame();
                     println!(
                         "frame {} {}x{} sum {}",
@@ -158,14 +161,14 @@ mod tests {
 
         let first = wait_frame(256, 128);
 
-        // camera input restarts accumulation and produces new frames
-        app_preview_set_input(PreviewInput {
-            keys: keys::FORWARD,
-            look_delta_x: 10.0,
-            look_delta_y: 0.0,
-            looking: true,
+        // a host camera restarts accumulation and produces new frames
+        app_preview_set_camera(PreviewCamera {
+            position: Vec3::new(0.5, 0.5, 5.0),
+            forward: Vec3::new(0.0, 0.0, -1.0),
+            up: Vec3::Y,
+            fov: 45.0,
+            ortho_size: 0.0,
         });
-        app_preview_set_input(PreviewInput::default());
 
         app_preview_resize(320, 200);
         let resized = wait_frame(320, 200);

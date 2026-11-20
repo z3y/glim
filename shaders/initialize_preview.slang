@@ -10,8 +10,10 @@ struct PushConstants
     RayTracingData rt;
 
     float3 cameraPosition;
-    float fov;
+    float fov; // tan(fov / 2), or the half view height when orthographic
     float3 cameraDirection;
+    uint orthographic;
+    float3 cameraUp;
     float pad0;
 
     uint2 resolution;
@@ -40,14 +42,21 @@ void main(uint3 threadID: SV_DispatchThreadID)
     ndc.x *= aspect * Push.fov;
     ndc.y *= Push.fov;
 
-    float3 worldUp = float3(0.0, 1.0, 0.0);
     float3 camForward = Push.cameraDirection;
-    float3 camRight = normalize(cross(camForward, worldUp));
-    float3 camUp = cross(camRight, camForward);
+    float3 camUp = Push.cameraUp;
+    float3 camRight = cross(camForward, camUp);
 
     Ray ray;
-    ray.P = Push.cameraPosition;
-    ray.D = normalize(camForward + ndc.x * camRight + ndc.y * camUp);
+    if (Push.orthographic != 0)
+    {
+        ray.P = Push.cameraPosition + ndc.x * camRight + ndc.y * camUp;
+        ray.D = camForward;
+    }
+    else
+    {
+        ray.P = Push.cameraPosition;
+        ray.D = normalize(camForward + ndc.x * camRight + ndc.y * camUp);
+    }
     ray.tMin = 0.001;
     ray.tMax = RAY_MAX;
 

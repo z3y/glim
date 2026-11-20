@@ -160,6 +160,7 @@ impl Texture2D {
         let size = match self.format() {
             vk::Format::R32G32B32A32_SFLOAT => std::mem::size_of::<f32>() * 4,
             vk::Format::R8G8B8A8_UNORM => std::mem::size_of::<u8>() * 4,
+            vk::Format::R16G16B16A16_SFLOAT => std::mem::size_of::<u16>() * 4,
             vk::Format::B10G11R11_UFLOAT_PACK32 => std::mem::size_of::<u8>() * 4,
             vk::Format::R8_UNORM => std::mem::size_of::<u8>(),
             _ => panic!("Unimplemented texture format"),

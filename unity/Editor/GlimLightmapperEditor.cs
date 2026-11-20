@@ -111,23 +111,35 @@ namespace Glim
             };
             horizontal.Add(bakeButton);
 
-            var previewButton = CreateIconButton("animationvisibilitytoggleon", "Preview", "Opens the path-traced preview window", 35);
+            var previewButton = CreateIconButton("animationvisibilitytoggleon", "Preview", "Toggles the path-traced preview in the scene view", 35);
             previewButton.clicked += () =>
             {
-                var camera = SceneView.lastActiveSceneView.camera;
+                if (Bake.IsPreviewing)
+                {
+                    ScenePreview.Stop();
+                    return;
+                }
+
+                var sceneView = SceneView.lastActiveSceneView;
+                if (!sceneView)
+                {
+                    Debug.LogWarning("Glim: open a Scene view to show the preview in");
+                    return;
+                }
+                var camera = sceneView.camera;
 
                 var previewSettings = new Bindings.LightmapSettings(
-                    PreviewWindow.InitialWidth, PreviewWindow.InitialHeight, false, false, false, false);
+                    ScenePreview.InitialWidth, ScenePreview.InitialHeight, false, false, false, false);
 
                 var config = new Bindings.GlimConfig(
                     Bindings.CoordinateSystem.Unity,
-                    PreviewWindow.Samples,
-                    PreviewWindow.Samples,
-                    PreviewWindow.Samples,
-                    PreviewWindow.Bounces,
+                    ScenePreview.Samples,
+                    ScenePreview.Samples,
+                    ScenePreview.Samples,
+                    ScenePreview.Bounces,
                     true,
                     lightmapper.hardwareRayTracing,
-                    PreviewWindow.ThrottleMs,
+                    ScenePreview.ThrottleMs,
                     previewSettings,
                     camera.transform.position,
                     camera.transform.forward,

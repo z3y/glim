@@ -1,5 +1,16 @@
 # [Glim](https://github.com/z3y/glim)
 
+# v0.14.0
+
+- The preview is now shown directly in the Scene view instead of the preview window
+  - Drawn as a full screen quad before post processing, so the Scene view post processing (bloom, tonemapping, color grading) applies to it
+  - Frames are now linear HDR (RGBA16F) instead of 8 bit sRGB
+  - Follows the Scene view camera exactly: position, rotation, field of view and orthographic mode, moving the Scene view camera restarts the preview
+  - Removed the preview window and its free fly controls (right mouse look, WASD)
+  - Render resolution follows the Scene view size, the resolution scale option is still remembered
+  - Stats, samples, bounces, resolution scale and a Stop button are in a Scene view overlay that is only shown while the preview is running
+  - The Preview button on the Glim Lightmapper component now toggles the preview
+
 # v0.13.0
 
 - Implemented a light tree for emissive meshes

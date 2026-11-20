@@ -1,6 +1,8 @@
 //! Preview host without a window, the image is read back into host visible buffers and
-//! the embedding application (Unity) polls for new frames and supplies the input.
+//! the embedding application (Unity) polls for new frames and supplies the camera.
 //! Works with any graphics API on the consumer side since only CPU memory is shared.
+//!
+//! Frames are linear HDR RGBA16F so the consumer can run its own post processing on them.
 
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
@@ -9,7 +11,9 @@ use ash::vk::{self, Handle};
 
 use crate::bindings::is_cancelled;
 use crate::buffer::Buffer;
-use crate::preview::{HostFrame, PreviewHost, PreviewInput, PreviewSettings, PreviewStats};
+use crate::preview::{
+    HostFrame, PreviewCamera, PreviewHost, PreviewInput, PreviewSettings, PreviewStats,
+};
 use crate::texture2d::Texture2D;
 use crate::vulkan_context::VulkanContext;
 
@@ -19,6 +23,8 @@ const FRAMES_IN_FLIGHT: usize = 2;
 // that iteration's readback is skipped, rare since the consumer copy takes ~1ms
 const READBACK_SLOTS: usize = 2;
 const MAX_SIZE: u32 = 8192;
+const FORMAT: vk::Format = vk::Format::R16G16B16A16_SFLOAT;
+const BYTES_PER_PIXEL: u64 = 8;
 
 #[derive(Clone, Copy)]
 struct Published {
@@ -36,6 +42,7 @@ struct Shared {
 
     requested_size: (u32, u32),
     settings: Option<PreviewSettings>,
+    camera: Option<PreviewCamera>,
 
     accepting: bool,
     latest: Option<Published>,
@@ -51,6 +58,7 @@ static SHARED: Mutex<Shared> = Mutex::new(Shared {
     look_delta: [0.0; 2],
     requested_size: (0, 0),
     settings: None,
+    camera: None,
     accepting: false,
     latest: None,
     locked: None,
@@ -71,7 +79,7 @@ fn shared() -> MutexGuard<'static, Shared> {
 
 #[repr(C)]
 pub struct PreviewFrame {
-    /// tightly packed R8G8B8A8 sRGB, first row is the top of the image
+    /// tightly packed R16G16B16A16 float, linear, first row is the top of the image
     pub pixels: *const u8,
     pub width: u32,
     pub height: u32,
@@ -92,6 +100,12 @@ pub extern "C" fn app_preview_set_input(input: PreviewInput) {
 #[unsafe(no_mangle)]
 pub extern "C" fn app_preview_set_settings(settings: PreviewSettings) {
     shared().settings = Some(settings);
+}
+
+/// Camera the preview renders from, kept until replaced. The accumulation restarts when it changes.
+#[unsafe(no_mangle)]
+pub extern "C" fn app_preview_set_camera(camera: PreviewCamera) {
+    shared().camera = Some(camera);
 }
 
 #[unsafe(no_mangle)]
@@ -165,7 +179,7 @@ pub struct ExternalHost {
     frames: Vec<Frame>,
     frame_index: usize,
     slots: Vec<Slot>,
-    // R8G8B8A8_SRGB conversion target, the blit does the linear -> sRGB encode
+    // RGBA16F conversion target, the blit converts from RGBA32F
     image: Texture2D,
     readback_memory: vk::MemoryPropertyFlags,
     default_size: (u32, u32),
@@ -182,6 +196,7 @@ impl ExternalHost {
             s.look_delta = [0.0; 2];
             s.requested_size = (0, 0);
             s.settings = None;
+            s.camera = None;
             s.latest = None;
             s.locked = None;
             s.consumed_id = 0;
@@ -284,7 +299,7 @@ impl ExternalHost {
                 vk,
                 width,
                 height,
-                vk::Format::R8G8B8A8_SRGB,
+                FORMAT,
                 // SAMPLED only because Texture2D always creates a view
                 vk::ImageUsageFlags::TRANSFER_DST
                     | vk::ImageUsageFlags::TRANSFER_SRC
@@ -293,7 +308,7 @@ impl ExternalHost {
             );
         }
 
-        let bytes = width as u64 * height as u64 * 4;
+        let bytes = width as u64 * height as u64 * BYTES_PER_PIXEL;
         let buffer = &mut self.slots[slot].buffer;
         if buffer.buffer.is_null() || buffer.bytes < bytes {
             if !buffer.buffer.is_null() {
@@ -325,6 +340,7 @@ impl PreviewHost for ExternalHost {
             input,
             close: is_cancelled(),
             settings: s.settings.take(),
+            camera: s.camera,
         }
     }
 

@@ -245,9 +245,19 @@ namespace Glim
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        public struct PreviewCamera
+        {
+            public Vector3 position;
+            public Vector3 forward;
+            public Vector3 up;
+            public float fov; // vertical, degrees
+            public float ortho_size; // half the vertical size, orthographic when > 0
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
         public struct PreviewFrame
         {
-            public IntPtr pixels; // tightly packed RGBA8 sRGB, first row is the top
+            public IntPtr pixels; // tightly packed RGBA16F linear, first row is the top
             public uint width;
             public uint height;
             public ulong id;
@@ -269,6 +279,9 @@ namespace Glim
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_preview_set_settings(PreviewSettings settings);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void app_preview_set_camera(PreviewCamera camera);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_preview_resize(uint width, uint height);

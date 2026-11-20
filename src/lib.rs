@@ -37,7 +37,7 @@ use crate::{
     lights::Light,
     mesh::{GpuMesh, Mesh, VulkanAs, create_tlas},
     oidn::Oidn,
-    preview::{PreviewHost, PreviewStats, update_camera},
+    preview::{PreviewHost, PreviewStats, apply_host_camera, update_camera},
     preview_external::ExternalHost,
     texture2d::Texture2D,
     vulkan_context::{VulkanConfig, VulkanContext},
@@ -269,8 +269,10 @@ fn update_visibility_from_camera(app: &mut Glim, cmd: vk::CommandBuffer) {
     let push = InitializePreviewPushConstants {
         rt: app.rt_data(),
         camera_position: app.camera.position,
-        fov: app.camera.fov_half_tan(),
-        camera_direction: app.camera.camera_direction(),
+        fov: app.camera.view_scale(),
+        camera_direction: app.camera.forward,
+        orthographic: app.camera.orthographic() as u32,
+        camera_up: app.camera.up,
         pad0: 0,
         resolution: [
             app.config.preview_settings.width,
@@ -728,7 +730,10 @@ fn render_preview(app: &mut Glim) {
             }
         }
 
-        update_camera(app, &frame.input, delta_time);
+        match &frame.camera {
+            Some(camera) => apply_host_camera(app, camera),
+            None => update_camera(app, &frame.input, delta_time),
+        }
 
         if LIGHT_UPDATE_REQUESTED.load(Ordering::Acquire) {
             let changed = app.upload_lights();
@@ -1208,9 +1213,10 @@ impl Glim {
         config.coordinate_system.transform(&mut pos);
         let mut camera = Camera {
             position: pos,
-            yaw: 0.0,
-            pitch: 0.0,
+            forward: Vec3::Z,
+            up: Vec3::Y,
             fov: 60.0,
+            ortho_size: 0.0,
         };
         let mut fwd = config.camera_forward;
         config.coordinate_system.transform(&mut fwd);

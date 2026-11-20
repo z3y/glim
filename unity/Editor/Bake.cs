@@ -291,7 +291,7 @@ namespace Glim
             {
                 PrintBakeLogs();
                 ResetBake();
-                PreviewWindow.CloseFromBake();
+                ScenePreview.End();
                 return;
             }
 
@@ -896,7 +896,7 @@ namespace Glim
             }
             else
             {
-                PreviewWindow.Open();
+                ScenePreview.Begin();
             }
 
             _bakeStartTime = Time.realtimeSinceStartupAsDouble;

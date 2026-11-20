@@ -134,6 +134,7 @@ impl PreviewHost for GlfwHost {
                 input,
                 close: glfwWindowShouldClose(window) != 0,
                 settings: None,
+                camera: None,
             }
         }
     }
