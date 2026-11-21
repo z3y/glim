@@ -7,9 +7,17 @@
   - Ambient occlusion is applied to it too, Post Processing v2 on Built-in and Screen Space Ambient Occlusion on URP
   - Frames are now linear HDR (RGBA16F) instead of 8 bit sRGB
   - Follows the Scene view camera exactly: position, rotation, field of view and orthographic mode, moving the Scene view camera restarts the preview
+  - Make sure the debug views are turned off in order to see the preview
 - Added a progress bar for the UV packer
 - Environment lighting now follows the Source set in the lighting window instead of always using the skybox material
   - Skybox, Gradient and Color are supported, Gradient is generated from the sky, equator and ground colors
+- Light Probe Deringing now only applies to direct light
+  - Ringing comes from sharp punctual lights, indirect light is already smooth and was only getting blurred
+- Directions below the actual triangle are no longer shaded
+  - With smooth normals part of the cosine lobe can point under the geometry, light can't arrive from there so it now counts as zero
+- Leak detection now also checks diagonal directions
+- Cosine hemisphere and Disc light sampling now use concentric disk mapping, which keeps the sample stratification intact and slightly reduces noise
+- Increased default Light Probe Radius to 0.05
 
 # v0.13.0
 
