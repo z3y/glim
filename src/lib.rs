@@ -1175,6 +1175,7 @@ impl Glim {
             enable_validation_layers: config.vulkan_validation_layers,
             enable_window: use_window,
             window_extensions: Vec::new(),
+            device_index: usize::try_from(config.vulkan_device_index).ok(),
         };
 
         #[cfg(any(test, feature = "glfw"))]

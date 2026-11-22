@@ -26,6 +26,8 @@ pub struct GlimConfig {
     pub seams_debug: bool,
     pub hardware_rt: bool,
     pub throttle_preview_ms: u32,
+    /// index from `app_list_vulkan_devices`, negative picks the best device automatically
+    pub vulkan_device_index: i32,
     pub preview_settings: LightmapSettings,
 
     pub camera_position: Vec3,
@@ -237,6 +239,25 @@ pub fn is_cancelled() -> bool {
 #[unsafe(no_mangle)]
 pub extern "C" fn app_request_cancel() {
     CANCEL_REQUESTED.store(true, Ordering::Relaxed);
+}
+
+/// Writes the names of all Vulkan devices into `buffer`, separated by '\n', in the order used by
+/// `GlimConfig::vulkan_device_index`. Returns the size in bytes needed for all names,
+/// nothing is written if `buffer_length` is smaller than that.
+#[unsafe(no_mangle)]
+pub extern "C" fn app_list_vulkan_devices(buffer: *mut u8, buffer_length: u32) -> u32 {
+    let result = catch_unwind(|| crate::vulkan_context::enumerate_device_names().join("\n"));
+
+    let Ok(names) = result else {
+        return 0;
+    };
+
+    let bytes = names.as_bytes();
+    if !buffer.is_null() && bytes.len() <= buffer_length as usize {
+        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buffer, bytes.len()) };
+    }
+
+    bytes.len() as u32
 }
 
 #[unsafe(no_mangle)]

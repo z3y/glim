@@ -1,5 +1,10 @@
 # [Glim](https://github.com/z3y/glim)
 
+# v0.15.0
+
+- Added Vulkan Device selection to the lightmapper inspector, saved per machine
+  - Automatic keeps the previous behavior, preferring a discrete GPU with ray query support
+
 # v0.14.0
 
 - The preview is now shown directly in the Scene view instead of the preview window

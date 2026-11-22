@@ -25,6 +25,7 @@ namespace Glim
             [MarshalAs(UnmanagedType.I1)] public readonly bool seams_debug;
             [MarshalAs(UnmanagedType.I1)] public readonly bool hardware_rt;
             public readonly uint throttle_preview_ms;
+            public readonly int vulkan_device_index;
             public readonly LightmapSettings preview_settings;
 
             public readonly Vector3 camera_position;
@@ -87,6 +88,7 @@ namespace Glim
                 this.coordinate_system = coordinate_system;
                 this.is_preview = is_preview;
                 this.throttle_preview_ms = throttle_preview_ms;
+                this.vulkan_device_index = VulkanDevice.SelectedIndex;
                 this.preview_settings = preview_settings;
                 this.camera_position = camera_position;
                 this.camera_forward = camera_forward;
@@ -173,6 +175,9 @@ namespace Glim
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_run(IntPtr app);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern unsafe uint app_list_vulkan_devices(byte* buffer, uint buffer_length);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern void app_request_cancel();

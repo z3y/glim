@@ -259,6 +259,7 @@ namespace Glim
             root.Add(cancelButton);
 
             InspectorElement.FillDefaultInspector(root, serializedObject, this);
+            root.Add(CreateDeviceField());
             root.Add(new IMGUIContainer(() =>
             {
                 var group = lightmapper.group;
@@ -341,6 +342,35 @@ namespace Glim
             }).Every(200);
 
             return root;
+        }
+
+        static VisualElement CreateDeviceField()
+        {
+            const string Auto = "Automatic";
+
+            var choices = new List<string> { Auto };
+            choices.AddRange(VulkanDevice.Devices);
+
+            string selected = VulkanDevice.SelectedName;
+            if (string.IsNullOrEmpty(selected))
+            {
+                selected = Auto;
+            }
+            else if (!choices.Contains(selected))
+            {
+                choices.Add(selected); // keep showing a saved device that's currently missing
+            }
+
+            var field = new PopupField<string>("Vulkan Device", choices, selected)
+            {
+                tooltip = "GPU used for baking and the preview. Saved per machine.\nAutomatic prefers a discrete GPU with ray query support.",
+                style = { marginTop = 4 }
+            };
+            field.AddToClassList(BaseField<string>.alignedFieldUssClassName);
+            field.RegisterValueChangedCallback(e =>
+                VulkanDevice.SelectedName = e.newValue == Auto ? string.Empty : e.newValue);
+
+            return field;
         }
 
         public static void BakeAllReflectionProbesSnapshots(Scene scene, int supersampling, bool specularProbes)

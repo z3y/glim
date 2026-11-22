@@ -15,6 +15,8 @@ pub struct VulkanConfig {
     pub enable_validation_layers: bool,
     pub enable_window: bool,
     pub window_extensions: Vec<*const c_char>,
+    /// index into `vkEnumeratePhysicalDevices`, `None` picks the best device automatically
+    pub device_index: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -184,35 +186,36 @@ impl VulkanContext {
             (None, None)
         };
 
-        let mut physical_devices = unsafe { instance.enumerate_physical_devices().unwrap() };
-        physical_devices.sort_by_key(|&pd| {
-            let props = unsafe { instance.get_physical_device_properties(pd) };
-            match props.device_type {
-                vk::PhysicalDeviceType::DISCRETE_GPU => {
-                    let avalilable_extensions =
-                        unsafe { instance.enumerate_device_extension_properties(pd).unwrap() };
-                    for ext in avalilable_extensions {
-                        if ext.extension_name_as_c_str().unwrap() == vk::KHR_RAY_QUERY_NAME {
-                            return 0;
-                        }
-                    }
-                    return 1;
-                }
-                vk::PhysicalDeviceType::INTEGRATED_GPU => 2,
-                vk::PhysicalDeviceType::VIRTUAL_GPU => 3,
-                vk::PhysicalDeviceType::CPU => 4,
-                _ => 5,
-            }
-        });
+        let physical_devices = unsafe { instance.enumerate_physical_devices().unwrap() };
+        if physical_devices.is_empty() {
+            panic!("No Vulkan devices found");
+        }
 
-        for physical_device in &physical_devices {
+        for (i, physical_device) in physical_devices.iter().enumerate() {
             let properties = unsafe { instance.get_physical_device_properties(*physical_device) };
 
             let name = properties.device_name_as_c_str();
-            Log::msg(&format!("Found Vulkan Device: {:?}", name));
+            Log::msg(&format!("Found Vulkan Device {i}: {:?}", name));
             // println!("Properties {:#?}", properties);
         }
-        let physical_device = physical_devices[0];
+
+        let physical_device = match config.device_index {
+            Some(i) if i < physical_devices.len() => physical_devices[i],
+            requested => {
+                if let Some(i) = requested {
+                    Log::error(&format!(
+                        "Vulkan device {i} not found, selecting a device automatically"
+                    ));
+                }
+                pick_best_device(&instance, &physical_devices)
+            }
+        };
+
+        let properties = unsafe { instance.get_physical_device_properties(physical_device) };
+        Log::msg(&format!(
+            "Using Vulkan Device: {:?}",
+            properties.device_name_as_c_str()
+        ));
 
         let queue_family_indices = find_queue_families(&instance, physical_device);
         println!("{:?}", queue_family_indices);
@@ -617,6 +620,74 @@ pub extern "system" fn vulkan_debug_callback(
     }
 
     vk::FALSE
+}
+
+/// discrete with ray queries > discrete > integrated > virtual > cpu
+fn pick_best_device(instance: &Instance, devices: &[vk::PhysicalDevice]) -> vk::PhysicalDevice {
+    *devices
+        .iter()
+        .min_by_key(|&&pd| {
+            let props = unsafe { instance.get_physical_device_properties(pd) };
+            match props.device_type {
+                vk::PhysicalDeviceType::DISCRETE_GPU => {
+                    let extensions =
+                        unsafe { instance.enumerate_device_extension_properties(pd).unwrap() };
+                    let has_ray_query = extensions.iter().any(|ext| {
+                        ext.extension_name_as_c_str().unwrap() == vk::KHR_RAY_QUERY_NAME
+                    });
+                    if has_ray_query { 0 } else { 1 }
+                }
+                vk::PhysicalDeviceType::INTEGRATED_GPU => 2,
+                vk::PhysicalDeviceType::VIRTUAL_GPU => 3,
+                vk::PhysicalDeviceType::CPU => 4,
+                _ => 5,
+            }
+        })
+        .unwrap()
+}
+
+/// Names of all Vulkan devices, in `vkEnumeratePhysicalDevices` order (matches `VulkanConfig::device_index`)
+pub fn enumerate_device_names() -> Vec<String> {
+    let entry = unsafe { load_vulkan_entry() };
+
+    let application_info = vk::ApplicationInfo {
+        p_application_name: c"glim".as_ptr(),
+        api_version: vk::API_VERSION_1_3,
+        ..Default::default()
+    };
+
+    #[allow(unused_mut)]
+    let mut extensions: Vec<*const c_char> = Vec::new();
+    #[allow(unused_mut)]
+    let mut create_info = vk::InstanceCreateInfo {
+        p_application_info: &application_info,
+        ..Default::default()
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        extensions.push(vk::KHR_PORTABILITY_ENUMERATION_NAME.as_ptr());
+        create_info.flags |= vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR;
+    }
+    create_info = create_info.enabled_extension_names(&extensions);
+
+    let instance = unsafe { entry.create_instance(&create_info, None).unwrap() };
+
+    let names = unsafe { instance.enumerate_physical_devices() }
+        .unwrap_or_default()
+        .into_iter()
+        .map(|pd| {
+            let props = unsafe { instance.get_physical_device_properties(pd) };
+            props
+                .device_name_as_c_str()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
+        .collect();
+
+    unsafe { instance.destroy_instance(None) };
+
+    names
 }
 
 fn find_queue_families(

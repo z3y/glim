@@ -61,6 +61,7 @@ mod tests {
             seams_debug: false,
             hardware_rt: HARDWARE_RT,
             throttle_preview_ms: 0,
+            vulkan_device_index: -1,
             preview_settings,
             camera_position: Vec3::new(0.0, 0.0, 5.0),
             camera_forward: Vec3::NEG_Z,
