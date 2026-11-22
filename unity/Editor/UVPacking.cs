@@ -20,7 +20,7 @@ namespace Glim
         public enum SplitMode : uint
         {
             Default = 0,     // use splitCharts from uvpacker_create
-            ScaleOffset = 1, // whole mesh is one chart (e.g. GPU instanced materials)
+            ScaleOffset = 1, // whole mesh is one chart (e.g. renderers that aren't statically batched)
             Split = 2,       // split into UV islands
         }
 

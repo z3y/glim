@@ -1052,10 +1052,13 @@ namespace Glim
             // the uv mesh only gets applied through static batching
             if (!GameObjectUtility.GetStaticEditorFlags(renderer.gameObject).HasFlag(StaticEditorFlags.BatchingStatic)) return false;
 
-            // instanced renderers can't use the per renderer uv mesh
+            // static batching takes precedence over gpu instancing, but shaders with the DisableBatching tag
+            // skip static batching and would never get the uv mesh
             foreach (var mat in renderer.sharedMaterials)
             {
-                if (mat && mat.enableInstancing) return false;
+                if (!mat) continue;
+                var disableBatching = mat.GetTag("DisableBatching", false, "False");
+                if (!disableBatching.Equals("False", System.StringComparison.OrdinalIgnoreCase)) return false;
             }
 
             return true;

@@ -4,6 +4,9 @@
 
 - Added Vulkan Device selection to the lightmapper inspector, saved per machine
   - Automatic keeps the previous behavior, preferring a discrete GPU with ray query support
+- Batching Static renderers with GPU instanced materials can now use SplitCharts UV packing
+  - Static batching takes precedence over GPU instancing, so they still get the generated UV mesh
+  - Renderers using a shader with the DisableBatching tag fall back to ScaleOffset instead
 
 # v0.14.0
 

@@ -46,7 +46,7 @@ Packs UVs by offsetting and scaling the entire mesh similar to the built-in ligh
 SplitCharts:
 Highest Quality UV packing. Each mesh is split into multiple charts and allows individual UV islands to get packed separately and more efficiently. Only works with static batching.
 Generated UV Meshes are stored in the Lighting Data Asset file itself, which Unity applies at runtime. At build time these UVs get merged into the statically batched mesh, without taking up additional memory.
-Renderers that aren't Batching Static or have a GPU instanced material fall back to ScaleOffset.
+Renderers that aren't Batching Static or use a shader with DisableBatching fall back to ScaleOffset. GPU instanced materials are fine, static batching takes precedence.
 
 Individual renderers can override ScaleOffset/SplitCharts with Glim Renderer Settings, both modes can be mixed in one group.
 ")]
