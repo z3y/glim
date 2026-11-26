@@ -38,6 +38,8 @@ namespace Glim
         static volatile IntPtr _app = IntPtr.Zero;
 
         static BakeContext _context = null;
+        static string _stagingDirectory;
+        static volatile Exception _bakeFailure;
 
         static volatile float _progress = 0f;
         static volatile string _bakeMessage = "";
@@ -58,7 +60,10 @@ namespace Glim
                 return;
             }
             _cancelRequested = true;
-            Bindings.app_request_cancel();
+            if (!_isComplete)
+            {
+                Bindings.app_request_cancel();
+            }
         }
 
         public static void StopPreview()
@@ -94,7 +99,7 @@ namespace Glim
             }
             if (data.ty == 1) // error
             {
-                throw new Exception(data.message.ToString());
+                _bakeFailure ??= new Exception(data.message.ToString());
             }
         }
 
@@ -291,35 +296,49 @@ namespace Glim
                 return;
             }
 
+            // DisplayDialog can run a nested editor update while this bake is finishing.
+            EditorApplication.update -= PollBakeComplete;
+
             if (_context.isPreview)
             {
+                if (_bakeFailure != null)
+                {
+                    Debug.LogException(_bakeFailure);
+                }
                 PrintBakeLogs();
                 ResetBake();
                 ScenePreview.End();
                 return;
             }
 
-#if GLIM_APV
-            // before ResetBake clears the results, cancels the APV bake if glim was canceled
-            if (!_cancelRequested)
-            {
-                AdaptiveProbeVolumeBake.Complete(_bakeProbesResults);
-            }
-#endif
-
-            if (_cancelRequested)
-            {
-                if (_progressID != -1)
-                {
-                    Progress.Finish(_progressID, Progress.Status.Canceled);
-                    _progressID = -1;
-                }
-                ResetBake();
-                return;
-            }
+            var status = Progress.Status.Failed;
             try
             {
                 var now = Time.realtimeSinceStartupAsDouble;
+                if (_cancelRequested)
+                {
+                    status = Progress.Status.Canceled;
+                    return;
+                }
+                if (_bakeFailure != null)
+                {
+                    throw new InvalidOperationException("Glim bake failed.", _bakeFailure);
+                }
+
+                bool hasDirectional = _context.lightmapMode == LightmapMode.DominantDirection || _context.lightmapMode == LightmapMode.MonoSH;
+                ValidateStagedLightmaps(hasDirectional);
+                _bakeMessage = "Saving baked lightmaps";
+                _progress = 1f;
+                ChangeProgressMessage(_bakeMessage);
+                if (!BakeOutput.Publish(_stagingDirectory, _context.outputDir))
+                {
+                    status = Progress.Status.Canceled;
+                    return;
+                }
+
+#if GLIM_APV
+                AdaptiveProbeVolumeBake.Complete(_bakeProbesResults);
+#endif
 
                 List<LightmapData> lightmapDatas = new();
                 for (int groupIndex = 0; groupIndex < _context.groups.Count; groupIndex++)
@@ -340,8 +359,6 @@ namespace Glim
 
                 long lightmapBytes = 0;
                 long lightmapMemoryBytes = 0;
-
-                bool hasDirectional = _context.lightmapMode == LightmapMode.DominantDirection || _context.lightmapMode == LightmapMode.MonoSH;
 
                 AssetDatabase.Refresh();
 
@@ -376,7 +393,7 @@ namespace Glim
                         lightmapBytes += new FileInfo(path).Length;
                     }
 
-                    if (_context.mixedMode == MixedLightMode.Shadowmask && File.Exists(Path.Combine(_context.outputDir, shadowMaskName)))
+                    if (_context.mixedMode == MixedLightMode.Shadowmask && File.Exists(Path.Combine(_stagingDirectory, shadowMaskName)))
                     {
                         var path = Path.Combine(_context.outputDir, shadowMaskName);
                         var loadedAsset = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
@@ -532,14 +549,53 @@ namespace Glim
                     EditorSceneManager.MarkSceneDirty(_context.scene);
                 }
 
+                status = Progress.Status.Succeeded;
+            }
+            catch (Exception error)
+            {
+                Debug.LogException(error);
             }
             finally
             {
-                bool playSound = _context.playBakeCompletionSound;
+                bool playSound = status == Progress.Status.Succeeded && _context.playBakeCompletionSound;
                 PrintBakeLogs();
-                ResetBake();
+                ResetBake(status);
                 if (playSound)
                     PlayCompletionSound();
+            }
+        }
+
+        static void ValidateStagedLightmaps(bool hasDirectional)
+        {
+            for (int groupIndex = 0; groupIndex < _context.groups.Count; groupIndex++)
+            {
+                if (_context.groups[groupIndex].settings.discard)
+                {
+                    continue;
+                }
+
+                RequireStagedTexture($"Lightmap-{groupIndex}_Diffuse.exr");
+                if (hasDirectional)
+                {
+                    RequireStagedTexture($"Lightmap-{groupIndex}_Directional.tga");
+                }
+                var shadowMask = $"Lightmap-{groupIndex}_ShadowMask.tga";
+                var shadowMaskPath = Path.Combine(_stagingDirectory, shadowMask);
+                if (File.Exists(shadowMaskPath) || File.Exists(shadowMaskPath + ".meta"))
+                {
+                    RequireStagedTexture(shadowMask);
+                }
+            }
+        }
+
+        static void RequireStagedTexture(string name)
+        {
+            var path = Path.Combine(_stagingDirectory, name);
+            var file = new FileInfo(path);
+            var meta = new FileInfo(path + ".meta");
+            if (!file.Exists || file.Length == 0 || !meta.Exists || meta.Length == 0)
+            {
+                throw new IOException($"Glim produced incomplete bake output for {name}.");
             }
         }
 
@@ -669,25 +725,40 @@ namespace Glim
         //     DynamicGI.UpdateEnvironment();
         // }
 
-        static void ResetBake()
+        static void ResetBake(Progress.Status status = Progress.Status.Succeeded)
         {
             EditorApplication.update -= PollBakeComplete;
 #if GLIM_APV
             // no-op if the results were already handed to unity
             AdaptiveProbeVolumeBake.Cancel();
 #endif
+            try
+            {
+                BakeOutput.Discard(_stagingDirectory);
+                if (_context?.storage != null && AssetDatabase.GetAssetPath(_context.storage) == LightingData.TempLightingDataPath)
+                {
+                    AssetDatabase.DeleteAsset(LightingData.TempLightingDataPath);
+                }
+            }
+            catch (Exception error)
+            {
+                Debug.LogWarning($"Glim could not clean up temporary bake files: {error.Message}");
+            }
+
             _app = IntPtr.Zero;
             _bakeProbesResults = new();
             _isComplete = false;
             _running = false;
             _context = null;
+            _stagingDirectory = null;
+            _bakeFailure = null;
             _progress = 0f;
             _bakeMessage = "";
             _isPreview = false;
             _cancelRequested = false;
             if (_progressID != -1)
             {
-                Progress.Finish(_progressID, Progress.Status.Succeeded);
+                Progress.Finish(_progressID, status);
             }
             _progressID = -1;
             bakeMessages.Clear();
@@ -875,34 +946,40 @@ namespace Glim
             try
             {
                 ctx = new BakeContext(baker, config);
+                _context = ctx;
+                if (!config.is_preview)
+                {
+                    _stagingDirectory = Path.Combine("Temp", $"GlimBake-{Guid.NewGuid():N}");
+                    Directory.CreateDirectory(_stagingDirectory);
+                    SkyboxCapture.WriteCubemapAsset(ctx.skyboxPixels,
+                        Path.Combine(_stagingDirectory, Path.GetFileName(ctx.skyboxReflectionPath)));
+                }
+
+#if VRC_LIGHT_VOLUMES
+                AddLightProbeVolumes(baker, ctx);
+#endif
+
+#if GLIM_APV
+                if (!config.is_preview)
+                {
+                    // after the BakeContext, the lighting data asset is created with a regular unity bake in a temp scene
+                    AdaptiveProbeVolumeBake.AddProbes(ctx, ctx.lightProbeRadius);
+                }
+#endif
             }
             catch (OperationCanceledException)
             {
-                ResetBake();
+                ResetBake(Progress.Status.Canceled);
                 Debug.Log("Glim: bake cancelled");
                 return;
             }
             catch
             {
-                ResetBake();
+                ResetBake(Progress.Status.Failed);
                 throw;
             }
 
             EditorApplication.update += PollBakeComplete;
-
-#if VRC_LIGHT_VOLUMES
-            AddLightProbeVolumes(baker, ctx);
-#endif
-
-#if GLIM_APV
-            if (!config.is_preview)
-            {
-                // after the BakeContext, the lighting data asset is created with a regular unity bake in a temp scene
-                AdaptiveProbeVolumeBake.AddProbes(ctx, ctx.lightProbeRadius);
-            }
-#endif
-
-            _context = ctx;
 
             _running = true;
             _isPreview = config.is_preview;
@@ -919,16 +996,23 @@ namespace Glim
             }
 
             _bakeStartTime = Time.realtimeSinceStartupAsDouble;
+            var nativeOutputDirectory = _stagingDirectory ?? ctx.outputDir;
             var thread = new Thread(() =>
             {
+                IntPtr app = IntPtr.Zero;
                 try
                 {
-                    var output_dir = Bindings.FfiString.FromString(ctx.outputDir);
-                    var app = Bindings.app_new(config, output_dir);
+                    var output_dir = Bindings.FfiString.FromString(nativeOutputDirectory);
+                    app = Bindings.app_new(config, output_dir);
 
-                    if (app == null)
+                    if (app == IntPtr.Zero)
                     {
                         throw new Exception("failed to launch");
+                    }
+
+                    if (_cancelRequested || _bakeFailure != null)
+                    {
+                        return;
                     }
 
                     foreach (var group in ctx.groups)
@@ -1048,25 +1132,42 @@ namespace Glim
                         Bindings.app_add_probe(app, p, r);
                     }
 
-                    uint size = (uint)Mathf.Sqrt(_context.ambientPixels.Length / 6);
+                    uint size = (uint)Mathf.Sqrt(ctx.ambientPixels.Length / 6);
 
-                    Bindings.app_set_skybox(app, _context.ambientPixels, (uint)_context.ambientPixels.Length * 4, size, size);
+                    Bindings.app_set_skybox(app, ctx.ambientPixels, (uint)ctx.ambientPixels.Length * 4, size, size);
+                    if (_cancelRequested || _bakeFailure != null)
+                    {
+                        return;
+                    }
 
                     _app = app;
 
                     Bindings.app_run(app);
-
-                    Bindings.app_destroy(app);
-                    _running = false;
-                    _isComplete = true;
+                    if (!ctx.isPreview && !_cancelRequested && config.probe_samples != 0 &&
+                        _bakeProbesResults.Count != ctx.probePositions.Count)
+                    {
+                        _bakeFailure ??= new Exception($"Expected {ctx.probePositions.Count} baked probes, received {_bakeProbesResults.Count}.");
+                    }
                 }
-                catch (Exception e)
+                catch (Exception error)
                 {
-                    _running = false;
-                    _isComplete = true;
+                    _bakeFailure ??= error;
+                }
+                finally
+                {
                     _app = IntPtr.Zero;
-                    PrintBakeLogs();
-                    Debug.LogException(e);
+                    try
+                    {
+                        if (app != IntPtr.Zero)
+                        {
+                            Bindings.app_destroy(app);
+                        }
+                    }
+                    catch (Exception error)
+                    {
+                        _bakeFailure ??= error;
+                    }
+                    _isComplete = true;
                 }
             });
 
