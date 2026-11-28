@@ -62,32 +62,37 @@ fn main() {
 
     for shader in shaders {
         let shader_path = shader_dir.join(shader.src);
-        let spv_path = out_dir.join(shader.dst);
+        let dst = Path::new(&shader.dst);
+        let stem = dst.file_stem().unwrap().to_str().unwrap();
+        let extension = dst.extension().unwrap().to_str().unwrap();
 
-        let mut args = Vec::new();
+        for (variant, enable_ray_query) in [("ray_query", true), ("software", false)] {
+            let spv_path = out_dir.join(format!("{stem}_{variant}.{extension}"));
+            let status = Command::new("slangc")
+                .arg(shader_path.to_str().unwrap())
+                .arg("-warnings-as-errors")
+                .arg("all")
+                .arg("-O3")
+                .arg("-g0")
+                .arg("-o")
+                .arg(spv_path.to_str().unwrap())
+                .args(["-target", "spirv"])
+                .arg(format!(
+                    "-DENABLE_RAY_QUERY={}",
+                    if enable_ray_query { 1 } else { 0 }
+                ))
+                .args(["-stage", "compute", "-entry", "main"])
+                .status()
+                .expect("Failed to run slangc");
 
-        args.push("-stage");
-        args.push("compute");
-        args.push("-entry");
-        args.push("main");
+            if !status.success() {
+                panic!(
+                    "Slang compilation failed for {:?} ({variant} variant)",
+                    shader_path
+                );
+            }
 
-        let status = Command::new("slangc")
-            .arg(shader_path.to_str().unwrap())
-            .arg("-warnings-as-errors")
-            .arg("all")
-            .arg("-O3")
-            .arg("-g0")
-            .arg("-o")
-            .arg(spv_path.to_str().unwrap())
-            .args(["-target", "spirv"])
-            .args(args)
-            .status()
-            .expect("Failed to run slangc");
-
-        if !status.success() {
-            panic!("Slang compilation failed for {:?}", shader_path);
+            println!("spv_path: {:?}", spv_path);
         }
-
-        println!("spv_path: {:?}", spv_path);
     }
 }

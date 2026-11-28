@@ -5,8 +5,10 @@
 #include "mesh.slang"
 #include "sh.slang"
 
+#if ENABLE_RAY_QUERY
 [[vk::binding(0, 0)]]
 RaytracingAccelerationStructure TopLevelAS;
+#endif
 
 [[vk::binding(2, 0)]]
 [[vk::image_format("rgba32f")]]
