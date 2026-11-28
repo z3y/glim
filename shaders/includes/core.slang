@@ -337,6 +337,7 @@ bool BVHTraceRay(Ray ray, out Hit hit, bool shadowRay, bool shadowRenderers, boo
 }
 #pragma warning(default: 41035)
 
+#if ENABLE_RAY_QUERY
 uint GlobalPrimitiveID(uint group, uint geometryID, uint localPrimitiveID)
 {
     uint variant = group * 2 + geometryID;
@@ -419,6 +420,7 @@ float3 QueryShadowTransmittance<let T : uint>(inout RayQuery<T> query)
 
     return transmittance;
 }
+#endif
 
 bool TraceRayInternal(Ray ray, out Hit hit, bool stochasticAlpha)
 {
@@ -426,6 +428,7 @@ bool TraceRayInternal(Ray ray, out Hit hit, bool stochasticAlpha)
 
     uint alphaSeed = stochasticAlpha ? RayAlphaSeed(ray) : 0u;
 
+#if ENABLE_RAY_QUERY
     if (HARDWARE_RT == 1)
     {
         RayDesc rayDesc;
@@ -458,6 +461,7 @@ bool TraceRayInternal(Ray ray, out Hit hit, bool stochasticAlpha)
         return false;
     }
     else
+#endif
     {
         float3 transmittance;
         return BVHTraceRay(ray, hit, false, false, stochasticAlpha, alphaSeed, transmittance);
@@ -479,6 +483,7 @@ bool TraceRayAlphaTested(Ray ray, out Hit hit)
 
 float3 TraceTransmittance(Ray ray, uint instanceMask, bool shadowRenderers)
 {
+#if ENABLE_RAY_QUERY
     if (HARDWARE_RT == 1)
     {
         RayDesc rayDesc;
@@ -493,6 +498,7 @@ float3 TraceTransmittance(Ray ray, uint instanceMask, bool shadowRenderers)
         return QueryShadowTransmittance(query);
     }
     else
+#endif
     {
         Hit hit = {};
         float3 transmittance;

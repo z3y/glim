@@ -14,18 +14,28 @@ pub enum ShaderName {
     ShadowMask,
 }
 
-pub fn load_shader_bytes(name: ShaderName) -> Vec<u32> {
+pub fn load_shader_bytes(name: ShaderName, hardware_rt: bool) -> Vec<u32> {
+    macro_rules! shader_bytes {
+        ($name:literal) => {
+            if hardware_rt {
+                include_bytes!(concat!(env!("OUT_DIR"), "/", $name, "_ray_query.spv"))
+            } else {
+                include_bytes!(concat!(env!("OUT_DIR"), "/", $name, "_software.spv"))
+            }
+        };
+    }
+
     #[rustfmt::skip]
     let bytes: &'static [u8] = match name {
-        ShaderName::InitializePreview => include_bytes!(concat!(env!("OUT_DIR"), "/initialize_preview.spv")),
-        ShaderName::AdjustSamples => include_bytes!(concat!(env!("OUT_DIR"), "/adjust_samples.spv")),
-        ShaderName::AdjustProbes => include_bytes!(concat!(env!("OUT_DIR"), "/adjust_probes.spv")),
-        ShaderName::BakeLightProbes => include_bytes!(concat!(env!("OUT_DIR"), "/bake_sh.spv")),
-        ShaderName::BakeIndirect => include_bytes!(concat!(env!("OUT_DIR"), "/bake_indirect.spv")),
-        ShaderName::Preview => include_bytes!(concat!(env!("OUT_DIR"), "/preview.spv")),
-        ShaderName::BakeDirectLight => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_light.spv")),
-        ShaderName::BakeDirectEmission => include_bytes!(concat!(env!("OUT_DIR"), "/bake_direct_emission.spv")),
-        ShaderName::ShadowMask => include_bytes!(concat!(env!("OUT_DIR"), "/bake_shadowmask.spv")),
+        ShaderName::InitializePreview => shader_bytes!("initialize_preview"),
+        ShaderName::AdjustSamples => shader_bytes!("adjust_samples"),
+        ShaderName::AdjustProbes => shader_bytes!("adjust_probes"),
+        ShaderName::BakeLightProbes => shader_bytes!("bake_sh"),
+        ShaderName::BakeIndirect => shader_bytes!("bake_indirect"),
+        ShaderName::Preview => shader_bytes!("preview"),
+        ShaderName::BakeDirectLight => shader_bytes!("bake_direct_light"),
+        ShaderName::BakeDirectEmission => shader_bytes!("bake_direct_emission"),
+        ShaderName::ShadowMask => shader_bytes!("bake_shadowmask"),
     };
 
     let aligned = bytes
@@ -256,7 +266,7 @@ pub fn load_compute_shader(
         size: push_constants_size as u32,
     }];
 
-    let bytes = load_shader_bytes(shader_name);
+    let bytes = load_shader_bytes(shader_name, constants.hardware_rt != 0);
 
     ComputeShader::new(
         vk,
