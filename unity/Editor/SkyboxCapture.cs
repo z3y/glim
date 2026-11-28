@@ -138,6 +138,12 @@ namespace Glim
 
         public static void SaveAsCubemapAsset(Color[] pixels, string assetPath)
         {
+            WriteCubemapAsset(pixels, assetPath);
+            AssetDatabase.ImportAsset(assetPath);
+        }
+
+        internal static void WriteCubemapAsset(Color[] pixels, string assetPath)
+        {
             int res = (int)Mathf.Sqrt(pixels.Length / 6);
 
             var strip = new Texture2D(res * 6, res, FORMAT, TextureCreationFlags.None);
@@ -167,8 +173,6 @@ namespace Glim
                 var yaml = CreateSkyboxYaml();
                 File.WriteAllText(metaPath, yaml);
             }
-
-            AssetDatabase.ImportAsset(assetPath);
         }
 
         static string CreateSkyboxYaml()

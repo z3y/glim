@@ -186,7 +186,10 @@ namespace Glim
             }
 
             this.skyboxReflectionPath = Path.Combine(this.outputDir, "SkyboxReflection.exr");
-            SkyboxCapture.SaveAsCubemapAsset(skyboxPixels, this.skyboxReflectionPath);
+            if (config.is_preview)
+            {
+                SkyboxCapture.SaveAsCubemapAsset(skyboxPixels, this.skyboxReflectionPath);
+            }
 
             var ftraceLightmaps = rootObjects.FirstOrDefault(x => x.gameObject.name == "!ftraceLightmaps");
             if (ftraceLightmaps != null)
